@@ -1,0 +1,16 @@
+[package]
+name = "fin-box"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0.100"
+chrono = "0.4.42"
+directories = "6.0.0"
+eframe = "0.30.0"
+encoding_rs = "0.8.35"
+reqwest = { version = "0.13.1", features = ["blocking", "native-tls"], default-features = false }
+global-hotkey = "0.6.0"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_yaml = "0.9.34"
+uuid = { version = "1.19.0", features = ["v4", "fast-rng"] }
