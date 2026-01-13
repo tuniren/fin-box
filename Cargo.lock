@@ -1112,7 +1112,7 @@ dependencies = [
 
 [[package]]
 name = "fin-box"
-version = "0.1.1-SNAPSHOT"
+version = "1.0.0"
 dependencies = [
  "anyhow",
  "chrono",
