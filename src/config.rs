@@ -35,34 +35,29 @@ impl ConfigManager {
         }
         
         // 默认配置
-        let default_config = AppConfig {
-            total_investment: Some(100000.0),
-            cash: Some(50000.0),
-            stocks: vec![
-                StockConfig {
-                    code: "sz002594".to_string(),
-                    alias: Some("BYD".to_string()),
-                    positions: vec![
-                        Position {
-                            account: Some("Account A".to_string()),
-                            shares: 100,
-                            cost: 250.0,
-                        },
-                    ],
-                }
-            ],
-        };
+        let mut default_config = AppConfig::default();
+        default_config.total_investment = Some(100000.0);
+        default_config.cash = Some(50000.0);
+        default_config.stocks = vec![
+            StockConfig {
+                code: "sz002594".to_string(),
+                alias: Some("BYD".to_string()),
+                positions: vec![
+                    Position {
+                        account: Some("Account A".to_string()),
+                        shares: 100,
+                        cost: 250.0,
+                    },
+                ],
+            }
+        ];
 
         let _ = self.save(&default_config);
         default_config
     }
 
-    /// 强制重新加载配置（忽略时间戳检查）
-    pub fn force_reload(&mut self) -> Option<AppConfig> {
-        if let Ok(metadata) = fs::metadata(&self.config_path) {
-             self.last_modified = metadata.modified().ok();
-        }
-        
+    /// 内部辅助：读取并解析配置文件
+    fn load_from_file(&self) -> Option<AppConfig> {
         if let Ok(content) = fs::read_to_string(&self.config_path) {
             if let Ok(config) = serde_yaml::from_str(&content) {
                 return Some(config);
@@ -71,17 +66,21 @@ impl ConfigManager {
         None
     }
 
+    /// 强制重新加载配置（忽略时间戳检查）
+    pub fn force_reload(&mut self) -> Option<AppConfig> {
+        if let Ok(metadata) = fs::metadata(&self.config_path) {
+             self.last_modified = metadata.modified().ok();
+        }
+        self.load_from_file()
+    }
+
     /// 检查配置文件是否更新，如果更新则重新加载
     pub fn reload_if_changed(&mut self) -> Option<AppConfig> {
         if let Ok(metadata) = fs::metadata(&self.config_path) {
             if let Ok(modified) = metadata.modified() {
                 if Some(modified) != self.last_modified {
                     self.last_modified = Some(modified);
-                    if let Ok(content) = fs::read_to_string(&self.config_path) {
-                        if let Ok(config) = serde_yaml::from_str(&content) {
-                            return Some(config);
-                        }
-                    }
+                    return self.load_from_file();
                 }
             }
         }

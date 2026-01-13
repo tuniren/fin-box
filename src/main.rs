@@ -4,6 +4,7 @@ mod app;
 mod config;
 mod core;
 mod model;
+mod theme;
 
 use app::MyApp;
 use eframe::egui;

@@ -74,6 +74,43 @@ stocks:
 
 *修改配置文件后保存，程序通常会自动检测并重载；如果未生效，请点击界面上的刷新按钮或重启程序。*
 
+### 3.1 主题配置
+
+FinBox 支持高度自定义的主题系统，您可以通过修改配置文件来调整应用外观。
+
+*   **切换主题**：
+    修改 `current_theme` 字段指定当前使用的主题名称。内置主题包括：
+    *   `default`: 默认暗色主题
+    *   `cyberpunk`: 赛博朋克风格
+
+*   **自定义主题**：
+    在 `themes` 字段下添加自定义主题配置。支持配置背景色、边框、文字颜色、涨跌色、圆角大小等。
+
+**主题配置示例：**
+
+```yaml
+# 当前使用的主题
+current_theme: "default"
+
+# 主题定义列表
+themes:
+  # 自定义浅色主题示例
+  light:
+    background: "#FFFFFFE6" # 背景色 (支持 Hex 格式，如 #RRGGBBAA)
+    border: "#CCCCCC"       # 边框颜色
+    text_normal: "#333333"  # 普通文字
+    text_white: "#000000"   # 高亮文字
+    text_gray: "#666666"    # 次要文字
+    color_up: "#E53935"     # 上涨颜色
+    color_down: "#43A047"   # 下跌颜色
+    accent: "#1976D2"       # 强调色
+    menu_bg: "#F5F5F5"      # 菜单背景
+    rounding: 6.0           # 圆角大小
+    border_width: 1.0       # 边框宽度
+```
+
+更详细的预设主题配置参数，请参考文档 [docs/themes_example.yaml](docs/themes_example.yaml)。
+
 ## 4. 常见问题
 
 *   **Q: 为什么显示乱码？**
@@ -83,7 +120,39 @@ stocks:
 *   **Q: 如何添加港股或美股？**
     *   A: 目前主要支持沪深 A 股（代码前缀 `sz`, `sh`）。其他市场取决于新浪财经 API 的支持情况，暂未做针对性适配。
 
-## 5. 开源协议 (License)
+## 5. 开发指南 (Development)
+
+如果您希望参与开发或自行编译修改版，请参考以下说明。
+
+### 5.1 环境要求
+*   **Rust**: 请安装最新稳定版 Rust 工具链 (建议通过 [rustup](https://rustup.rs/) 安装)。
+*   **平台**: Windows / macOS / Linux (需安装对应系统的 GTK/xcb 依赖库，详见 eframe 文档)。
+
+### 5.2 常用命令
+
+*   **运行 (Debug 模式)**
+    ```bash
+    cargo run
+    ```
+
+*   **代码检查**
+    ```bash
+    cargo check
+    ```
+
+*   **编译发布 (Release)**
+    ```bash
+    cargo build --release
+    ```
+    编译产物位于 `target/release/fin-box` (Windows 下为 `.exe`)。
+    *注意：Release 模式下会自动隐藏控制台窗口。*
+
+*   **清理构建缓存**
+    ```bash
+    cargo clean
+    ```
+
+## 6. 开源协议 (License)
 
 本项目基于 [Apache License 2.0](LICENSE) 协议开源。
 

@@ -1,0 +1,58 @@
+# FinBox 主题配置示例
+# 您可以将以下内容复制到 config.yaml 文件中以自定义主题
+
+# 默认暗色主题 (Default Dark)
+default:
+  background: "#141414E6" # 窗口背景色 (支持透明度)
+  border: "#3C3C3C"        # 边框颜色
+  text_normal: "#D3D3D3"   # 普通文本颜色
+  text_white: "#FFFFFF"    # 高亮/白色文本颜色
+  text_gray: "#808080"     # 次要/灰色文本颜色
+  color_up: "#FF6464"      # 上涨颜色 (红)
+  color_down: "#64FF64"    # 下跌颜色 (绿)
+  accent: "#FFA500"        # 强调色 (按钮图标等)
+  menu_bg: "#232323"       # 右键菜单背景色
+  rounding: 8.0            # 圆角大小
+  border_width: 1.0        # 边框宽度
+
+# 赛博朋克主题 (Cyberpunk)
+cyberpunk:
+  background: "#0A0A10F0"
+  border: "#00F0FF"       # 霓虹青
+  text_normal: "#00F0FF"
+  text_white: "#DCF5FF"
+  text_gray: "#647882"
+  color_up: "#FF2828"     # 霓虹红
+  color_down: "#28FF28"   # 霓虹绿
+  accent: "#FF00FF"       # 霓虹紫
+  menu_bg: "#0F0F19"
+  rounding: 2.0
+  border_width: 1.0
+
+# Sublime 风格主题 (Monokai)
+sublime:
+  background: "#272822F0" # Monokai 背景
+  border: "#171814"       # 深色边框
+  text_normal: "#F8F8F2"  # Monokai 前景
+  text_white: "#FFFFFF"
+  text_gray: "#75715E"    # Monokai 注释
+  color_up: "#F92672"     # Monokai Pink (红)
+  color_down: "#A6E22E"   # Monokai Green (绿)
+  accent: "#66D9EF"       # Monokai Blue
+  menu_bg: "#272822"
+  rounding: 4.0
+  border_width: 1.0
+
+# 简约浅色主题 (Light)
+light:
+  background: "#F5F5F7F2" # 类似 macOS 浅色窗口背景
+  border: "#D1D1D6"       # 浅灰边框
+  text_normal: "#1D1D1F"  # 深灰/接近黑色文字
+  text_white: "#000000"   # 纯黑高亮
+  text_gray: "#86868B"    # 中性灰辅助文本
+  color_up: "#EA4C89"     # 柔和红
+  color_down: "#4CAF50"   # 材质绿
+  accent: "#007AFF"       # 系统蓝
+  menu_bg: "#FFFFFF"      # 纯白菜单背景
+  rounding: 6.0
+  border_width: 1.0

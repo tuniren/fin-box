@@ -1,10 +1,12 @@
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use crate::theme::Theme;
 
 // ----------------------------------------------------------------------------
 // 配置模型 (Configuration Models)
 // ----------------------------------------------------------------------------
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
     /// 总投入资金 (用于计算总盈亏比例)
     pub total_investment: Option<f64>,
@@ -12,7 +14,38 @@ pub struct AppConfig {
     pub cash: Option<f64>,
     /// 自选股列表
     pub stocks: Vec<StockConfig>,
+    
+    /// 当前使用的主题名称 (默认 "default")
+    #[serde(default = "default_theme_name")]
+    pub current_theme: String,
+    
+    /// 主题列表
+    #[serde(default)]
+    pub themes: HashMap<String, Theme>,
 }
+
+fn default_theme_name() -> String {
+    "default".to_string()
+}
+
+impl Default for AppConfig {
+    fn default() -> Self {
+        let mut themes = HashMap::new();
+        themes.insert("default".to_string(), Theme::default());
+        themes.insert("cyberpunk".to_string(), Theme::cyberpunk());
+        themes.insert("light".to_string(), Theme::light());
+        themes.insert("sublime".to_string(), Theme::sublime());
+
+        Self {
+            total_investment: None,
+            cash: None,
+            stocks: Vec::new(),
+            current_theme: "default".to_string(),
+            themes,
+        }
+    }
+}
+
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StockConfig {
