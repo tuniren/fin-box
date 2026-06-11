@@ -1,0 +1,1 @@
+export { fetchStockComments } from "./sina";
