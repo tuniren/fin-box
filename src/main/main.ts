@@ -2,7 +2,7 @@ import { app, BrowserWindow, globalShortcut, ipcMain, Menu, nativeImage, shell }
 import fs from "node:fs";
 import path from "node:path";
 import { AppCore } from "./core";
-import type { KLineScale, NoteTreeItem, Position } from "../shared/types";
+import type { AppConfig, KLinePoint, KLineScale, NoteTreeItem, Position, StockJournalNote } from "../shared/types";
 
 process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = "true";
 
@@ -359,6 +359,7 @@ function createMinuteWindow(code: string, name: string): BrowserWindow {
     transparent: true,
     alwaysOnTop: true,
     skipTaskbar: true,
+    resizable: true,
     hasShadow: false,
     backgroundColor: "#00000000",
     webPreferences: {
@@ -437,10 +438,16 @@ ipcMain.handle("open-config-dir", () => core.openConfigDir());
 ipcMain.handle("quit", () => app.quit());
 ipcMain.handle("search-stocks", (_event, query: string) => core.searchStocks(query));
 ipcMain.handle("add-stock", (_event, code: string, alias?: string) => core.addStock(code, alias));
+ipcMain.handle("update-account-config", (_event, patch: Pick<AppConfig, "total_investment" | "cash">) => core.updateAccountConfig(patch));
+ipcMain.handle("update-theme", (_event, themeName: string) => core.updateTheme(themeName));
 ipcMain.handle("update-stock-alias", (_event, code: string, alias?: string) => core.updateStockAlias(code, alias));
 ipcMain.handle("update-stock-tags", (_event, code: string, tags: string[]) => core.updateStockTags(code, tags));
 ipcMain.handle("update-stock-positions", (_event, code: string, positions: Position[]) => core.updateStockPositions(code, positions));
 ipcMain.handle("fetch-kline", (_event, code: string, scale: KLineScale) => core.fetchKLine(code, scale));
+ipcMain.handle("get-stock-journal", (_event, code: string) => core.getStockJournal(code));
+ipcMain.handle("start-stock-journal", (_event, code: string, followedAt: string) => core.startStockJournal(code, followedAt));
+ipcMain.handle("save-stock-journal-note", (_event, code: string, note: Pick<StockJournalNote, "id" | "date" | "content">) => core.saveStockJournalNote(code, note));
+ipcMain.handle("archive-daily-kline", (_event, code: string, points: KLinePoint[]) => core.archiveDailyKLine(code, points));
 ipcMain.handle("fetch-minute-data", (_event, code: string) => core.fetchMinuteData(code));
 ipcMain.handle("fetch-stock-news", (_event, code: string, page: number, keyword?: string) => core.fetchStockNews(code, page, keyword));
 ipcMain.handle("fetch-stock-news-article", (_event, url: string) => core.fetchStockNewsArticle(url));

@@ -65,6 +65,22 @@ export type KLinePoint = {
   volume: number;
 };
 
+export type StockJournalNote = {
+  id: string;
+  date?: string;
+  content: string;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type StockJournal = {
+  code: string;
+  followedAt?: string;
+  dailyKLine: KLinePoint[];
+  notes: StockJournalNote[];
+  updatedAt: number;
+};
+
 export type MinutePoint = {
   time: string;
   price: number;
@@ -141,10 +157,16 @@ export type FinBoxApi = {
   quit: () => Promise<void>;
   searchStocks: (query: string) => Promise<StockSearchResult[]>;
   addStock: (code: string, alias?: string) => Promise<void>;
+  updateAccountConfig: (patch: Pick<AppConfig, "total_investment" | "cash">) => Promise<void>;
+  updateTheme: (themeName: string) => Promise<void>;
   updateStockAlias: (code: string, alias?: string) => Promise<void>;
   updateStockTags: (code: string, tags: string[]) => Promise<void>;
   updateStockPositions: (code: string, positions: Position[]) => Promise<void>;
   fetchKLine: (code: string, scale: KLineScale) => Promise<KLinePoint[]>;
+  getStockJournal: (code: string) => Promise<StockJournal>;
+  startStockJournal: (code: string, followedAt: string) => Promise<StockJournal>;
+  saveStockJournalNote: (code: string, note: Pick<StockJournalNote, "id" | "date" | "content">) => Promise<StockJournal>;
+  archiveDailyKLine: (code: string, points: KLinePoint[]) => Promise<StockJournal>;
   fetchMinuteData: (code: string) => Promise<MinutePoint[]>;
   fetchStockNews: (code: string, page: number, keyword?: string) => Promise<StockNewsPage>;
   fetchStockNewsArticle: (url: string) => Promise<StockNewsArticle>;
