@@ -2,7 +2,7 @@ import { app, BrowserWindow, globalShortcut, ipcMain, Menu, nativeImage, shell }
 import fs from "node:fs";
 import path from "node:path";
 import { AppCore } from "./core";
-import type { AppConfig, KLinePoint, KLineScale, NoteTreeItem, Position, StockJournalNote } from "../shared/types";
+import type { AppConfig, KLinePoint, KLineScale, MottoConfig, NoteTreeItem, Position, StockJournalNote } from "../shared/types";
 
 process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = "true";
 
@@ -13,9 +13,9 @@ if (process.platform === "win32") {
 
 let mainWindow: BrowserWindow | undefined;
 let floatWindow: BrowserWindow | undefined;
+let mottoWindow: BrowserWindow | undefined;
 let core: AppCore;
 const klineWindows = new Map<string, BrowserWindow>();
-const minuteWindows = new Map<string, BrowserWindow>();
 let appIcon: Electron.NativeImage | undefined;
 
 function notesRoot(): string {
@@ -261,15 +261,15 @@ function closeDerivedWindows(): void {
   }
   floatWindow = undefined;
 
+  if (mottoWindow && !mottoWindow.isDestroyed()) {
+    mottoWindow.close();
+  }
+  mottoWindow = undefined;
+
   for (const win of klineWindows.values()) {
     if (!win.isDestroyed()) win.close();
   }
   klineWindows.clear();
-
-  for (const win of minuteWindows.values()) {
-    if (!win.isDestroyed()) win.close();
-  }
-  minuteWindows.clear();
 }
 
 function createFloatWindow(): BrowserWindow {
@@ -309,6 +309,46 @@ function createFloatWindow(): BrowserWindow {
   return win;
 }
 
+function createMottoWindow(): BrowserWindow {
+  if (mottoWindow && !mottoWindow.isDestroyed()) {
+    mottoWindow.show();
+    mottoWindow.focus();
+    return mottoWindow;
+  }
+
+  const win = new BrowserWindow({
+    width: 260,
+    height: 70,
+    minWidth: 120,
+    minHeight: 42,
+    frame: false,
+    transparent: true,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    resizable: true,
+    hasShadow: false,
+    icon: getAppIcon(),
+    backgroundColor: "#00000000",
+    webPreferences: {
+      preload: path.join(__dirname, "../preload.js"),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false
+    }
+  });
+
+  applyWindowIcon(win);
+  win.setAlwaysOnTop(true, "screen-saver");
+  win.setMenuBarVisibility(false);
+  win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  win.on("closed", () => {
+    if (mottoWindow === win) mottoWindow = undefined;
+  });
+  mottoWindow = win;
+  void loadRenderer(win, "#/motto");
+  return win;
+}
+
 function createKLineWindow(code: string, name: string): BrowserWindow {
   const existed = klineWindows.get(code);
   if (existed && !existed.isDestroyed()) {
@@ -337,46 +377,6 @@ function createKLineWindow(code: string, name: string): BrowserWindow {
   win.on("closed", () => klineWindows.delete(code));
   klineWindows.set(code, win);
   void loadRenderer(win, `#/kline/${encodeURIComponent(code)}/${encodeURIComponent(name)}`);
-  return win;
-}
-
-function createMinuteWindow(code: string, name: string): BrowserWindow {
-  const existed = minuteWindows.get(code);
-  if (existed && !existed.isDestroyed()) {
-    existed.show();
-    existed.focus();
-    return existed;
-  }
-
-  const win = new BrowserWindow({
-    width: 240,
-    height: 108,
-    minWidth: 180,
-    minHeight: 76,
-    title: `${name} Minute - ${code}`,
-    icon: getAppIcon(),
-    frame: false,
-    transparent: true,
-    alwaysOnTop: true,
-    skipTaskbar: true,
-    resizable: true,
-    hasShadow: false,
-    backgroundColor: "#00000000",
-    webPreferences: {
-      preload: path.join(__dirname, "../preload.js"),
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: false
-    }
-  });
-  applyWindowIcon(win);
-  win.setAlwaysOnTop(true, "screen-saver");
-  win.setOpacity(0.68);
-  win.setMenuBarVisibility(false);
-  win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-  win.on("closed", () => minuteWindows.delete(code));
-  minuteWindows.set(code, win);
-  void loadRenderer(win, `#/minute/${encodeURIComponent(code)}/${encodeURIComponent(name)}`);
   return win;
 }
 
@@ -439,6 +439,7 @@ ipcMain.handle("quit", () => app.quit());
 ipcMain.handle("search-stocks", (_event, query: string) => core.searchStocks(query));
 ipcMain.handle("add-stock", (_event, code: string, alias?: string) => core.addStock(code, alias));
 ipcMain.handle("update-account-config", (_event, patch: Pick<AppConfig, "total_investment" | "cash">) => core.updateAccountConfig(patch));
+ipcMain.handle("update-motto", (_event, motto: MottoConfig) => core.updateMotto(motto));
 ipcMain.handle("update-theme", (_event, themeName: string) => core.updateTheme(themeName));
 ipcMain.handle("update-stock-alias", (_event, code: string, alias?: string) => core.updateStockAlias(code, alias));
 ipcMain.handle("update-stock-tags", (_event, code: string, tags: string[]) => core.updateStockTags(code, tags));
@@ -518,7 +519,14 @@ ipcMain.handle("start-drag", (event) => {
   win?.moveTop();
 });
 ipcMain.handle("open-kline-window", (_event, code: string, name: string) => createKLineWindow(code, name));
-ipcMain.handle("open-minute-window", (_event, code: string, name: string) => createMinuteWindow(code, name));
+ipcMain.handle("toggle-motto-window", () => {
+  if (mottoWindow && !mottoWindow.isDestroyed()) {
+    mottoWindow.close();
+    mottoWindow = undefined;
+    return;
+  }
+  createMottoWindow();
+});
 ipcMain.handle("toggle-float-window", () => {
   if (floatWindow && !floatWindow.isDestroyed()) {
     floatWindow.close();

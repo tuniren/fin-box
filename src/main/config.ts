@@ -3,7 +3,14 @@ import fs from "node:fs";
 import path from "node:path";
 import yaml from "js-yaml";
 import { defaultThemes } from "../shared/theme";
-import type { AppConfig } from "../shared/types";
+import type { AppConfig, MottoConfig } from "../shared/types";
+
+const defaultMotto: MottoConfig = {
+  text: "\u51b7\u9759\uff0c\u8010\u5fc3\uff0c\u53ea\u505a\u770b\u5f97\u61c2\u7684\u51b3\u5b9a\u3002",
+  font_family: "Microsoft YaHei",
+  font_size: 14,
+  color: "#f8fafc"
+};
 
 export class ConfigManager {
   private readonly configPath: string;
@@ -28,6 +35,7 @@ export class ConfigManager {
     const config: AppConfig = {
       total_investment: 100000,
       cash: 50000,
+      motto: defaultMotto,
       hide_zero_shares: false,
       stocks: [
         {
@@ -76,6 +84,7 @@ export class ConfigManager {
       const normalized: AppConfig = {
         total_investment: config.total_investment,
         cash: config.cash,
+        motto: normalizeMotto(config.motto),
         hide_zero_shares: config.hide_zero_shares ?? false,
         stocks: (config.stocks ?? []).map((stock) => ({
           code: stock.code,
@@ -100,6 +109,22 @@ export class ConfigManager {
       this.lastModified = 0;
     }
   }
+}
+
+function normalizeMotto(value: unknown): MottoConfig {
+  if (typeof value === "string") {
+    return { ...defaultMotto, text: value };
+  }
+  if (!value || typeof value !== "object") return defaultMotto;
+
+  const motto = value as Partial<MottoConfig>;
+  const fontSize = Number(motto.font_size);
+  return {
+    text: typeof motto.text === "string" ? motto.text : defaultMotto.text,
+    font_family: typeof motto.font_family === "string" && motto.font_family.trim() ? motto.font_family.trim() : defaultMotto.font_family,
+    font_size: Number.isFinite(fontSize) ? Math.min(Math.max(fontSize, 10), 36) : defaultMotto.font_size,
+    color: typeof motto.color === "string" && /^#[0-9a-fA-F]{6}$/.test(motto.color) ? motto.color : defaultMotto.color
+  };
 }
 
 function normalizeTags(tags: unknown): string[] {

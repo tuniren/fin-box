@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { ConfigManager } from "./config";
 import { fetchKLineData, fetchMultipleStocks, fetchStockComments as fetchThsStockComments, fetchStockNews as fetchSinaStockNews, fetchStockNewsArticle as fetchSinaStockNewsArticle, fetchTencentMinuteData, searchStocks } from "./sina";
-import type { AppConfig, AppState, KLinePoint, KLineScale, Position, StockConfig, StockJournal, StockJournalNote } from "../shared/types";
+import type { AppConfig, AppState, KLinePoint, KLineScale, MottoConfig, Position, StockConfig, StockJournal, StockJournalNote } from "../shared/types";
 
 const INDEX_CODE = "sh000001";
 const TRADING_REFRESH_MIN_MS = 3000;
@@ -92,6 +92,19 @@ export class AppCore {
     const config = this.configManager.loadOrDefault();
     config.total_investment = normalizeOptionalNumber(patch.total_investment);
     config.cash = normalizeOptionalNumber(patch.cash);
+
+    this.configManager.save(config);
+    this.applyConfig(config);
+  }
+
+  updateMotto(motto: MottoConfig): void {
+    const config = this.configManager.loadOrDefault();
+    config.motto = {
+      text: motto.text.trim(),
+      font_family: motto.font_family.trim() || "Microsoft YaHei",
+      font_size: Math.min(Math.max(Number(motto.font_size) || 14, 10), 36),
+      color: /^#[0-9a-fA-F]{6}$/.test(motto.color) ? motto.color : "#f8fafc"
+    };
 
     this.configManager.save(config);
     this.applyConfig(config);

@@ -25,9 +25,17 @@ export type StockConfig = {
   positions: Position[];
 };
 
+export type MottoConfig = {
+  text: string;
+  font_family: string;
+  font_size: number;
+  color: string;
+};
+
 export type AppConfig = {
   total_investment?: number;
   cash?: number;
+  motto: MottoConfig;
   hide_zero_shares: boolean;
   stocks: StockConfig[];
   current_theme: string;
@@ -158,6 +166,7 @@ export type FinBoxApi = {
   searchStocks: (query: string) => Promise<StockSearchResult[]>;
   addStock: (code: string, alias?: string) => Promise<void>;
   updateAccountConfig: (patch: Pick<AppConfig, "total_investment" | "cash">) => Promise<void>;
+  updateMotto: (motto: MottoConfig) => Promise<void>;
   updateTheme: (themeName: string) => Promise<void>;
   updateStockAlias: (code: string, alias?: string) => Promise<void>;
   updateStockTags: (code: string, tags: string[]) => Promise<void>;
@@ -181,8 +190,8 @@ export type FinBoxApi = {
   resizeWindow: (width: number, height: number) => Promise<void>;
   startDrag: () => Promise<void>;
   openKLineWindow: (code: string, name: string) => Promise<void>;
-  openMinuteWindow: (code: string, name: string) => Promise<void>;
   toggleFloatWindow: () => Promise<void>;
+  toggleMottoWindow: () => Promise<void>;
   minimizeWindow: () => Promise<void>;
   toggleMaximizeWindow: () => Promise<void>;
   closeWindow: () => Promise<void>;

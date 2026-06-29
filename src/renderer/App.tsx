@@ -1,5 +1,5 @@
 import { KLineView } from "./components/KLineView";
-import { FloatTickerView, MainWorkspace, MinuteWindowView } from "./views/MainWorkspace";
+import { FloatTickerView, MainWorkspace, MottoWindowView } from "./views/MainWorkspace";
 
 export function App() {
   const hash = decodeURIComponent(window.location.hash);
@@ -7,10 +7,7 @@ export function App() {
     const [, , code, name] = hash.split("/");
     return <KLineView code={code} name={name ?? code} />;
   }
-  if (hash.startsWith("#/minute/")) {
-    const [, , code, name] = hash.split("/");
-    return <MinuteWindowView code={code} name={name ?? code} />;
-  }
   if (hash === "#/float") return <FloatTickerView />;
+  if (hash === "#/motto") return <MottoWindowView />;
   return <MainWorkspace />;
 }

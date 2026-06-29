@@ -1,4 +1,3 @@
-import * as echarts from "echarts";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Blocks,
@@ -39,9 +38,10 @@ import {
   totalShares
 } from "../../shared/finance";
 import { currentTheme, profitColor } from "../../shared/theme";
-import type { AppState, MinutePoint, NoteTreeItem, Position, StockCommentItem, StockCommentPage, StockNewsPage, StockSearchResult, StockStatus, Theme } from "../../shared/types";
+import type { AppState, MottoConfig, NoteTreeItem, Position, StockCommentItem, StockCommentPage, StockNewsPage, StockSearchResult, StockStatus, Theme } from "../../shared/types";
 import { KLineView } from "../components/KLineView";
 import { MarketStatusBar } from "../components/MarketStatusBar";
+import { MinutePanel } from "../components/MinutePanel";
 import { SearchPane } from "../components/SearchPane";
 import { TickerSummary } from "../components/TickerSummary";
 import { TradingIntensityPanel } from "../components/TradingIntensityPanel";
@@ -52,20 +52,13 @@ const clamp = (value: number, min: number, max: number) => Math.min(Math.max(val
 type ActivityView = "watchlist" | "news" | "notes";
 type ActiveView = "details" | "chart" | "note";
 type StockView = "details" | "chart";
-const defaultChartTheme: Theme = {
-  background: "#ffffff",
-  border: "#d4d4d4",
-  text_normal: "#333333",
-  text_white: "#ffffff",
-  text_gray: "#6a6a6a",
-  color_up: "#d73a49",
-  color_down: "#22863a",
-  accent: "#007acc",
-  menu_bg: "#f3f3f3",
-  rounding: 2,
-  border_width: 1
+type TitleMenu = "file" | "view" | "window";
+const defaultMotto: MottoConfig = {
+  text: "\u51b7\u9759\uff0c\u8010\u5fc3\uff0c\u53ea\u505a\u770b\u5f97\u61c2\u7684\u51b3\u5b9a\u3002",
+  font_family: "Microsoft YaHei",
+  font_size: 14,
+  color: "#f8fafc"
 };
-
 function useAppState() {
   const [state, setState] = useState<AppState>();
 
@@ -116,6 +109,10 @@ function joinNotePath(parentPath: string, name: string) {
   return normalizedParent ? `${normalizedParent}/${normalizedName}` : normalizedName;
 }
 
+function sameMotto(left: MottoConfig, right: MottoConfig) {
+  return left.text === right.text && left.font_family === right.font_family && left.font_size === right.font_size && left.color === right.color;
+}
+
 export function MainWorkspace() {
   const state = useAppState();
   const visibleStocks = useVisibleStocks(state);
@@ -129,6 +126,7 @@ export function MainWorkspace() {
   const [explorerVisible, setExplorerVisible] = useState(true);
   const [editorVisible, setEditorVisible] = useState(true);
   const [sideVisible, setSideVisible] = useState(true);
+  const [activeTitleMenu, setActiveTitleMenu] = useState<TitleMenu>();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [themeError, setThemeError] = useState("");
   const [explorerWidth, setExplorerWidth] = useState(332);
@@ -148,6 +146,10 @@ export function MainWorkspace() {
   const [noteSaving, setNoteSaving] = useState(false);
   const [noteError, setNoteError] = useState("");
   const [notesReload, setNotesReload] = useState(0);
+  const [mottoDraft, setMottoDraft] = useState<MottoConfig>(defaultMotto);
+  const [savedMotto, setSavedMotto] = useState<MottoConfig>(defaultMotto);
+  const [mottoSaving, setMottoSaving] = useState(false);
+  const [mottoError, setMottoError] = useState("");
 
   useEffect(() => {
     if (!visibleStocks.length) {
@@ -188,6 +190,16 @@ export function MainWorkspace() {
     });
     return offCycle;
   }, [holdStocks]);
+
+  useEffect(() => {
+    const onMouseDown = (event: MouseEvent) => {
+      if ((event.target as HTMLElement | null)?.closest(".title-menu")) return;
+      setActiveTitleMenu(undefined);
+    };
+
+    window.addEventListener("mousedown", onMouseDown);
+    return () => window.removeEventListener("mousedown", onMouseDown);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -261,10 +273,21 @@ export function MainWorkspace() {
     };
   }, [selectedNotePath]);
 
+  useEffect(() => {
+    if (!state) return;
+    const nextMotto = state.config.motto;
+    setSavedMotto((currentSaved) => {
+      if (sameMotto(currentSaved, nextMotto)) return currentSaved;
+      setMottoDraft((currentDraft) => (sameMotto(currentDraft, currentSaved) ? nextMotto : currentDraft));
+      return nextMotto;
+    });
+  }, [state?.config.motto.text, state?.config.motto.font_family, state?.config.motto.font_size, state?.config.motto.color]);
+
   const theme = state ? currentTheme(state.config) : undefined;
   const selectedStock = visibleStocks.find((stock) => stock.config.code === selectedCode) ?? visibleStocks[0];
   const selectedNoteName = selectedNotePath ? selectedNotePath.split("/").pop() ?? selectedNotePath : "";
   const noteDirty = noteContent !== savedNoteContent;
+  const mottoDirty = !sameMotto(mottoDraft, savedMotto);
   const detailsOpen = openStockViews.has("details");
   const chartOpen = openStockViews.has("chart");
 
@@ -314,6 +337,15 @@ export function MainWorkspace() {
   };
 
   const refreshNotes = () => setNotesReload((value) => value + 1);
+
+  const updateMottoDraft = (patch: Partial<MottoConfig>) => {
+    setMottoDraft((motto) => ({ ...motto, ...patch }));
+  };
+
+  const runTitleMenuAction = (action: () => void) => {
+    action();
+    setActiveTitleMenu(undefined);
+  };
 
   const selectTheme = async (themeName: string) => {
     setThemeError("");
@@ -372,6 +404,19 @@ export function MainWorkspace() {
     }
   };
 
+  const saveMotto = async () => {
+    setMottoSaving(true);
+    setMottoError("");
+    try {
+      await api.updateMotto(mottoDraft);
+      setSavedMotto(mottoDraft);
+    } catch (error) {
+      setMottoError(error instanceof Error ? error.message : "Failed to save motto.");
+    } finally {
+      setMottoSaving(false);
+    }
+  };
+
   const saveNote = async () => {
     if (!selectedNotePath) return;
     setNoteSaving(true);
@@ -399,28 +444,52 @@ export function MainWorkspace() {
       <header className="title-bar">
         <nav className="title-menu" aria-label="Application menu">
           <img className="title-logo" src="./assets/app-icon.svg" alt="" />
-          <button onClick={() => void api.forceRefresh()}>Refresh</button>
-          <button onClick={() => setSearchOpen(true)}>Add Symbol</button>
-          <button onClick={() => void api.openConfigFile()}>Config</button>
-          <button onClick={() => void api.openConfigDir()}>Folder</button>
-          <button onClick={() => void api.toggleFloatWindow()}>Float</button>
-          <button
-            onClick={() => {
-              openStockView("details");
-            }}
-            disabled={!selectedStock}
-          >
-            Details
-          </button>
-          <button
-            onClick={() => {
-              openStockView("chart");
-            }}
-            disabled={!selectedStock}
-          >
-            Chart
-          </button>
-          <button onClick={() => void api.quit()}>Quit</button>
+          <div className={`title-menu-group ${activeTitleMenu === "file" ? "open" : ""}`}>
+            <button className="title-menu-root" aria-haspopup="menu" aria-expanded={activeTitleMenu === "file"} onClick={() => setActiveTitleMenu((menu) => (menu === "file" ? undefined : "file"))}>File</button>
+            <div className="title-menu-dropdown" role="menu">
+              <button role="menuitem" onClick={() => runTitleMenuAction(() => setSearchOpen(true))}>Add Symbol</button>
+              <button role="menuitem" onClick={() => runTitleMenuAction(() => void api.forceRefresh())}>Refresh</button>
+              <span className="title-menu-separator" />
+              <button role="menuitem" onClick={() => runTitleMenuAction(() => void api.openConfigFile())}>Open Config</button>
+              <button role="menuitem" onClick={() => runTitleMenuAction(() => void api.openConfigDir())}>Open Config Folder</button>
+              <span className="title-menu-separator" />
+              <button role="menuitem" onClick={() => runTitleMenuAction(() => void api.quit())}>Quit</button>
+            </div>
+          </div>
+          <div className={`title-menu-group ${activeTitleMenu === "view" ? "open" : ""}`}>
+            <button className="title-menu-root" aria-haspopup="menu" aria-expanded={activeTitleMenu === "view"} onClick={() => setActiveTitleMenu((menu) => (menu === "view" ? undefined : "view"))}>View</button>
+            <div className="title-menu-dropdown" role="menu">
+              <button role="menuitem" onClick={() => runTitleMenuAction(() => setExplorerVisible((value) => !value))}>{explorerVisible ? "Hide Explorer" : "Show Explorer"}</button>
+              <button role="menuitem" onClick={() => runTitleMenuAction(() => setEditorVisible((value) => !value))}>{editorVisible ? "Hide Editor" : "Show Editor"}</button>
+              <button role="menuitem" onClick={() => runTitleMenuAction(() => setSideVisible((value) => !value))}>{sideVisible ? "Hide Side Panel" : "Show Side Panel"}</button>
+              <span className="title-menu-separator" />
+              <button
+                role="menuitem"
+                onClick={() => runTitleMenuAction(() => {
+                  openStockView("details");
+                })}
+                disabled={!selectedStock}
+              >
+                Details
+              </button>
+              <button
+                role="menuitem"
+                onClick={() => runTitleMenuAction(() => {
+                  openStockView("chart");
+                })}
+                disabled={!selectedStock}
+              >
+                Chart
+              </button>
+            </div>
+          </div>
+          <div className={`title-menu-group ${activeTitleMenu === "window" ? "open" : ""}`}>
+            <button className="title-menu-root" aria-haspopup="menu" aria-expanded={activeTitleMenu === "window"} onClick={() => setActiveTitleMenu((menu) => (menu === "window" ? undefined : "window"))}>Window</button>
+            <div className="title-menu-dropdown" role="menu">
+              <button role="menuitem" onClick={() => runTitleMenuAction(() => void api.toggleFloatWindow())}>Toggle Stock Float</button>
+              <button role="menuitem" onClick={() => runTitleMenuAction(() => void api.toggleMottoWindow())}>Toggle Motto Window</button>
+            </div>
+          </div>
         </nav>
         <div className="window-title">electron-react</div>
         <div className="layout-actions" aria-label="Layout actions">
@@ -591,6 +660,50 @@ export function MainWorkspace() {
               <FileText size={14} />
               Config
             </button>
+            <section className="motto-editor">
+              <div className="motto-editor-title">
+                <span>Motto</span>
+                <button className="icon-tool compact" onClick={() => void api.toggleMottoWindow()} title="Toggle motto window" aria-label="Toggle motto window">
+                  <Maximize2 size={14} />
+                </button>
+              </div>
+              <textarea
+                value={mottoDraft.text}
+                onChange={(event) => updateMottoDraft({ text: event.target.value })}
+                placeholder="Write a reminder to keep in sight"
+              />
+              <div className="motto-style-grid">
+                <label>
+                  <span>Font</span>
+                  <input value={mottoDraft.font_family} onChange={(event) => updateMottoDraft({ font_family: event.target.value })} />
+                </label>
+                <label>
+                  <span>Size</span>
+                  <input
+                    type="number"
+                    min="10"
+                    max="36"
+                    step="1"
+                    value={mottoDraft.font_size || ""}
+                    onChange={(event) => updateMottoDraft({ font_size: event.target.value === "" ? 0 : clamp(Number(event.target.value), 10, 36) })}
+                  />
+                </label>
+                <label>
+                  <span>Color</span>
+                  <input type="color" value={mottoDraft.color} onChange={(event) => updateMottoDraft({ color: event.target.value })} />
+                </label>
+              </div>
+              <div className="motto-actions">
+                {mottoDirty && <span className="edit-state">Unsaved motto</span>}
+                {mottoError && <span className="save-error">{mottoError}</span>}
+                <button className="tool-button" onClick={() => setMottoDraft(savedMotto)} disabled={!mottoDirty || mottoSaving}>
+                  Cancel
+                </button>
+                <button className="tool-button accent" onClick={() => void saveMotto()} disabled={!mottoDirty || mottoSaving}>
+                  {mottoSaving ? "Saving..." : "Save Motto"}
+                </button>
+              </div>
+            </section>
           </div>
         </aside>
         )}
@@ -678,14 +791,12 @@ export function FloatTickerView() {
   );
 }
 
-export function MinuteWindowView({ code, name }: { code: string; name: string }) {
+export function MottoWindowView() {
   const state = useAppState();
-  const [points, setPoints] = useState<MinutePoint[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const theme = state ? currentTheme(state.config) : defaultChartTheme;
+  const shellRef = useRef<HTMLElement>(null);
+  const textRef = useRef<HTMLDivElement>(null);
 
-  const startMinuteResize = (event: ReactMouseEvent<HTMLButtonElement>) => {
+  const startMottoResize = (event: ReactMouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
     event.stopPropagation();
     const startX = event.clientX;
@@ -694,8 +805,8 @@ export function MinuteWindowView({ code, name }: { code: string; name: string })
     const startHeight = window.innerHeight;
 
     const onMouseMove = (moveEvent: MouseEvent) => {
-      const width = clamp(startWidth + moveEvent.clientX - startX, 220, 960);
-      const height = clamp(startHeight + moveEvent.clientY - startY, 120, 720);
+      const width = clamp(startWidth + moveEvent.clientX - startX, 120, 720);
+      const height = clamp(startHeight + moveEvent.clientY - startY, 42, 420);
       void api.resizeWindow(width, height);
     };
 
@@ -708,51 +819,31 @@ export function MinuteWindowView({ code, name }: { code: string; name: string })
     window.addEventListener("mouseup", onMouseUp);
   };
 
+  const motto = state?.config.motto ?? defaultMotto;
+
   useEffect(() => {
-    let cancelled = false;
-    let inFlight = false;
+    const shell = shellRef.current;
+    const text = textRef.current;
+    if (!shell || !text) return;
 
-    const loadMinuteData = () => {
-      if (inFlight) return;
-      inFlight = true;
-      setError("");
-      void api.fetchMinuteData(code)
-        .then((items) => {
-          if (!cancelled) setPoints(items);
-        })
-        .catch((loadError) => {
-          if (!cancelled) setError(loadError instanceof Error ? loadError.message : "Failed to load minute data.");
-        })
-        .finally(() => {
-          inFlight = false;
-          if (!cancelled) setLoading(false);
-        });
-    };
-
-    setLoading(true);
-    loadMinuteData();
-    const timer = window.setInterval(loadMinuteData, 2000);
-    return () => {
-      cancelled = true;
-      window.clearInterval(timer);
-    };
-  }, [code]);
+    const width = clamp(Math.ceil(text.scrollWidth + 36), 120, 520);
+    const height = clamp(Math.ceil(text.scrollHeight + 22), 42, 260);
+    void api.resizeWindow(width, height);
+  }, [motto.text, motto.font_family, motto.font_size, motto.color]);
 
   return (
-    <main className="minute-window drag-region">
-      <header>
-        <h1>{name}</h1>
-        <button className="icon-tool compact" onClick={() => void api.closeWindow()} aria-label="Close minute window" title="Close">
-          <X size={12} />
-        </button>
-      </header>
-      {error && <div className="save-error minute-error">{error}</div>}
-      {loading && points.length === 0 ? (
-        <div className="loading">Loading...</div>
-      ) : (
-        <MinuteChart points={points} theme={theme} fill />
-      )}
-      <button className="minute-resize-handle no-drag" onMouseDown={startMinuteResize} aria-label="Resize minute window" title="Resize" />
+    <main className="motto-window drag-region" ref={shellRef}>
+      <button className="motto-close no-drag" onClick={() => void api.closeWindow()} aria-label="Close motto window" title="Close">
+        <X size={13} />
+      </button>
+      <div
+        className="motto-text"
+        ref={textRef}
+        style={{ color: motto.color, fontFamily: motto.font_family, fontSize: `${motto.font_size}px` }}
+      >
+        {motto.text}
+      </div>
+      <button className="motto-resize-handle no-drag" onMouseDown={startMottoResize} aria-label="Resize motto window" title="Resize" />
     </main>
   );
 }
@@ -1044,9 +1135,6 @@ function StockDetail({ state, stock, theme, onOpenChart }: { state: AppState; st
   const [commentsLoading, setCommentsLoading] = useState(false);
   const [commentsError, setCommentsError] = useState("");
   const [minuteOpen, setMinuteOpen] = useState(false);
-  const [minutePoints, setMinutePoints] = useState<MinutePoint[]>([]);
-  const [minuteLoading, setMinuteLoading] = useState(false);
-  const [minuteError, setMinuteError] = useState("");
 
   useEffect(() => {
     setDraft(stock?.config.positions.map((position) => ({ ...position })) ?? []);
@@ -1065,9 +1153,6 @@ function StockDetail({ state, stock, theme, onOpenChart }: { state: AppState; st
     setCommentsLoading(false);
     setCommentsError("");
     setMinuteOpen(false);
-    setMinutePoints([]);
-    setMinuteLoading(false);
-    setMinuteError("");
   }, [stock?.config.code]);
 
   useEffect(() => {
@@ -1092,36 +1177,6 @@ function StockDetail({ state, stock, theme, onOpenChart }: { state: AppState; st
     };
   }, [stock?.config.code, commentsOpen, commentsPage]);
 
-  useEffect(() => {
-    let cancelled = false;
-    let inFlight = false;
-    if (!stock || !minuteOpen) return;
-
-    const loadMinuteData = () => {
-      if (inFlight) return;
-      inFlight = true;
-      setMinuteError("");
-      void api.fetchMinuteData(stock.config.code)
-        .then((points) => {
-          if (!cancelled) setMinutePoints(points);
-        })
-        .catch((error) => {
-          if (!cancelled) setMinuteError(error instanceof Error ? error.message : "Failed to load minute data.");
-        })
-        .finally(() => {
-          inFlight = false;
-          if (!cancelled) setMinuteLoading(false);
-        });
-    };
-
-    setMinuteLoading(true);
-    loadMinuteData();
-    const timer = window.setInterval(loadMinuteData, 2000);
-    return () => {
-      cancelled = true;
-      window.clearInterval(timer);
-    };
-  }, [stock?.config.code, minuteOpen]);
 
   if (!stock) return <div className="empty-state">Select a symbol</div>;
 
@@ -1287,27 +1342,7 @@ function StockDetail({ state, stock, theme, onOpenChart }: { state: AppState; st
         <DetailItem label="Updated" value={state.last_market_update ? new Date(state.last_market_update).toLocaleTimeString() : "--"} />
       </div>
       <TradingIntensityPanel stock={stock} theme={theme} />
-      {minuteOpen && (
-        <section className="minute-panel">
-          <div className="minute-title">
-            <span>Minute</span>
-            <div className="minute-actions">
-              <button className="icon-tool compact" onClick={() => void api.openMinuteWindow(stock.config.code, displayName(stock))} aria-label="Open minute window" title="Open in window">
-                <Maximize2 size={14} />
-              </button>
-              <button className="icon-tool compact" onClick={() => setMinuteOpen(false)} aria-label="Close minute chart" title="Close">
-                <X size={14} />
-              </button>
-            </div>
-          </div>
-          {minuteError && <div className="save-error minute-error">{minuteError}</div>}
-          {minuteLoading && minutePoints.length === 0 ? (
-            <div className="loading minute-loading">Loading...</div>
-          ) : (
-            <MinuteChart points={minutePoints} theme={theme} />
-          )}
-        </section>
-      )}
+      {minuteOpen && <MinutePanel stock={stock} theme={theme} onClose={() => setMinuteOpen(false)} />}
       <section className="tags-editor">
         <div className="tags-title">
           <span>Tags</span>
@@ -1441,228 +1476,6 @@ function StockDetail({ state, stock, theme, onOpenChart }: { state: AppState; st
   );
 }
 
-function MinuteChart({ points, theme, fill = false, mini = false }: { points: MinutePoint[]; theme: Theme; fill?: boolean; mini?: boolean }) {
-  const chartRef = useRef<HTMLDivElement>(null);
-  const instanceRef = useRef<echarts.ECharts | null>(null);
-  const zoomRef = useRef<MinuteZoomState>({ start: 0, end: 100 });
-
-  useEffect(() => {
-    if (!chartRef.current) return;
-    const chart = echarts.init(chartRef.current, undefined, { renderer: "canvas" });
-    instanceRef.current = chart;
-
-    const rememberZoom = () => {
-      const option = chart.getOption?.() as MinuteChartOption | undefined;
-      const zoom = option?.dataZoom?.[0];
-      if (isFiniteNumber(zoom?.start) && isFiniteNumber(zoom?.end)) {
-        zoomRef.current = { start: zoom.start, end: zoom.end };
-      }
-    };
-
-    chart.on("dataZoom", rememberZoom);
-
-    const resizeObserver = new ResizeObserver(() => chart.resize());
-    resizeObserver.observe(chartRef.current);
-
-    return () => {
-      chart.off("dataZoom", rememberZoom);
-      resizeObserver.disconnect();
-      chart.dispose();
-      instanceRef.current = null;
-    };
-  }, []);
-
-  useEffect(() => {
-    const chart = instanceRef.current;
-    if (!chart) return;
-
-    if (points.length === 0) {
-      chart.clear();
-      return;
-    }
-
-    const times = points.map((point) => point.time);
-    const prices = points.map((point) => point.price);
-    const averagePrices = points.map((point) => point.avgPrice ?? point.price);
-    const volumes = points.map((point, index) => [index, point.volume, index > 0 && point.price < points[index - 1].price ? -1 : 1]);
-    const previousClose = points.find((point) => point.prevClose !== undefined)?.prevClose;
-    const latest = points[points.length - 1];
-    const delta = previousClose && latest ? latest.price - previousClose : 0;
-    const trendColor = profitColor(theme, delta);
-    const zoom = zoomRef.current;
-
-    chart.setOption(
-      {
-        animation: false,
-        backgroundColor: mini ? "transparent" : "#ffffff",
-        color: [trendColor, "#d28721", "rgba(0,122,204,0.34)"],
-        textStyle: {
-          color: "#3f3f3f",
-          fontFamily: "\"Segoe UI\", system-ui, sans-serif",
-          fontSize: 11
-        },
-        tooltip: {
-          trigger: "axis",
-          triggerOn: "mousemove|click",
-          axisPointer: {
-            type: "line",
-            axis: "x",
-            lineStyle: { color: "#6b7280", width: 1, type: "dashed" }
-          },
-          borderColor: "#d4d4d4",
-          borderWidth: 1,
-          backgroundColor: "rgba(255,255,255,0.96)",
-          textStyle: { color: "#333333" },
-          formatter: (params: MinuteTooltipParam | MinuteTooltipParam[]) => formatMinuteTooltip(params, previousClose)
-        },
-        axisPointer: {
-          link: [{ xAxisIndex: [0, 1] }],
-          snap: true,
-          label: {
-            show: true,
-            backgroundColor: "#5666a5"
-          }
-        },
-        grid: [
-          mini
-            ? { left: 6, right: 6, top: 6, height: "68%" }
-            : { left: 54, right: 22, top: 16, height: "57%" },
-          mini
-            ? { left: 6, right: 6, top: "79%", height: "13%" }
-            : { left: 54, right: 22, top: "72%", height: "17%" }
-        ],
-        xAxis: [
-          {
-            type: "category",
-            data: times,
-            boundaryGap: false,
-            axisLine: { show: !mini, lineStyle: { color: "#d4d4d4" } },
-            axisTick: { show: false },
-            axisLabel: { show: false },
-            splitLine: { show: false },
-            axisPointer: {
-              show: true,
-              label: { show: false }
-            }
-          },
-          {
-            type: "category",
-            gridIndex: 1,
-            data: times,
-            boundaryGap: false,
-            axisLine: { show: !mini, lineStyle: { color: "#d4d4d4" } },
-            axisTick: { show: false },
-            axisLabel: { show: !mini, color: "#6a6a6a", fontSize: 10 },
-            splitLine: { show: false },
-            axisPointer: {
-              show: true,
-              label: { show: true }
-            }
-          }
-        ],
-        yAxis: [
-          {
-            scale: true,
-            axisLine: { show: false },
-            axisTick: { show: false },
-            axisLabel: {
-              show: !mini,
-              color: "#6a6a6a",
-              fontSize: 10,
-              formatter: (value: number) => formatChartDecimal(value)
-            },
-            splitLine: { show: !mini, lineStyle: { color: "#eeeeee" } }
-          },
-          {
-            gridIndex: 1,
-            axisLine: { show: false },
-            axisTick: { show: false },
-            axisLabel: { show: false },
-            splitLine: { show: false }
-          }
-        ],
-        dataZoom: [
-          {
-            type: "inside",
-            xAxisIndex: [0, 1],
-            filterMode: "filter",
-            zoomOnMouseWheel: true,
-            moveOnMouseMove: true,
-            moveOnMouseWheel: false,
-            start: zoom.start,
-            end: zoom.end,
-            minSpan: 3
-          },
-          {
-            type: "slider",
-            show: !mini,
-            xAxisIndex: [0, 1],
-            filterMode: "filter",
-            height: 16,
-            bottom: 8,
-            borderColor: "#d4d4d4",
-            fillerColor: "rgba(0,122,204,0.14)",
-            handleSize: 12,
-            moveHandleSize: 5,
-            start: zoom.start,
-            end: zoom.end,
-            minSpan: 3,
-            textStyle: { color: "#6a6a6a", fontSize: 10 }
-          }
-        ],
-        series: [
-          {
-            name: "Price",
-            type: "line",
-            xAxisIndex: 0,
-            yAxisIndex: 0,
-            data: prices,
-            symbol: "none",
-            lineStyle: { width: mini ? 1.4 : 1.8, color: trendColor },
-            areaStyle: { color: mini ? "rgba(0,122,204,0.1)" : "rgba(0,122,204,0.08)" },
-            connectNulls: true,
-            markLine: previousClose
-              ? {
-                  silent: true,
-                  symbol: "none",
-                  label: { show: !mini, formatter: "Prev", color: "#6a6a6a", fontSize: 10 },
-                  lineStyle: { color: "#9ca3af", type: "dashed", width: 1 },
-                  data: [{ yAxis: previousClose }]
-                }
-              : undefined
-          },
-          {
-            name: "Avg",
-            type: "line",
-            xAxisIndex: 0,
-            yAxisIndex: 0,
-            data: averagePrices,
-            symbol: "none",
-            lineStyle: { width: 1, type: "dashed" },
-            opacity: mini ? 0.78 : 1,
-            connectNulls: true
-          },
-          {
-            name: "Volume",
-            type: "bar",
-            xAxisIndex: 1,
-            yAxisIndex: 1,
-            barWidth: "58%",
-            data: volumes,
-            itemStyle: {
-              color: (params: { data: [number, number, number] }) => (params.data[2] > 0 ? "rgba(215,58,73,0.46)" : "rgba(34,134,58,0.46)")
-            }
-          }
-        ]
-      },
-      true
-    );
-  }, [points, theme]);
-
-  if (points.length === 0) return <div className="loading minute-loading">No minute data</div>;
-  return <div className={`minute-chart ${fill ? "fill" : ""} ${mini ? "mini" : ""}`} ref={chartRef} role="img" aria-label="Minute chart" />;
-}
-
 function ThemeQuickPick({
   currentThemeName,
   themes,
@@ -1718,67 +1531,6 @@ function ThemeSwatch({ theme }: { theme: Theme }) {
   );
 }
 
-type MinuteTooltipParam = {
-  axisValueLabel?: string;
-  dataIndex?: number;
-  marker?: string;
-  seriesName?: string;
-  value?: number | [number, number, number];
-};
-
-type MinuteZoomState = {
-  start: number;
-  end: number;
-};
-
-type MinuteChartOption = {
-  dataZoom?: Array<Partial<MinuteZoomState>>;
-};
-
-function formatMinuteTooltip(params: MinuteTooltipParam | MinuteTooltipParam[], previousClose?: number): string {
-  const items = Array.isArray(params) ? params : [params];
-  const time = items.find((item) => item.axisValueLabel)?.axisValueLabel ?? "";
-  const rows = items
-    .filter((item) => item.seriesName)
-    .map((item) => {
-      const value = minuteTooltipValue(item);
-      const formatted = item.seriesName === "Volume" ? formatChartInteger(value) : formatChartDecimal(value);
-      return `<div class="chart-tooltip-row">${item.marker ?? ""}<span>${escapeTooltipText(item.seriesName ?? "")}</span><b>${formatted}</b></div>`;
-    })
-    .join("");
-  const price = minuteTooltipValue(items.find((item) => item.seriesName === "Price") ?? {});
-  const change = previousClose && price ? ((price - previousClose) / previousClose) * 100 : undefined;
-  const changeRow = change === undefined
-    ? ""
-    : `<div class="chart-tooltip-row"><span>Change %</span><b>${formatSigned(change, 2)}%</b></div>`;
-
-  return `<div class="chart-tooltip"><div class="chart-tooltip-time">${escapeTooltipText(time)}</div>${rows}${changeRow}</div>`;
-}
-
-function minuteTooltipValue(item: MinuteTooltipParam): number {
-  if (Array.isArray(item.value)) return Number(item.value[1]) || 0;
-  return Number(item.value) || 0;
-}
-
-function formatChartDecimal(value: number): string {
-  return Number.isFinite(value) ? value.toFixed(3) : "--";
-}
-
-function formatChartInteger(value: number): string {
-  return Number.isFinite(value) ? Math.round(value).toLocaleString() : "--";
-}
-
-function isFiniteNumber(value: unknown): value is number {
-  return typeof value === "number" && Number.isFinite(value);
-}
-
-function escapeTooltipText(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-}
-
 function DetailItem({ label, value, color, strong = false }: { label: string; value: string; color?: string; strong?: boolean }) {
   return (
     <div className="detail-item">
@@ -1827,3 +1579,4 @@ function formatCommentMeta(item: StockCommentItem): string {
   ].filter(Boolean);
   return [item.user, item.date, counts.join(" ")].filter(Boolean).join(" ");
 }
+

@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from "electron";
-import type { AppState, FinBoxApi, KLineScale } from "./shared/types";
+import type { AppState, FinBoxApi, KLineScale, MottoConfig } from "./shared/types";
 
 // Expose only the FinBox IPC surface to the renderer.
 // React can still manage windows and market state while contextIsolation stays on.
@@ -12,6 +12,7 @@ const api: FinBoxApi = {
   searchStocks: (query: string) => ipcRenderer.invoke("search-stocks", query),
   addStock: (code: string, alias?: string) => ipcRenderer.invoke("add-stock", code, alias),
   updateAccountConfig: (patch) => ipcRenderer.invoke("update-account-config", patch),
+  updateMotto: (motto: MottoConfig) => ipcRenderer.invoke("update-motto", motto),
   updateTheme: (themeName: string) => ipcRenderer.invoke("update-theme", themeName),
   updateStockAlias: (code: string, alias?: string) => ipcRenderer.invoke("update-stock-alias", code, alias),
   updateStockTags: (code: string, tags: string[]) => ipcRenderer.invoke("update-stock-tags", code, tags),
@@ -35,8 +36,8 @@ const api: FinBoxApi = {
   resizeWindow: (width: number, height: number) => ipcRenderer.invoke("resize-window", width, height),
   startDrag: () => ipcRenderer.invoke("start-drag"),
   openKLineWindow: (code: string, name: string) => ipcRenderer.invoke("open-kline-window", code, name),
-  openMinuteWindow: (code: string, name: string) => ipcRenderer.invoke("open-minute-window", code, name),
   toggleFloatWindow: () => ipcRenderer.invoke("toggle-float-window"),
+  toggleMottoWindow: () => ipcRenderer.invoke("toggle-motto-window"),
   minimizeWindow: () => ipcRenderer.invoke("window-minimize"),
   toggleMaximizeWindow: () => ipcRenderer.invoke("window-toggle-maximize"),
   closeWindow: () => ipcRenderer.invoke("window-close"),
