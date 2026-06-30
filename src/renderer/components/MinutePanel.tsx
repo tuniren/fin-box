@@ -1,26 +1,50 @@
 ﻿import * as echarts from "echarts";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent as ReactMouseEvent } from "react";
 import { X } from "lucide-react";
-import type { MinutePoint, StockStatus, Theme } from "../../shared/types";
-import { formatSigned } from "../utils";
+import type { KLinePoint, MinutePoint, StockStatus, Theme } from "../../shared/types";
+import { formatMaybe, formatSigned } from "../utils";
 
 const api = window.finBox;
+const DAILY_SCALE = 240;
+const TRADING_MINUTES_PER_DAY = 240;
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
 
 export function MinutePanel({ stock, theme, onClose }: { stock: StockStatus; theme: Theme; onClose: () => void }) {
   const [points, setPoints] = useState<MinutePoint[]>([]);
+  const [history, setHistory] = useState<KLinePoint[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [panelSize, setPanelSize] = useState({ width: 520, height: 360 });
+  const [panelSize, setPanelSize] = useState({ width: 520, height: 460 });
   const [markerInput, setMarkerInput] = useState("");
+  const [activeWidget, setActiveWidget] = useState<MinuteWidgetKind>("volume");
+  const [selectedMinuteIndex, setSelectedMinuteIndex] = useState<number>();
 
   useEffect(() => {
     setPoints([]);
     setLoading(false);
     setError("");
-    setPanelSize({ width: 520, height: 360 });
+    setHistory([]);
+    setPanelSize({ width: 520, height: 460 });
     setMarkerInput("");
+    setActiveWidget("volume");
+    setSelectedMinuteIndex(undefined);
+  }, [stock.config.code]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setHistory([]);
+    void api.fetchKLine(stock.config.code, DAILY_SCALE)
+      .then((nextHistory) => {
+        if (!cancelled) setHistory(nextHistory);
+      })
+      .catch(() => {
+        if (!cancelled) setHistory([]);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [stock.config.code]);
 
   useEffect(() => {
@@ -54,6 +78,7 @@ export function MinutePanel({ stock, theme, onClose }: { stock: StockStatus; the
   }, [stock.config.code]);
 
   const markerPrice = markerInput.trim() === "" ? undefined : Number(markerInput);
+  const selectedMinutePoint = isFiniteNumber(selectedMinuteIndex) ? points[selectedMinuteIndex] : undefined;
 
   const startResize = (event: ReactMouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
@@ -65,7 +90,7 @@ export function MinutePanel({ stock, theme, onClose }: { stock: StockStatus; the
     const onMouseMove = (moveEvent: MouseEvent) => {
       setPanelSize({
         width: clamp(startSize.width + moveEvent.clientX - startX, 300, 920),
-        height: clamp(startSize.height + moveEvent.clientY - startY, 220, 720)
+        height: clamp(startSize.height + moveEvent.clientY - startY, 330, 760)
       });
     };
 
@@ -108,9 +133,10 @@ export function MinutePanel({ stock, theme, onClose }: { stock: StockStatus; the
         {loading && points.length === 0 ? (
           <div className="loading minute-loading">Loading...</div>
         ) : (
-          <MinuteChart points={points} theme={theme} fill subtle markerPrice={isFiniteNumber(markerPrice) ? markerPrice : undefined} />
+          <MinuteChart points={points} theme={theme} fill subtle markerPrice={isFiniteNumber(markerPrice) ? markerPrice : undefined} selectedIndex={selectedMinuteIndex} onSelectPoint={setSelectedMinuteIndex} />
         )}
       </div>
+      <MinuteWidgetDeck points={points} history={history} theme={theme} activeWidget={activeWidget} selectedIndex={selectedMinuteIndex} selectedPoint={selectedMinutePoint} onActiveWidgetChange={setActiveWidget} onSelectPoint={setSelectedMinuteIndex} />
       <button className="minute-resize-handle embedded-minute-resize-handle" onMouseDown={startResize} aria-label="Resize minute chart" title="Resize" />
     </section>
   );
@@ -122,7 +148,9 @@ function MinuteChart({
   fill = false,
   mini = false,
   subtle = false,
-  markerPrice
+  markerPrice,
+  selectedIndex,
+  onSelectPoint
 }: {
   points: MinutePoint[];
   theme: Theme;
@@ -130,10 +158,18 @@ function MinuteChart({
   mini?: boolean;
   subtle?: boolean;
   markerPrice?: number;
+  selectedIndex?: number;
+  onSelectPoint?: (index: number) => void;
 }) {
   const chartRef = useRef<HTMLDivElement>(null);
   const instanceRef = useRef<echarts.ECharts | null>(null);
   const zoomRef = useRef<MinuteZoomState>({ start: 0, end: 100 });
+  const onSelectPointRef = useRef(onSelectPoint);
+  const timeLabelsRef = useRef<string[]>([]);
+
+  useEffect(() => {
+    onSelectPointRef.current = onSelectPoint;
+  }, [onSelectPoint]);
 
   useEffect(() => {
     if (!chartRef.current) return;
@@ -148,13 +184,22 @@ function MinuteChart({
       }
     };
 
+    const selectPoint = (params: MinuteChartSelectParam) => {
+      const index = resolveMinuteSelectIndex(params, timeLabelsRef.current);
+      if (isFiniteNumber(index)) onSelectPointRef.current?.(index);
+    };
+
     chart.on("dataZoom", rememberZoom);
+    chart.on("click", selectPoint);
+    chart.on("updateAxisPointer", selectPoint);
 
     const resizeObserver = new ResizeObserver(() => chart.resize());
     resizeObserver.observe(chartRef.current);
 
     return () => {
       chart.off("dataZoom", rememberZoom);
+      chart.off("click", selectPoint);
+      chart.off("updateAxisPointer", selectPoint);
       resizeObserver.disconnect();
       chart.dispose();
       instanceRef.current = null;
@@ -171,15 +216,15 @@ function MinuteChart({
     }
 
     const times = points.map((point) => point.time);
+    timeLabelsRef.current = times;
     const prices = points.map((point) => point.price);
     const averagePrices = points.map((point) => point.avgPrice ?? point.price);
-    const volumes = points.map((point, index) => [index, point.volume, index > 0 && point.price < points[index - 1].price ? -1 : 1] as [number, number, number]);
     const previousClose = points.find((point) => point.prevClose !== undefined)?.prevClose;
     const latest = points[points.length - 1];
+    const selectedPoint = isFiniteNumber(selectedIndex) ? points[selectedIndex] : undefined;
     const delta = previousClose && latest ? latest.price - previousClose : 0;
     const trendColor = subtle ? "#69736f" : profitColor(theme, delta);
     const averageColor = subtle ? "rgba(224,169,48,0.42)" : "#e5a829";
-    const volumeColor = subtle ? "rgba(99,112,107,0.13)" : "rgba(0,122,204,0.34)";
     const subduedTextColor = subtle ? "#7b8581" : "#6a6a6a";
     const subduedAxisColor = subtle ? "rgba(128,139,134,0.24)" : "#d4d4d4";
     const priceAxisBounds = resolveMinutePriceAxisBounds(
@@ -189,6 +234,9 @@ function MinuteChart({
       latest?.price,
       isFiniteNumber(markerPrice) ? markerPrice : undefined
     );
+    const priceAxisInterval = isFiniteNumber(previousClose) && isFiniteNumber(priceAxisBounds.min) && isFiniteNumber(priceAxisBounds.max)
+      ? (priceAxisBounds.max - priceAxisBounds.min) / 2
+      : undefined;
     const zoom = zoomRef.current;
     const priceMarkLines = [
       previousClose
@@ -219,6 +267,14 @@ function MinuteChart({
             lineStyle: { color: trendColor, type: "dashed", width: mini || subtle ? 1 : 1.2, opacity: subtle ? 0.34 : 0.72 }
           }
         : undefined,
+      selectedPoint
+        ? {
+            name: "Selected",
+            xAxis: selectedPoint.time,
+            label: { show: false },
+            lineStyle: { color: "rgba(31,31,31,0.26)", type: "dotted", width: 1 }
+          }
+        : undefined,
       isFiniteNumber(markerPrice)
         ? {
             name: "Prep",
@@ -246,7 +302,7 @@ function MinuteChart({
       {
         animation: false,
         backgroundColor: mini || subtle ? "transparent" : "#ffffff",
-        color: [trendColor, averageColor, volumeColor],
+        color: [trendColor, averageColor],
         textStyle: {
           color: subtle ? "#737d79" : "#3f3f3f",
           fontFamily: "\"Segoe UI\", system-ui, sans-serif",
@@ -267,7 +323,7 @@ function MinuteChart({
           formatter: (params: MinuteTooltipParam | MinuteTooltipParam[]) => formatMinuteTooltip(params, previousClose)
         },
         axisPointer: {
-          link: [{ xAxisIndex: [0, 1] }],
+          link: [{ xAxisIndex: [0] }],
           snap: true,
           label: {
             show: !subtle,
@@ -276,15 +332,10 @@ function MinuteChart({
         },
         grid: [
           mini
-            ? { left: 6, right: 38, top: 6, height: "68%" }
+            ? { left: 6, right: 38, top: 6, bottom: 12 }
             : subtle
-              ? { left: 12, right: 34, top: 10, height: "63%" }
-              : { left: 54, right: 48, top: 16, height: "57%" },
-          mini
-            ? { left: 6, right: 38, top: "79%", height: "13%" }
-            : subtle
-              ? { left: 12, right: 34, top: "80%", height: "9%" }
-              : { left: 54, right: 48, top: "72%", height: "17%" }
+              ? { left: 12, right: 34, top: 10, bottom: 20 }
+              : { left: 54, right: 48, top: 16, bottom: 34 }
         ],
         xAxis: [
           {
@@ -299,20 +350,6 @@ function MinuteChart({
               show: true,
               label: { show: false }
             }
-          },
-          {
-            type: "category",
-            gridIndex: 1,
-            data: times,
-            boundaryGap: false,
-            axisLine: { show: !mini && !subtle, lineStyle: { color: subduedAxisColor } },
-            axisTick: { show: false },
-            axisLabel: { show: !mini && !subtle, color: subduedTextColor, fontSize: 10 },
-            splitLine: { show: false },
-            axisPointer: {
-              show: true,
-              label: { show: true }
-            }
           }
         ],
         yAxis: [
@@ -320,7 +357,8 @@ function MinuteChart({
             scale: true,
             min: priceAxisBounds.min,
             max: priceAxisBounds.max,
-            splitNumber: previousClose ? 4 : undefined,
+            splitNumber: previousClose ? 2 : undefined,
+            interval: priceAxisInterval,
             axisLine: { show: false },
             axisTick: { show: false },
             axisLabel: { show: false },
@@ -330,30 +368,24 @@ function MinuteChart({
             scale: true,
             min: priceAxisBounds.min,
             max: priceAxisBounds.max,
-            splitNumber: previousClose ? 4 : undefined,
+            splitNumber: previousClose ? 2 : undefined,
+            interval: priceAxisInterval,
             position: "right",
             axisLine: { show: false },
             axisTick: { show: false },
             axisLabel: {
-              show: !mini && !subtle && !!previousClose,
+              show: !mini && !!previousClose,
               color: subduedTextColor,
-              fontSize: 10,
-              formatter: (value: number) => formatMinuteChangePoints(value, previousClose)
+              fontSize: subtle ? 9 : 10,
+              formatter: (value: number) => formatMinuteEdgeChangePoint(value, previousClose, priceAxisBounds)
             },
-            splitLine: { show: false }
-          },
-          {
-            gridIndex: 1,
-            axisLine: { show: false },
-            axisTick: { show: false },
-            axisLabel: { show: false },
             splitLine: { show: false }
           }
         ],
         dataZoom: [
           {
             type: "inside",
-            xAxisIndex: [0, 1],
+            xAxisIndex: [0],
             filterMode: "filter",
             zoomOnMouseWheel: true,
             moveOnMouseMove: true,
@@ -365,7 +397,7 @@ function MinuteChart({
           {
             type: "slider",
             show: !mini,
-            xAxisIndex: [0, 1],
+            xAxisIndex: [0],
             filterMode: "filter",
             height: subtle ? 8 : 16,
             bottom: 8,
@@ -388,7 +420,6 @@ function MinuteChart({
             data: prices,
             symbol: "none",
             lineStyle: { width: subtle ? 1.35 : mini ? 1.4 : 1.8, color: trendColor, opacity: subtle ? 0.58 : 1, cap: "round", join: "round" },
-            areaStyle: { color: subtle ? "rgba(83,96,91,0.035)" : mini ? "rgba(0,122,204,0.1)" : "rgba(0,122,204,0.08)" },
             connectNulls: true,
             markLine: {
               silent: true,
@@ -406,26 +437,338 @@ function MinuteChart({
             lineStyle: { width: subtle ? 1 : 1.25, color: averageColor },
             opacity: subtle ? 0.34 : mini ? 0.78 : 1,
             connectNulls: true
-          },
+          }
+        ]
+      },
+      true
+    );
+  }, [points, theme, subtle, markerPrice, selectedIndex]);
+
+  if (points.length === 0) return <div className="loading minute-loading">No minute data</div>;
+  return <div className={`minute-chart ${fill ? "fill" : ""} ${mini ? "mini" : ""} ${subtle ? "subtle" : ""}`} ref={chartRef} role="img" aria-label="Minute chart" />;
+}
+
+type MinuteWidgetKind = "volume" | "ratio" | "macdfs";
+
+const minuteWidgets: Array<{ value: MinuteWidgetKind; label: string }> = [
+  { value: "volume", label: "\u5206\u65f6\u91cf" },
+  { value: "ratio", label: "\u91cf\u6bd4" },
+  { value: "macdfs", label: "MACDFS" }
+];
+
+function MinuteWidgetDeck({
+  points,
+  history,
+  theme,
+  activeWidget,
+  selectedIndex,
+  selectedPoint,
+  onActiveWidgetChange,
+  onSelectPoint
+}: {
+  points: MinutePoint[];
+  history: KLinePoint[];
+  theme: Theme;
+  activeWidget: MinuteWidgetKind;
+  selectedIndex?: number;
+  selectedPoint?: MinutePoint;
+  onActiveWidgetChange: (widget: MinuteWidgetKind) => void;
+  onSelectPoint: (index: number) => void;
+}) {
+  const volumeStats = useMemo(() => calculateMinuteVolumeStats(history, points), [history, points]);
+  const macd = useMemo(() => calculateMinuteMacd(points), [points]);
+  const latestPoint = points[points.length - 1];
+  const displayPoint = selectedPoint ?? latestPoint;
+  const displayVolume = Math.max(0, displayPoint?.volume ?? 0);
+  const displayHandVolume = Math.max(0, latestPoint?.volume ?? 0);
+
+  return (
+    <section className="minute-widget-deck" aria-label="Minute widgets">
+      <div className="minute-widget-title">
+        <select value={activeWidget} onChange={(event) => onActiveWidgetChange(event.target.value as MinuteWidgetKind)} aria-label="Minute widget">
+          {minuteWidgets.map((widget) => (
+            <option key={widget.value} value={widget.value}>{widget.label}</option>
+          ))}
+        </select>
+        <span className="minute-widget-help" title="Switch minute widgets">?</span>
+        <div className="minute-widget-summary">
+          {activeWidget === "volume" && (
+            <>
+              {displayPoint && <span className="minute-widget-time">{displayPoint.time}</span>}
+              <span>{"\u91cf: "}<strong style={{ color: theme.text_normal }}>{formatFullVolume(displayVolume)}</strong></span>
+              <span>{"\u73b0\u624b: "}<strong style={{ color: theme.text_normal }}>{formatFullVolume(displayHandVolume)}</strong></span>
+            </>
+          )}
+          {activeWidget === "ratio" && (
+            <>
+              <span>{"\u91cf\u6bd4: "}<strong>{isFiniteNumber(volumeStats.ratioToAverage) ? `${formatMaybe(volumeStats.ratioToAverage, 2)}x` : "--"}</strong></span>
+              <span>{"\u8fdb\u5ea6: "}<strong>{Math.round(volumeStats.progress * 100)}%</strong></span>
+            </>
+          )}
+          {activeWidget === "macdfs" && (
+            <>
+              <span>DIF: <strong>{formatSigned(macd?.dif ?? 0, 3)}</strong></span>
+              <span>DEA: <strong>{formatSigned(macd?.dea ?? 0, 3)}</strong></span>
+            </>
+          )}
+        </div>
+      </div>
+      <div className="minute-widget-body">
+        {activeWidget === "volume" && <MinuteVolumeWidget points={points} selectedIndex={selectedIndex} onSelectPoint={onSelectPoint} />}
+        {activeWidget === "ratio" && <MinuteRatioWidget stats={volumeStats} theme={theme} />}
+        {activeWidget === "macdfs" && <MinuteMacdfsWidget macd={macd} theme={theme} />}
+      </div>
+    </section>
+  );
+}
+
+function MinuteVolumeWidget({ points, selectedIndex, onSelectPoint }: { points: MinutePoint[]; selectedIndex?: number; onSelectPoint: (index: number) => void }) {
+  const chartRef = useRef<HTMLDivElement>(null);
+  const instanceRef = useRef<echarts.ECharts | null>(null);
+  const onSelectPointRef = useRef(onSelectPoint);
+  const timeLabelsRef = useRef<string[]>([]);
+
+  useEffect(() => {
+    onSelectPointRef.current = onSelectPoint;
+  }, [onSelectPoint]);
+
+  useEffect(() => {
+    if (!chartRef.current) return;
+    const chart = echarts.init(chartRef.current, undefined, { renderer: "canvas" });
+    instanceRef.current = chart;
+
+    const selectPoint = (params: MinuteChartSelectParam) => {
+      const index = resolveMinuteSelectIndex(params, timeLabelsRef.current);
+      if (isFiniteNumber(index)) onSelectPointRef.current(index);
+    };
+
+    chart.on("click", selectPoint);
+    chart.on("updateAxisPointer", selectPoint);
+
+    const resizeObserver = new ResizeObserver(() => chart.resize());
+    resizeObserver.observe(chartRef.current);
+
+    return () => {
+      chart.off("click", selectPoint);
+      chart.off("updateAxisPointer", selectPoint);
+      resizeObserver.disconnect();
+      chart.dispose();
+      instanceRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    const chart = instanceRef.current;
+    if (!chart) return;
+    if (points.length === 0) {
+      chart.clear();
+      return;
+    }
+
+    const times = points.map((point) => point.time);
+    timeLabelsRef.current = times;
+    const selectedPoint = isFiniteNumber(selectedIndex) ? points[selectedIndex] : undefined;
+    const volumes = points.map((point, index) => [index, point.volume, index > 0 && point.price < points[index - 1].price ? -1 : 1] as [number, number, number]);
+
+    chart.setOption(
+      {
+        animation: false,
+        backgroundColor: "transparent",
+        tooltip: {
+          trigger: "axis",
+          axisPointer: { type: "line", lineStyle: { color: "rgba(104,116,111,0.28)", width: 1, type: "dashed" } },
+          borderColor: "rgba(118,130,125,0.24)",
+          borderWidth: 1,
+          backgroundColor: "rgba(246,247,241,0.92)",
+          textStyle: { color: "#5f6965", fontSize: 11 },
+          formatter: (params: MinuteTooltipParam | MinuteTooltipParam[]) => formatVolumeTooltip(params)
+        },
+        grid: { left: 12, right: 38, top: 6, bottom: 4 },
+        xAxis: {
+          type: "category",
+          data: times,
+          boundaryGap: false,
+          axisLine: { show: false },
+          axisTick: { show: false },
+          axisLabel: { show: false },
+          splitLine: { show: false }
+        },
+        yAxis: {
+          axisLine: { show: false },
+          axisTick: { show: false },
+          axisLabel: { show: false },
+          splitLine: { show: false }
+        },
+        series: [
           {
-            name: "Volume",
+            name: "\u5206\u65f6\u91cf",
             type: "bar",
-            xAxisIndex: 1,
-            yAxisIndex: 2,
-            barWidth: "58%",
+            barWidth: "62%",
             data: volumes,
             itemStyle: {
-              color: (params: { data: [number, number, number] }) => subtle ? "rgba(96,108,103,0.12)" : params.data[2] > 0 ? "rgba(215,58,73,0.46)" : "rgba(34,134,58,0.46)"
+              color: (params: { data: [number, number, number]; dataIndex: number }) => params.dataIndex === selectedIndex ? "rgba(31,31,31,0.58)" : params.data[2] > 0 ? "rgba(31,31,31,0.34)" : "rgba(31,31,31,0.18)"
+            },
+            markLine: {
+              silent: true,
+              symbol: "none",
+              data: selectedPoint
+                ? [
+                    {
+                      name: "Selected",
+                      xAxis: selectedPoint.time,
+                      label: { show: false },
+                      lineStyle: { color: "rgba(31,31,31,0.26)", type: "dotted", width: 1 }
+                    }
+                  ]
+                : []
             }
           }
         ]
       },
       true
     );
-  }, [points, theme, subtle, markerPrice]);
+  }, [points, selectedIndex]);
 
-  if (points.length === 0) return <div className="loading minute-loading">No minute data</div>;
-  return <div className={`minute-chart ${fill ? "fill" : ""} ${mini ? "mini" : ""} ${subtle ? "subtle" : ""}`} ref={chartRef} role="img" aria-label="Minute chart" />;
+  if (points.length === 0) return <div className="minute-widget-empty">No minute volume</div>;
+  return <div className="minute-volume-widget" ref={chartRef} role="img" aria-label="Minute volume" />;
+}
+
+function MinuteRatioWidget({ stats, theme }: { stats: MinuteVolumeStats; theme: Theme }) {
+  const ratio = isFiniteNumber(stats.ratioToAverage) ? stats.ratioToAverage : 0;
+  const width = `${Math.round(clamp(ratio / 3, 0, 1) * 100)}%`;
+
+  return (
+    <div className="minute-metric-widget">
+      <div className="minute-meter"><span style={{ width, background: ratio >= 1 ? theme.color_up : theme.color_down }} /></div>
+      <div className="minute-widget-grid">
+        <MinuteWidgetMetric label={"\u5f53\u524d\u91cf"} value={formatVolume(stats.currentVolume)} />
+        <MinuteWidgetMetric label={"\u4f30\u7b97\u91cf"} value={formatVolume(stats.projectedVolume)} />
+        <MinuteWidgetMetric label={"\u5747\u91cf\u6bd4"} value={isFiniteNumber(stats.ratioToAverage) ? `${formatMaybe(stats.ratioToAverage, 2)}x` : "--"} />
+        <MinuteWidgetMetric label={"\u6837\u672c"} value={stats.sampleSize ? `${stats.sampleSize}` : "--"} />
+      </div>
+    </div>
+  );
+}
+
+function MinuteMacdfsWidget({ macd, theme }: { macd?: MinuteMacdPoint; theme: Theme }) {
+  if (!macd) return <div className="minute-widget-empty">No MACDFS data</div>;
+  const color = macd.macd >= 0 ? theme.color_up : theme.color_down;
+
+  return (
+    <div className="minute-metric-widget">
+      <div className="minute-macd-line"><span style={{ width: `${Math.round(clamp(Math.abs(macd.macd) * 120, 4, 100))}%`, background: color }} /></div>
+      <div className="minute-widget-grid">
+        <MinuteWidgetMetric label="DIF" value={formatSigned(macd.dif, 3)} />
+        <MinuteWidgetMetric label="DEA" value={formatSigned(macd.dea, 3)} />
+        <MinuteWidgetMetric label="MACD" value={formatSigned(macd.macd, 3)} color={color} />
+        <MinuteWidgetMetric label={"\u65b9\u5411"} value={macd.macd >= 0 ? "\u591a" : "\u7a7a"} color={color} />
+      </div>
+    </div>
+  );
+}
+
+function MinuteWidgetMetric({ label, value, color }: { label: string; value: string; color?: string }) {
+  return (
+    <div className="minute-widget-metric">
+      <span>{label}</span>
+      <strong style={{ color }}>{value}</strong>
+    </div>
+  );
+}
+
+type MinuteVolumeStats = {
+  currentVolume: number;
+  latestVolume: number;
+  projectedVolume: number;
+  ratioToAverage?: number;
+  progress: number;
+  sampleSize: number;
+};
+
+type MinuteMacdPoint = {
+  dif: number;
+  dea: number;
+  macd: number;
+};
+
+function calculateMinuteVolumeStats(history: KLinePoint[], points: MinutePoint[]): MinuteVolumeStats {
+  const currentVolume = points.reduce((sum, point) => sum + Math.max(0, point.volume), 0);
+  const latestVolume = Math.max(0, points[points.length - 1]?.volume ?? 0);
+  const progress = tradingProgress(points);
+  const projectedVolume = currentVolume > 0 ? currentVolume / progress : 0;
+  const baseline = history.length > 1 ? history.slice(0, -1) : history;
+  const historicalVolumes = baseline.map((point) => point.volume).filter((value) => Number.isFinite(value) && value > 0);
+  const averageVolume = historicalVolumes.length > 0
+    ? historicalVolumes.reduce((sum, value) => sum + value, 0) / historicalVolumes.length
+    : undefined;
+
+  return {
+    currentVolume,
+    latestVolume,
+    projectedVolume,
+    ratioToAverage: averageVolume && averageVolume > 0 ? projectedVolume / averageVolume : undefined,
+    progress,
+    sampleSize: historicalVolumes.length
+  };
+}
+
+function calculateMinuteMacd(points: MinutePoint[]): MinuteMacdPoint | undefined {
+  if (points.length < 2) return undefined;
+  let ema12 = points[0].price;
+  let ema26 = points[0].price;
+  let dea = 0;
+  let dif = 0;
+
+  for (const point of points) {
+    ema12 = ema12 * (11 / 13) + point.price * (2 / 13);
+    ema26 = ema26 * (25 / 27) + point.price * (2 / 27);
+    dif = ema12 - ema26;
+    dea = dea * (8 / 10) + dif * (2 / 10);
+  }
+
+  return { dif, dea, macd: (dif - dea) * 2 };
+}
+
+function tradingProgress(points: MinutePoint[]): number {
+  const latest = points[points.length - 1]?.time;
+  const elapsed = latest ? elapsedTradingMinutes(latest) : points.length;
+  return clamp(elapsed / TRADING_MINUTES_PER_DAY, 0.05, 1);
+}
+
+function elapsedTradingMinutes(time: string): number {
+  const match = time.match(/(\d{1,2}):(\d{2})/);
+  if (!match) return 0;
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+  const value = hour * 60 + minute;
+  const morningStart = 9 * 60 + 30;
+  const morningEnd = 11 * 60 + 30;
+  const afternoonStart = 13 * 60;
+  const afternoonEnd = 15 * 60;
+
+  if (value <= morningStart) return 1;
+  if (value <= morningEnd) return value - morningStart;
+  if (value < afternoonStart) return 120;
+  if (value <= afternoonEnd) return 120 + value - afternoonStart;
+  return TRADING_MINUTES_PER_DAY;
+}
+
+function formatFullVolume(value: number): string {
+  return Number.isFinite(value) ? Math.round(value).toLocaleString() : "--";
+}
+
+function formatVolume(value: number): string {
+  if (value >= 1000000000) return `${formatMaybe(value / 1000000000, 2)}B`;
+  if (value >= 1000000) return `${formatMaybe(value / 1000000, 2)}M`;
+  if (value >= 1000) return `${formatMaybe(value / 1000, 2)}K`;
+  return Math.round(value).toLocaleString();
+}
+
+function formatVolumeTooltip(params: MinuteTooltipParam | MinuteTooltipParam[]): string {
+  const item = Array.isArray(params) ? params[0] : params;
+  const value = minuteTooltipValue(item ?? {});
+  const time = item?.axisValueLabel ?? "";
+  return `<div class="chart-tooltip"><div class="chart-tooltip-time">${escapeTooltipText(time)}</div><div class="chart-tooltip-row"><span>\u5206\u65f6\u91cf</span><b>${formatFullVolume(value)}</b></div></div>`;
 }
 
 type MinuteTooltipParam = {
@@ -436,10 +779,32 @@ type MinuteTooltipParam = {
   value?: number | [number, number, number];
 };
 
+type MinuteChartSelectParam = {
+  axesInfo?: Array<{ value?: number | string }>;
+  axisValue?: number | string;
+  dataIndex?: number;
+  name?: string;
+};
+
 type MinuteZoomState = {
   start: number;
   end: number;
 };
+
+function resolveMinuteSelectIndex(params: MinuteChartSelectParam, labels: string[]): number | undefined {
+  if (labels.length === 0) return undefined;
+
+  if (isFiniteNumber(params.dataIndex)) return clamp(Math.round(params.dataIndex), 0, labels.length - 1);
+
+  const axisValue = params.axesInfo?.[0]?.value ?? params.axisValue ?? params.name;
+  if (isFiniteNumber(axisValue)) return clamp(Math.round(axisValue), 0, labels.length - 1);
+  if (typeof axisValue === "string") {
+    const index = labels.indexOf(axisValue);
+    return index >= 0 ? index : undefined;
+  }
+
+  return undefined;
+}
 
 type MinuteChartOption = {
   dataZoom?: Array<Partial<MinuteZoomState>>;
@@ -480,7 +845,15 @@ function formatChartInteger(value: number): string {
 
 function formatMinuteChangePoints(value: number, previousClose?: number): string {
   if (!previousClose || !Number.isFinite(previousClose) || previousClose === 0) return "--";
-  return formatSigned(((value - previousClose) / previousClose) * 100, 2);
+  return `${formatSigned(((value - previousClose) / previousClose) * 100, 2)}%`;
+}
+
+function formatMinuteEdgeChangePoint(value: number, previousClose: number | undefined, bounds: { min?: number; max?: number }): string {
+  if (!isFiniteNumber(previousClose) || !isFiniteNumber(bounds.min) || !isFiniteNumber(bounds.max)) return "";
+  const range = bounds.max - bounds.min;
+  const tolerance = Math.max(Math.abs(range) * 0.0001, 0.000001);
+  const isEdge = Math.abs(value - bounds.max) <= tolerance || Math.abs(value - bounds.min) <= tolerance;
+  return isEdge ? formatMinuteChangePoints(value, previousClose) : "";
 }
 
 function resolveMinutePriceAxisBounds(
@@ -501,8 +874,15 @@ function resolveMinutePriceAxisBounds(
   const dataMin = Math.min(...finiteValues);
   const dataMax = Math.max(...finiteValues);
 
+  if (isFiniteNumber(previousClose) && previousClose !== 0) {
+    const distance = Math.max(Math.abs(dataMax - previousClose), Math.abs(dataMin - previousClose));
+    const padding = Math.max(distance * 0.1, Math.abs(previousClose) * 0.0015, 0.001);
+    const span = distance + padding;
+    return { min: previousClose - span, max: previousClose + span };
+  }
+
   const valueSpan = dataMax - dataMin;
-  const referenceValue = isFiniteNumber(previousClose) && previousClose !== 0 ? previousClose : dataMax || dataMin;
+  const referenceValue = dataMax || dataMin;
   const padding = Math.max(valueSpan * 0.1, Math.abs(referenceValue) * 0.0015, 0.001);
 
   return { min: dataMin - padding, max: dataMax + padding };

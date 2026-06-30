@@ -38,6 +38,7 @@ export type AppConfig = {
   motto: MottoConfig;
   hide_zero_shares: boolean;
   stocks: StockConfig[];
+  stock_groups: string[];
   current_theme: string;
   themes: Record<string, Theme>;
 };
@@ -165,13 +166,15 @@ export type FinBoxApi = {
   quit: () => Promise<void>;
   searchStocks: (query: string) => Promise<StockSearchResult[]>;
   addStock: (code: string, alias?: string) => Promise<void>;
+  removeStock: (code: string) => Promise<void>;
   updateAccountConfig: (patch: Pick<AppConfig, "total_investment" | "cash">) => Promise<void>;
   updateMotto: (motto: MottoConfig) => Promise<void>;
   updateTheme: (themeName: string) => Promise<void>;
   updateStockAlias: (code: string, alias?: string) => Promise<void>;
   updateStockTags: (code: string, tags: string[]) => Promise<void>;
+  updateStockGroups: (groups: string[]) => Promise<void>;
   updateStockPositions: (code: string, positions: Position[]) => Promise<void>;
-  fetchKLine: (code: string, scale: KLineScale) => Promise<KLinePoint[]>;
+  fetchKLine: (code: string, scale: KLineScale, force?: boolean) => Promise<KLinePoint[]>;
   getStockJournal: (code: string) => Promise<StockJournal>;
   startStockJournal: (code: string, followedAt: string) => Promise<StockJournal>;
   saveStockJournalNote: (code: string, note: Pick<StockJournalNote, "id" | "date" | "content">) => Promise<StockJournal>;
@@ -191,6 +194,7 @@ export type FinBoxApi = {
   startDrag: () => Promise<void>;
   openKLineWindow: (code: string, name: string) => Promise<void>;
   toggleFloatWindow: () => Promise<void>;
+  toggleWatchFloatWindow: () => Promise<void>;
   toggleMottoWindow: () => Promise<void>;
   minimizeWindow: () => Promise<void>;
   toggleMaximizeWindow: () => Promise<void>;

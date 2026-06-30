@@ -13,6 +13,7 @@ if (process.platform === "win32") {
 
 let mainWindow: BrowserWindow | undefined;
 let floatWindow: BrowserWindow | undefined;
+let watchFloatWindow: BrowserWindow | undefined;
 let mottoWindow: BrowserWindow | undefined;
 let core: AppCore;
 const klineWindows = new Map<string, BrowserWindow>();
@@ -82,10 +83,17 @@ function compareNoteEntries(left: fs.Dirent, right: fs.Dirent): number {
 function getAppIcon(): Electron.NativeImage {
   if (appIcon && !appIcon.isEmpty()) return appIcon;
 
-  const svgIconPath = path.join(app.getAppPath(), "public", "assets", "app-icon.svg");
-  if (fs.existsSync(svgIconPath)) {
-    const svg = fs.readFileSync(svgIconPath, "utf8");
-    appIcon = nativeImage.createFromDataURL(`data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`);
+  const icoIconPath = path.join(app.getAppPath(), "public", "assets", "app-icon.ico");
+  if (fs.existsSync(icoIconPath)) {
+    appIcon = nativeImage.createFromPath(icoIconPath);
+  }
+
+  if (!appIcon || appIcon.isEmpty()) {
+    const svgIconPath = path.join(app.getAppPath(), "public", "assets", "app-icon.svg");
+    if (fs.existsSync(svgIconPath)) {
+      const svg = fs.readFileSync(svgIconPath, "utf8");
+      appIcon = nativeImage.createFromDataURL(`data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`);
+    }
   }
 
   if (!appIcon || appIcon.isEmpty()) {
@@ -98,7 +106,6 @@ function getAppIcon(): Electron.NativeImage {
 
   return appIcon;
 }
-
 function createIcoFromSvgContent(svg: string): Buffer {
   const background = readSvgColor(svg, /<rect[^>]*fill="([^"]+)"/, [0, 122, 204, 255]);
   const primary = readSvgColor(svg, /<path[^>]*fill="([^"]+)"/, [255, 255, 255, 235]);
@@ -261,6 +268,11 @@ function closeDerivedWindows(): void {
   }
   floatWindow = undefined;
 
+  if (watchFloatWindow && !watchFloatWindow.isDestroyed()) {
+    watchFloatWindow.close();
+  }
+  watchFloatWindow = undefined;
+
   if (mottoWindow && !mottoWindow.isDestroyed()) {
     mottoWindow.close();
   }
@@ -306,6 +318,46 @@ function createFloatWindow(): BrowserWindow {
   });
   floatWindow = win;
   void loadRenderer(win, "#/float");
+  return win;
+}
+
+function createWatchFloatWindow(): BrowserWindow {
+  if (watchFloatWindow && !watchFloatWindow.isDestroyed()) {
+    watchFloatWindow.show();
+    watchFloatWindow.focus();
+    return watchFloatWindow;
+  }
+
+  const win = new BrowserWindow({
+    width: 128,
+    height: 180,
+    minWidth: 1,
+    minHeight: 1,
+    frame: false,
+    transparent: true,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    resizable: true,
+    hasShadow: false,
+    icon: getAppIcon(),
+    backgroundColor: "#00000000",
+    webPreferences: {
+      preload: path.join(__dirname, "../preload.js"),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false
+    }
+  });
+
+  applyWindowIcon(win);
+  win.setAlwaysOnTop(true, "screen-saver");
+  win.setMenuBarVisibility(false);
+  win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  win.on("closed", () => {
+    if (watchFloatWindow === win) watchFloatWindow = undefined;
+  });
+  watchFloatWindow = win;
+  void loadRenderer(win, "#/watch-float");
   return win;
 }
 
@@ -416,6 +468,17 @@ app.whenReady().then(() => {
       createFloatWindow();
     }
   });
+  globalShortcut.register("CommandOrControl+Alt+0", () => {
+    if (watchFloatWindow && !watchFloatWindow.isDestroyed()) {
+      if (watchFloatWindow.isVisible()) {
+        watchFloatWindow.hide();
+      } else {
+        watchFloatWindow.show();
+      }
+    } else {
+      createWatchFloatWindow();
+    }
+  });
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) mainWindow = createMainWindow();
@@ -438,13 +501,15 @@ ipcMain.handle("open-config-dir", () => core.openConfigDir());
 ipcMain.handle("quit", () => app.quit());
 ipcMain.handle("search-stocks", (_event, query: string) => core.searchStocks(query));
 ipcMain.handle("add-stock", (_event, code: string, alias?: string) => core.addStock(code, alias));
+ipcMain.handle("remove-stock", (_event, code: string) => core.removeStock(code));
 ipcMain.handle("update-account-config", (_event, patch: Pick<AppConfig, "total_investment" | "cash">) => core.updateAccountConfig(patch));
 ipcMain.handle("update-motto", (_event, motto: MottoConfig) => core.updateMotto(motto));
 ipcMain.handle("update-theme", (_event, themeName: string) => core.updateTheme(themeName));
 ipcMain.handle("update-stock-alias", (_event, code: string, alias?: string) => core.updateStockAlias(code, alias));
 ipcMain.handle("update-stock-tags", (_event, code: string, tags: string[]) => core.updateStockTags(code, tags));
+ipcMain.handle("update-stock-groups", (_event, groups: string[]) => core.updateStockGroups(groups));
 ipcMain.handle("update-stock-positions", (_event, code: string, positions: Position[]) => core.updateStockPositions(code, positions));
-ipcMain.handle("fetch-kline", (_event, code: string, scale: KLineScale) => core.fetchKLine(code, scale));
+ipcMain.handle("fetch-kline", (_event, code: string, scale: KLineScale, force?: boolean) => core.fetchKLine(code, scale, force));
 ipcMain.handle("get-stock-journal", (_event, code: string) => core.getStockJournal(code));
 ipcMain.handle("start-stock-journal", (_event, code: string, followedAt: string) => core.startStockJournal(code, followedAt));
 ipcMain.handle("save-stock-journal-note", (_event, code: string, note: Pick<StockJournalNote, "id" | "date" | "content">) => core.saveStockJournalNote(code, note));
@@ -534,6 +599,14 @@ ipcMain.handle("toggle-float-window", () => {
     return;
   }
   createFloatWindow();
+});
+ipcMain.handle("toggle-watch-float-window", () => {
+  if (watchFloatWindow && !watchFloatWindow.isDestroyed()) {
+    watchFloatWindow.close();
+    watchFloatWindow = undefined;
+    return;
+  }
+  createWatchFloatWindow();
 });
 ipcMain.handle("window-minimize", (event) => {
   BrowserWindow.fromWebContents(event.sender)?.minimize();

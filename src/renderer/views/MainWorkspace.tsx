@@ -27,7 +27,7 @@ import {
   UserCircle,
   X
 } from "lucide-react";
-import type { CSSProperties, MouseEvent as ReactMouseEvent } from "react";
+import type { CSSProperties, FormEvent, MouseEvent as ReactMouseEvent } from "react";
 import {
   dayProfit,
   displayName,
@@ -45,6 +45,8 @@ import { MinutePanel } from "../components/MinutePanel";
 import { SearchPane } from "../components/SearchPane";
 import { TickerSummary } from "../components/TickerSummary";
 import { TradingIntensityPanel } from "../components/TradingIntensityPanel";
+import { GroupedWatchlist, mergeWatchGroups, normalizeWatchGroupName } from "../components/WatchTree";
+import type { WatchTreeSelection } from "../components/WatchTree";
 import { formatMaybe, formatSigned, stockPercent, themeStyle } from "../utils";
 
 const api = window.finBox;
@@ -53,6 +55,15 @@ type ActivityView = "watchlist" | "news" | "notes";
 type ActiveView = "details" | "chart" | "note";
 type StockView = "details" | "chart";
 type TitleMenu = "file" | "view" | "window";
+type WatchPromptKind = "create-group" | "rename-group" | "edit-alias";
+type WatchPromptState = {
+  kind: WatchPromptKind;
+  title: string;
+  label: string;
+  value: string;
+  tag?: string;
+  stockCode?: string;
+};
 const defaultMotto: MottoConfig = {
   text: "\u51b7\u9759\uff0c\u8010\u5fc3\uff0c\u53ea\u505a\u770b\u5f97\u61c2\u7684\u51b3\u5b9a\u3002",
   font_family: "Microsoft YaHei",
@@ -118,9 +129,13 @@ export function MainWorkspace() {
   const visibleStocks = useVisibleStocks(state);
   const holdStocks = useHoldStocks(visibleStocks);
   const [selectedCode, setSelectedCode] = useState<string>();
+  const [selectedWatchNode, setSelectedWatchNode] = useState<WatchTreeSelection>();
+  const [watchPrompt, setWatchPrompt] = useState<WatchPromptState>();
+  const [watchPromptValue, setWatchPromptValue] = useState("");
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<StockSearchResult[]>([]);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [searchTargetGroup, setSearchTargetGroup] = useState<string>();
   const [activeView, setActiveView] = useState<ActiveView>();
   const [openStockViews, setOpenStockViews] = useState<Set<StockView>>(() => new Set());
   const [explorerVisible, setExplorerVisible] = useState(true);
@@ -283,6 +298,22 @@ export function MainWorkspace() {
     });
   }, [state?.config.motto.text, state?.config.motto.font_family, state?.config.motto.font_size, state?.config.motto.color]);
 
+  useEffect(() => {
+    if (!searchOpen && !watchPrompt) return;
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setSearchOpen(false);
+      setSearchTargetGroup(undefined);
+      setQuery("");
+      setWatchPrompt(undefined);
+      setWatchPromptValue("");
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [searchOpen, watchPrompt]);
+
   const theme = state ? currentTheme(state.config) : undefined;
   const selectedStock = visibleStocks.find((stock) => stock.config.code === selectedCode) ?? visibleStocks[0];
   const selectedNoteName = selectedNotePath ? selectedNotePath.split("/").pop() ?? selectedNotePath : "";
@@ -355,6 +386,177 @@ export function MainWorkspace() {
     } catch (error) {
       setThemeError(error instanceof Error ? error.message : "Failed to switch theme.");
     }
+  };
+
+  const openWatchPrompt = (prompt: WatchPromptState) => {
+    setWatchPrompt(prompt);
+    setWatchPromptValue(prompt.value);
+  };
+
+  const closeWatchPrompt = () => {
+    setWatchPrompt(undefined);
+    setWatchPromptValue("");
+  };
+
+  const createWatchGroup = () => {
+    if (!state) return;
+    openWatchPrompt({
+      kind: "create-group",
+      title: "New Stock Group",
+      label: "Group name",
+      value: "New Group"
+    });
+  };
+
+  const openSearch = (targetGroup?: string) => {
+    setSearchTargetGroup(targetGroup);
+    setQuery("");
+    setSearchOpen(true);
+  };
+
+  const closeSearch = () => {
+    setSearchOpen(false);
+    setSearchTargetGroup(undefined);
+    setQuery("");
+  };
+
+  const addStockFromSearch = async (stock: StockSearchResult) => {
+    if (!state) return;
+    const existingStock = state.stocks.find((item) => item.config.code.toLowerCase() === stock.code.toLowerCase());
+    await api.addStock(stock.code, stock.name);
+
+    if (searchTargetGroup) {
+      await api.updateStockTags(stock.code, mergeWatchGroups([...(existingStock?.config.tags ?? []), searchTargetGroup]));
+      setSelectedWatchNode({ type: "stock", tag: searchTargetGroup, code: stock.code });
+    }
+
+    setSelectedCode(stock.code);
+    closeSearch();
+  };
+
+  const addStockToWatchGroup = (tag: string) => {
+    if (!state) return;
+    openSearch(tag);
+  };
+
+  const renameWatchGroup = (tag: string) => {
+    if (!state) return;
+    openWatchPrompt({
+      kind: "rename-group",
+      title: "Rename Stock Group",
+      label: "Group name",
+      value: tag,
+      tag
+    });
+  };
+
+  const editSelectedWatchNode = () => {
+    if (!state) return;
+
+    if (selectedWatchNode?.type === "group") {
+      renameWatchGroup(selectedWatchNode.tag);
+      return;
+    }
+
+    const targetCode = selectedWatchNode?.type === "stock" ? selectedWatchNode.code : selectedCode;
+    if (!targetCode) return;
+    const stock = state.stocks.find((item) => item.config.code.toLowerCase() === targetCode.toLowerCase());
+    if (!stock) return;
+
+    openWatchPrompt({
+      kind: "edit-alias",
+      title: "Edit Stock Alias",
+      label: "Alias",
+      value: stock.config.alias ?? "",
+      stockCode: stock.config.code
+    });
+  };
+
+  const submitWatchPrompt = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!state || !watchPrompt) return;
+
+    const value = watchPromptValue.trim();
+
+    if (watchPrompt.kind === "create-group") {
+      const groupName = normalizeWatchGroupName(value);
+      if (!groupName) return;
+      await api.updateStockGroups(mergeWatchGroups([...(state.config.stock_groups ?? []), groupName]));
+      setSelectedWatchNode({ type: "group", tag: groupName });
+      closeWatchPrompt();
+      return;
+    }
+
+    if (watchPrompt.kind === "rename-group") {
+      const oldTag = watchPrompt.tag;
+      const nextName = normalizeWatchGroupName(value);
+      if (!oldTag || !nextName || nextName === oldTag) {
+        closeWatchPrompt();
+        return;
+      }
+
+      const nextGroups = mergeWatchGroups((state.config.stock_groups ?? []).map((group) => (group === oldTag ? nextName : group)));
+      const affectedStocks = state.stocks.filter((stock) => stock.config.tags.includes(oldTag));
+      for (const stock of affectedStocks) {
+        await api.updateStockTags(stock.config.code, mergeWatchGroups(stock.config.tags.map((stockTag) => (stockTag === oldTag ? nextName : stockTag))));
+      }
+      await api.updateStockGroups(nextGroups);
+      setSelectedWatchNode((selection) => {
+        if (!selection || selection.tag !== oldTag) return selection;
+        return selection.type === "group" ? { type: "group", tag: nextName } : { ...selection, tag: nextName };
+      });
+      closeWatchPrompt();
+      return;
+    }
+
+    if (watchPrompt.kind === "edit-alias") {
+      const stockCode = watchPrompt.stockCode;
+      if (!stockCode) return;
+      const stock = state.stocks.find((item) => item.config.code.toLowerCase() === stockCode.toLowerCase());
+      if (!stock || value === (stock.config.alias ?? "")) {
+        closeWatchPrompt();
+        return;
+      }
+      await api.updateStockAlias(stock.config.code, value || undefined);
+      closeWatchPrompt();
+    }
+  };
+
+  const moveStockToWatchGroup = async (code: string, sourceTag: string, targetTag: string, copy: boolean) => {
+    if (!state || sourceTag === targetTag) return;
+    const stock = state.stocks.find((item) => item.config.code.toLowerCase() === code.toLowerCase());
+    if (!stock) return;
+
+    const currentTags = stock.config.tags.length ? stock.config.tags : ["watchlist"];
+    const nextTags = copy
+      ? mergeWatchGroups([...currentTags, targetTag])
+      : mergeWatchGroups([...currentTags.filter((tag) => tag !== sourceTag), targetTag]);
+    await api.updateStockTags(stock.config.code, nextTags);
+  };
+
+  const deleteSelectedWatchNode = async () => {
+    if (!state || !selectedWatchNode) return;
+
+    if (selectedWatchNode.type === "stock") {
+      const stock = state.stocks.find((item) => item.config.code.toLowerCase() === selectedWatchNode.code.toLowerCase());
+      if (!stock) return;
+      if (!window.confirm(`Delete ${displayName(stock)} from watchlist?`)) return;
+
+      await api.removeStock(stock.config.code);
+      if (selectedCode === stock.config.code) setSelectedCode(undefined);
+      return;
+    }
+
+    const tag = selectedWatchNode.tag;
+    if (!window.confirm(`Delete group ${tag}? Symbols in this group will not be deleted.`)) return;
+
+    const nextGroups = mergeWatchGroups((state.config.stock_groups ?? []).filter((group) => group !== tag));
+    const affectedStocks = state.stocks.filter((stock) => stock.config.tags.includes(tag));
+    for (const stock of affectedStocks) {
+      await api.updateStockTags(stock.config.code, stock.config.tags.filter((stockTag) => stockTag !== tag));
+    }
+    await api.updateStockGroups(nextGroups);
+    setSelectedWatchNode(undefined);
   };
 
   const createNoteItem = async (type: "file" | "directory", parentPath = parentNotePath(selectedNotePath)) => {
@@ -447,7 +649,7 @@ export function MainWorkspace() {
           <div className={`title-menu-group ${activeTitleMenu === "file" ? "open" : ""}`}>
             <button className="title-menu-root" aria-haspopup="menu" aria-expanded={activeTitleMenu === "file"} onClick={() => setActiveTitleMenu((menu) => (menu === "file" ? undefined : "file"))}>File</button>
             <div className="title-menu-dropdown" role="menu">
-              <button role="menuitem" onClick={() => runTitleMenuAction(() => setSearchOpen(true))}>Add Symbol</button>
+              <button role="menuitem" onClick={() => runTitleMenuAction(() => openSearch())}>Add Symbol</button>
               <button role="menuitem" onClick={() => runTitleMenuAction(() => void api.forceRefresh())}>Refresh</button>
               <span className="title-menu-separator" />
               <button role="menuitem" onClick={() => runTitleMenuAction(() => void api.openConfigFile())}>Open Config</button>
@@ -486,7 +688,8 @@ export function MainWorkspace() {
           <div className={`title-menu-group ${activeTitleMenu === "window" ? "open" : ""}`}>
             <button className="title-menu-root" aria-haspopup="menu" aria-expanded={activeTitleMenu === "window"} onClick={() => setActiveTitleMenu((menu) => (menu === "window" ? undefined : "window"))}>Window</button>
             <div className="title-menu-dropdown" role="menu">
-              <button role="menuitem" onClick={() => runTitleMenuAction(() => void api.toggleFloatWindow())}>Toggle Stock Float</button>
+              <button role="menuitem" onClick={() => runTitleMenuAction(() => void api.toggleFloatWindow())}><span>Toggle Stock Float</span><kbd>Ctrl+Alt+9</kbd></button>
+              <button role="menuitem" onClick={() => runTitleMenuAction(() => void api.toggleWatchFloatWindow())}><span>Toggle Watch Float</span><kbd>Ctrl+Alt+0</kbd></button>
               <button role="menuitem" onClick={() => runTitleMenuAction(() => void api.toggleMottoWindow())}>Toggle Motto Window</button>
             </div>
           </div>
@@ -535,12 +738,14 @@ export function MainWorkspace() {
         {explorerVisible && (
         <aside className="explorer-panel">
           <div className="explorer-header">
-            <span>{activityView === "news" ? "7X24" : activityView === "notes" ? "NOTES" : "EXPLORER"}</span>
+            {activityView !== "watchlist" && <span>{activityView === "news" ? "7X24" : "NOTES"}</span>}
             {activityView === "watchlist" ? (
               <div className="explorer-actions">
-                <button onClick={() => setSearchOpen(true)} title="Add symbol" aria-label="Add symbol"><Plus size={15} /></button>
+                <button onClick={() => openSearch()} title="Add symbol" aria-label="Add symbol"><Plus size={15} /></button>
+                <button onClick={() => void createWatchGroup()} title="New stock group" aria-label="New stock group"><Folder size={14} /></button>
+                <button onClick={() => void editSelectedWatchNode()} title="Edit selected" aria-label="Edit selected"><Edit3 size={14} /></button>
+                <button onClick={() => void deleteSelectedWatchNode()} disabled={!selectedWatchNode} title="Delete selected" aria-label="Delete selected"><Trash2 size={14} /></button>
                 <button onClick={() => void api.forceRefresh()} title="Refresh quotes" aria-label="Refresh quotes"><RefreshCw size={14} /></button>
-                <button onClick={() => void api.openConfigFile()} title="Open config file" aria-label="Open config file"><FileText size={14} /></button>
                 <button title="More" aria-label="More"><MoreHorizontal size={15} /></button>
               </div>
             ) : activityView === "news" ? (
@@ -584,8 +789,14 @@ export function MainWorkspace() {
           ) : (
             <GroupedWatchlist
               stocks={visibleStocks}
+              groupNames={state.config.stock_groups}
               selectedCode={selectedStock?.config.code}
+              selectedSelection={selectedWatchNode}
               theme={theme}
+              onCreateGroup={() => void createWatchGroup()}
+              onAddStockToGroup={(tag) => void addStockToWatchGroup(tag)}
+              onMoveStockToGroup={(code, sourceTag, targetTag, copy) => void moveStockToWatchGroup(code, sourceTag, targetTag, copy)}
+              onSelectNode={setSelectedWatchNode}
               onSelect={(stock) => setSelectedCode(stock.config.code)}
               onOpenDetails={(stock) => { setSelectedCode(stock.config.code); openStockView("details"); }}
             />
@@ -644,7 +855,8 @@ export function MainWorkspace() {
           <div className="codex-title">FINBOX</div>
           <div className="codex-toolbar">
             <button onClick={() => void api.openConfigDir()} title="Open config folder" aria-label="Open config folder"><FolderOpen size={15} /></button>
-            <button onClick={() => void api.toggleFloatWindow()} title="Toggle floating window" aria-label="Toggle floating window"><Maximize2 size={15} /></button>
+            <button onClick={() => void api.toggleFloatWindow()} title="Toggle stock float" aria-label="Toggle stock float"><Maximize2 size={15} /></button>
+            <button onClick={() => void api.toggleWatchFloatWindow()} title="Toggle watch float" aria-label="Toggle watch float"><Files size={15} /></button>
             <button title="More" aria-label="More"><MoreHorizontal size={15} /></button>
           </div>
           <div className="codex-content">
@@ -712,11 +924,11 @@ export function MainWorkspace() {
       <MarketStatusBar state={state} theme={theme} />
 
       {searchOpen && (
-        <div className="modal-backdrop" onMouseDown={() => setSearchOpen(false)}>
+        <div className="modal-backdrop" onMouseDown={closeSearch}>
           <section className="search-modal" onMouseDown={(event) => event.stopPropagation()}>
             <div className="modal-title">
-              <span>Add Symbol</span>
-              <button className="icon-tool compact" onClick={() => setSearchOpen(false)} aria-label="Close">
+              <span>{searchTargetGroup ? `Add Symbol to ${searchTargetGroup}` : "Add Symbol"}</span>
+              <button className="icon-tool compact" onClick={closeSearch} aria-label="Close">
                 <X size={16} />
               </button>
             </div>
@@ -724,14 +936,43 @@ export function MainWorkspace() {
               query={query}
               results={results}
               onQuery={setQuery}
-              onClose={() => setSearchOpen(false)}
-              onAdd={(stock) => {
-                void api.addStock(stock.code, stock.name);
-                setSearchOpen(false);
-                setQuery("");
-              }}
+              onClose={closeSearch}
+              onAdd={(stock) => void addStockFromSearch(stock)}
             />
           </section>
+        </div>
+      )}
+
+      {watchPrompt && (
+        <div className="modal-backdrop" onMouseDown={closeWatchPrompt}>
+          <form className="search-modal watch-prompt-modal" onSubmit={(event) => void submitWatchPrompt(event)} onMouseDown={(event) => event.stopPropagation()}>
+            <div className="modal-title">
+              <span>{watchPrompt.title}</span>
+              <button type="button" className="icon-tool compact" onClick={closeWatchPrompt} aria-label="Close">
+                <X size={16} />
+              </button>
+            </div>
+            <label className="watch-prompt-field">
+              <span>{watchPrompt.label}</span>
+              <input
+                type="text"
+                autoFocus
+                value={watchPromptValue}
+                onChange={(event) => setWatchPromptValue(event.target.value)}
+                onFocus={(event) => event.currentTarget.select()}
+                onKeyDown={(event) => {
+                  if (event.key === "Escape") closeWatchPrompt();
+                }}
+              />
+            </label>
+            <div className="watch-prompt-actions">
+              <button type="button" className="tool-button" onClick={closeWatchPrompt}>Cancel</button>
+              <button type="submit" className="tool-button accent">
+                <Check size={14} />
+                Save
+              </button>
+            </div>
+          </form>
         </div>
       )}
     </main>
@@ -790,7 +1031,128 @@ export function FloatTickerView() {
     </main>
   );
 }
+export function WatchFloatView() {
+  const state = useAppState();
+  const visibleStocks = useVisibleStocks(state);
+  const [selectedCode, setSelectedCode] = useState<string>();
+  const [selectedGroup, setSelectedGroup] = useState("");
+  const [groupPickerOpen, setGroupPickerOpen] = useState(false);
+  const theme = state ? currentTheme(state.config) : undefined;
+  const watchGroups = useMemo(() => buildWatchFloatGroups(visibleStocks, state?.config.stock_groups ?? []), [visibleStocks, state?.config.stock_groups]);
+  const selectedGroupData = selectedGroup ? watchGroups.find((group) => group.tag === selectedGroup) : undefined;
+  const selectedGroupStocks = selectedGroupData?.stocks ?? [];
 
+  useEffect(() => {
+    if (!visibleStocks.length) {
+      setSelectedCode(undefined);
+      return;
+    }
+    if (!selectedCode || !visibleStocks.some((stock) => stock.config.code === selectedCode)) {
+      setSelectedCode(visibleStocks[0].config.code);
+    }
+  }, [selectedCode, visibleStocks]);
+
+  useEffect(() => {
+    if (!watchGroups.length) {
+      setSelectedGroup("");
+      return;
+    }
+    if (!selectedGroup || !watchGroups.some((group) => group.tag === selectedGroup)) {
+      setSelectedGroup(watchGroups[0].tag);
+    }
+  }, [selectedGroup, watchGroups]);
+
+  return (
+    <main className="watch-float-shell drag-region" style={themeStyle(theme)}>
+      <div className={`watch-float-title ${groupPickerOpen ? "open" : "collapsed"}`}>
+        {groupPickerOpen && (
+          <select
+            className="watch-float-select no-drag"
+            value={selectedGroup}
+            onChange={(event) => setSelectedGroup(event.target.value)}
+            aria-label="Watch float group"
+          >
+            {watchGroups.map((group) => (
+              <option value={group.tag} key={group.tag}>{group.tag}</option>
+            ))}
+          </select>
+        )}
+        <span className="watch-float-title-right">
+          <button
+            type="button"
+            className="watch-float-collapse no-drag"
+            onClick={() => setGroupPickerOpen((open) => !open)}
+            aria-label="Toggle group picker"
+            title="Toggle group picker"
+          >
+            <ChevronRight size={11} />
+          </button>
+          <span className="watch-float-drag-hint" aria-hidden="true" />
+        </span>
+      </div>
+      <div className="watch-float-body no-drag">
+        {state ? (
+          <WatchFloatStockList
+            stocks={selectedGroupStocks}
+            selectedCode={selectedCode}
+            theme={currentTheme(state.config)}
+            onSelect={(stock) => setSelectedCode(stock.config.code)}
+          />
+        ) : (
+          <span className="muted">Loading...</span>
+        )}
+      </div>
+    </main>
+  );
+}
+
+function WatchFloatStockList({
+  stocks,
+  selectedCode,
+  theme,
+  onSelect
+}: {
+  stocks: StockStatus[];
+  selectedCode?: string;
+  theme: Theme;
+  onSelect: (stock: StockStatus) => void;
+}) {
+  if (!stocks.length) return <div className="watch-float-empty">No symbols</div>;
+
+  return (
+    <div className="watch-float-list">
+      {stocks.map((stock) => (
+        <button
+          className={`watch-float-row ${stock.config.code === selectedCode ? "active" : ""}`}
+          key={stock.config.code}
+          onClick={() => onSelect(stock)}
+        >
+          <span className="stock-name">{stock.config.alias || stock.market?.name || "--"}</span>
+          <SignedMetric value={stockPercent(stock)} digits={2} suffix="" theme={theme} />
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function buildWatchFloatGroups(stocks: StockStatus[], groupNames: string[]) {
+  const groups = new Map<string, StockStatus[]>();
+  for (const tag of mergeWatchGroups(groupNames)) {
+    groups.set(tag, []);
+  }
+
+  for (const stock of stocks) {
+    const tags = stock.config.tags.length ? stock.config.tags : ["watchlist"];
+    for (const tag of tags) {
+      const key = normalizeWatchGroupName(tag) || "watchlist";
+      groups.set(key, [...(groups.get(key) ?? []), stock]);
+    }
+  }
+
+  return [...groups.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([tag, groupStocks]) => ({ tag, stocks: groupStocks }));
+}
 export function MottoWindowView() {
   const state = useAppState();
   const shellRef = useRef<HTMLElement>(null);
@@ -845,76 +1207,6 @@ export function MottoWindowView() {
       </div>
       <button className="motto-resize-handle no-drag" onMouseDown={startMottoResize} aria-label="Resize motto window" title="Resize" />
     </main>
-  );
-}
-
-function GroupedWatchlist({
-  stocks,
-  selectedCode,
-  theme,
-  onSelect,
-  onOpenDetails
-}: {
-  stocks: StockStatus[];
-  selectedCode?: string;
-  theme: Theme;
-  onSelect: (stock: StockStatus) => void;
-  onOpenDetails: (stock: StockStatus) => void;
-}) {
-  const groups = useMemo(() => groupStocksByTag(stocks), [stocks]);
-  const initializedCollapsedTags = useRef<Set<string>>(new Set(groups.map((group) => group.tag)));
-  const [collapsedTags, setCollapsedTags] = useState<Set<string>>(() => new Set(groups.map((group) => group.tag)));
-
-  useEffect(() => {
-    const newTags = groups.map((group) => group.tag).filter((tag) => !initializedCollapsedTags.current.has(tag));
-    if (!newTags.length) return;
-    newTags.forEach((tag) => initializedCollapsedTags.current.add(tag));
-    setCollapsedTags((items) => new Set([...items, ...newTags]));
-  }, [groups]);
-
-  if (!stocks.length) return <div className="empty-state">No symbols in watchlist</div>;
-
-  const toggleTag = (tag: string) => {
-    setCollapsedTags((items) => {
-      const next = new Set(items);
-      if (next.has(tag)) {
-        next.delete(tag);
-      } else {
-        next.add(tag);
-      }
-      return next;
-    });
-  };
-
-  return (
-    <div className="watch-groups">
-      {groups.map((group) => {
-        const collapsed = collapsedTags.has(group.tag);
-        return (
-          <section className="watch-group" key={group.tag}>
-            <button
-              className={`watch-group-title ${collapsed ? "collapsed" : ""}`}
-              onClick={() => toggleTag(group.tag)}
-              aria-expanded={!collapsed}
-            >
-              <ChevronRight size={16} />
-              <Folder size={15} />
-              <span>{group.tag}</span>
-              <small>{group.stocks.length}</small>
-            </button>
-            {!collapsed && (
-              <StockTable
-                stocks={group.stocks}
-                selectedCode={selectedCode}
-                theme={theme}
-                onSelect={onSelect}
-                onOpenDetails={onOpenDetails}
-              />
-            )}
-          </section>
-        );
-      })}
-    </div>
   );
 }
 
@@ -1053,63 +1345,6 @@ function NoteTreeRow({
           onDelete={onDelete}
           key={child.path}
         />
-      ))}
-    </div>
-  );
-}
-
-function groupStocksByTag(stocks: StockStatus[]) {
-  const groups = new Map<string, StockStatus[]>();
-  for (const stock of stocks) {
-    const tags = stock.config.tags.length ? stock.config.tags : ["watchlist"];
-    for (const tag of tags) {
-      const key = tag.trim() || "watchlist";
-      groups.set(key, [...(groups.get(key) ?? []), stock]);
-    }
-  }
-  return [...groups.entries()]
-    .sort(([left], [right]) => left.localeCompare(right))
-    .map(([tag, groupStocks]) => ({ tag, stocks: groupStocks }));
-}
-
-function StockTable({
-  stocks,
-  selectedCode,
-  theme,
-  onSelect,
-  onOpenDetails
-}: {
-  stocks: StockStatus[];
-  selectedCode?: string;
-  theme: Theme;
-  onSelect: (stock: StockStatus) => void;
-  onOpenDetails: (stock: StockStatus) => void;
-}) {
-  if (!stocks.length) return <div className="empty-state">No symbols in watchlist</div>;
-
-  return (
-    <div className="watch-table">
-      <div className="watch-head">
-        <span>Name</span>
-        <span>Last</span>
-        <span>Chg%</span>
-        <span>Day P/L</span>
-      </div>
-      {stocks.map((stock) => (
-        <button
-          className={`watch-row ${stock.config.code === selectedCode ? "active" : ""}`}
-          key={stock.config.code}
-          onClick={() => onSelect(stock)}
-          onDoubleClick={() => onOpenDetails(stock)}
-        >
-          <span>
-            <span className="stock-name">{displayName(stock)}</span>
-            <small>{stock.config.code}</small>
-          </span>
-          <span>{formatMaybe(effectivePrice(stock.market), 2)}</span>
-          <SignedMetric value={stockPercent(stock)} digits={2} suffix="%" theme={theme} />
-          <SignedMetric value={dayProfit(stock)} digits={0} theme={theme} />
-        </button>
       ))}
     </div>
   );

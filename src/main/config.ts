@@ -37,6 +37,7 @@ export class ConfigManager {
       cash: 50000,
       motto: defaultMotto,
       hide_zero_shares: false,
+      stock_groups: ["watchlist"],
       stocks: [
         {
           code: "sz002594",
@@ -81,6 +82,7 @@ export class ConfigManager {
       const raw = fs.readFileSync(this.configPath, "utf8");
       const config = yaml.load(raw) as Partial<AppConfig> | undefined;
       if (!config) return undefined;
+      const stockGroups = normalizeTags(config.stock_groups);
       const normalized: AppConfig = {
         total_investment: config.total_investment,
         cash: config.cash,
@@ -92,6 +94,7 @@ export class ConfigManager {
           tags: normalizeTags(stock.tags),
           positions: stock.positions ?? []
         })),
+        stock_groups: stockGroups.length ? stockGroups : ["watchlist"],
         current_theme: config.current_theme ?? "default",
         themes: { ...defaultThemes, ...(config.themes ?? {}) }
       };

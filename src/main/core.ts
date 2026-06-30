@@ -88,6 +88,16 @@ export class AppCore {
     void this.forceRefresh();
   }
 
+  removeStock(code: string): void {
+    const config = this.configManager.loadOrDefault();
+    const nextStocks = config.stocks.filter((stock) => stock.code.toLowerCase() !== code.toLowerCase());
+    if (nextStocks.length === config.stocks.length) return;
+
+    config.stocks = nextStocks;
+    this.configManager.save(config);
+    this.applyConfig(config);
+  }
+
   updateAccountConfig(patch: Pick<AppConfig, "total_investment" | "cash">): void {
     const config = this.configManager.loadOrDefault();
     config.total_investment = normalizeOptionalNumber(patch.total_investment);
@@ -137,6 +147,15 @@ export class AppCore {
     if (!stock) return;
 
     stock.tags = normalizeTags(tags);
+    config.stock_groups = normalizeTags([...(config.stock_groups ?? []), ...stock.tags]);
+
+    this.configManager.save(config);
+    this.applyConfig(config);
+  }
+
+  updateStockGroups(groups: string[]): void {
+    const config = this.configManager.loadOrDefault();
+    config.stock_groups = normalizeTags(groups);
 
     this.configManager.save(config);
     this.applyConfig(config);
@@ -160,13 +179,13 @@ export class AppCore {
     void this.forceRefresh();
   }
 
-  async fetchKLine(code: string, scale: KLineScale) {
+  async fetchKLine(code: string, scale: KLineScale, force = false) {
     const normalizedCode = code.toLowerCase();
     const cacheKey = `${normalizedCode}:${scale}`;
     const now = Date.now();
     const cached = this.klineCache.get(cacheKey);
-    if (cached?.data && cached.expiresAt > now) return structuredClone(cached.data);
-    if (cached?.pending) return structuredClone(await cached.pending);
+    if (!force && cached?.data && cached.expiresAt > now) return structuredClone(cached.data);
+    if (!force && cached?.pending) return structuredClone(await cached.pending);
 
     const pending = fetchKLineData(normalizedCode, scale);
     this.klineCache.set(cacheKey, {

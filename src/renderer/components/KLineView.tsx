@@ -1,172 +1,177 @@
 import * as echarts from "echarts";
-import { useEffect, useRef, useState } from "react";
-import type { KLinePoint, KLineScale, StockJournal, StockJournalNote } from "../../shared/types";
-import { scaleLabel } from "../utils";
+import "antd/dist/reset.css";
+import { Form, Input } from "antd";
+import { RefreshCw } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { CSSProperties, PointerEvent as ReactPointerEvent } from "react";
+import type { KLinePoint } from "../../shared/types";
+import { formatMaybe } from "../utils";
 
 const api = window.finBox;
+const DAILY_SCALE = 240;
+const DEFAULT_CHART_HEIGHT = 560;
+const MIN_CHART_WIDTH = 520;
+const MIN_CHART_HEIGHT = 360;
+const MAX_CHART_HEIGHT = 1200;
+const kLineViews = [
+  { key: "daily", label: "日K" },
+  { key: "weekly", label: "周K" },
+  { key: "monthly", label: "月K" },
+  { key: "five-day", label: "五日K" }
+] as const;
+const movingAveragePeriods = [5, 10, 20, 30, 60] as const;
+
+const movingAverageColors: Record<(typeof movingAveragePeriods)[number], string> = {
+  5: "#d18f00",
+  10: "#7a4fd3",
+  20: "#208a72",
+  30: "#c45050",
+  60: "#3c78c2"
+};
 
 type KLineViewProps = {
   code: string;
   name: string;
 };
 
+type KLineViewScale = (typeof kLineViews)[number]["key"];
+type ChartResizeCorner = "nw" | "ne" | "sw" | "se";
+type ChartFrameSize = { width?: number; height: number };
+
 export function KLineView({ code, name }: KLineViewProps) {
-  const [scale, setScale] = useState<KLineScale>(240);
+  const [viewScale, setViewScale] = useState<KLineViewScale>("daily");
   const [points, setPoints] = useState<KLinePoint[]>([]);
+  const [hoverIndex, setHoverIndex] = useState<number | undefined>();
   const [loading, setLoading] = useState(true);
-  const [journal, setJournal] = useState<StockJournal>();
-  const [journalLoading, setJournalLoading] = useState(true);
-  const [journalError, setJournalError] = useState("");
-  const [noteDraft, setNoteDraft] = useState("");
-  const [selectedDate, setSelectedDate] = useState<string>();
-  const [savingNote, setSavingNote] = useState(false);
+  const [chartFrameSize, setChartFrameSize] = useState<ChartFrameSize>({ height: DEFAULT_CHART_HEIGHT });
 
-  useEffect(() => {
-    let cancelled = false;
-    setJournalLoading(true);
-    setJournalError("");
-    setJournal(undefined);
-    setNoteDraft("");
-    setSelectedDate(undefined);
-    void api.getStockJournal(code)
-      .then((item) => {
-        if (!cancelled) setJournal(item);
-      })
-      .catch((error) => {
-        if (!cancelled) setJournalError(error instanceof Error ? error.message : "Failed to load journal.");
-      })
-      .finally(() => {
-        if (!cancelled) setJournalLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
+  const loadKLine = useCallback((force = false) => {
+    setLoading(true);
+    setHoverIndex(undefined);
+    void api.fetchKLine(code, DAILY_SCALE, force)
+      .then(setPoints)
+      .finally(() => setLoading(false));
   }, [code]);
 
   useEffect(() => {
-    setLoading(true);
-    void api.fetchKLine(code, scale)
-      .then(setPoints)
-      .finally(() => setLoading(false));
-  }, [code, scale]);
+    loadKLine();
+  }, [loadKLine]);
 
-  useEffect(() => {
-    if (scale !== 240 || points.length === 0 || !journal?.followedAt) return;
-    let cancelled = false;
-    void api.archiveDailyKLine(code, points)
-      .then((item) => {
-        if (!cancelled) setJournal(item);
-      })
-      .catch((error) => {
-        if (!cancelled) setJournalError(error instanceof Error ? error.message : "Failed to archive daily K line.");
+  const chartPoints = useMemo(() => aggregateKLinePoints(points, viewScale), [points, viewScale]);
+  const chartFrameStyle = useMemo<CSSProperties>(() => ({
+    height: `${chartFrameSize.height}px`,
+    width: chartFrameSize.width ? `${chartFrameSize.width}px` : undefined
+  }), [chartFrameSize]);
+
+  const startChartResize = useCallback((corner: ChartResizeCorner, event: ReactPointerEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    const frame = event.currentTarget.closest(".kline-chart-frame") as HTMLElement | null;
+    const rect = frame?.getBoundingClientRect();
+    if (!frame || !rect) return;
+
+    const startX = event.clientX;
+    const startY = event.clientY;
+    const startWidth = rect.width;
+    const startHeight = rect.height;
+    const maxWidth = Math.max(MIN_CHART_WIDTH, frame.parentElement?.clientWidth ?? startWidth);
+
+    const resize = (moveEvent: PointerEvent) => {
+      const xDelta = moveEvent.clientX - startX;
+      const yDelta = moveEvent.clientY - startY;
+      const width = startWidth + (corner.endsWith("e") ? xDelta : -xDelta);
+      const height = startHeight + (corner.endsWith("s") ? yDelta : -yDelta);
+      setChartFrameSize({
+        width: clamp(Math.round(width), MIN_CHART_WIDTH, maxWidth),
+        height: clamp(Math.round(height), MIN_CHART_HEIGHT, MAX_CHART_HEIGHT)
       });
-
-    return () => {
-      cancelled = true;
     };
-  }, [code, points, journal?.followedAt, scale]);
 
-  const chartNotes = journal?.notes.filter((note) => note.date) ?? [];
-  const selectedNote = selectedDate ? journal?.notes.find((note) => note.date === selectedDate) : undefined;
-  const stockNote = journal?.notes.find((note) => !note.date);
-  const archivedCount = journal?.dailyKLine.length ?? 0;
+    const stop = () => {
+      window.removeEventListener("pointermove", resize);
+      window.removeEventListener("pointerup", stop);
+      window.removeEventListener("pointercancel", stop);
+    };
 
-  const startJournal = async () => {
-    setJournalError("");
-    try {
-      setJournal(await api.startStockJournal(code, todayDate()));
-    } catch (error) {
-      setJournalError(error instanceof Error ? error.message : "Failed to start tracking.");
-    }
-  };
-
-  const saveNote = async (date?: string) => {
-    const content = date ? noteDraft : window.prompt("Stock note", stockNote?.content ?? "")?.trim();
-    if (content === undefined) return;
-    setSavingNote(true);
-    setJournalError("");
-    try {
-      setJournal(await api.saveStockJournalNote(code, {
-        id: date ? `day-${date}` : "stock-note",
-        date,
-        content
-      }));
-      if (date) setNoteDraft(content);
-    } catch (error) {
-      setJournalError(error instanceof Error ? error.message : "Failed to save note.");
-    } finally {
-      setSavingNote(false);
-    }
-  };
-
-  const selectChartDate = (date: string) => {
-    setSelectedDate(date);
-    setNoteDraft(journal?.notes.find((note) => note.date === date)?.content ?? "");
-  };
+    window.addEventListener("pointermove", resize);
+    window.addEventListener("pointerup", stop);
+    window.addEventListener("pointercancel", stop);
+  }, []);
 
   return (
     <main className="kline-view">
+      <KLineQuotePanel points={chartPoints} hoverIndex={hoverIndex} />
       <header>
         <h1>
           {name} - {code}
         </h1>
         <div className="kline-header-actions">
-          {scale === 240 && !journalLoading && !journal?.followedAt && (
-            <button className="tool-button accent compact-text" onClick={() => void startJournal()}>
-              Start Tracking
-            </button>
-          )}
           <div className="scale-tabs">
-            {([1, 5, 15, 30, 60, 240] as KLineScale[]).map((item) => (
-              <button className={item === scale ? "active" : ""} key={item} onClick={() => setScale(item)}>
-                {scaleLabel(item)}
+            {kLineViews.map((item) => (
+              <button className={item.key === viewScale ? "active" : ""} key={item.key} onClick={() => { setViewScale(item.key); setHoverIndex(undefined); }}>
+                {item.label}
               </button>
             ))}
           </div>
+          <button className="tool-button compact-text" onClick={() => loadKLine(true)} disabled={loading} title="刷新K线" aria-label="刷新K线">
+            <RefreshCw size={14} />
+            刷新
+          </button>
         </div>
       </header>
-      <section className={`kline-body ${scale === 240 ? "" : "no-journal"}`}>
-        {loading ? (
-          <div className="loading">Loading...</div>
-        ) : (
-          <EChartsCandles points={points} journal={journal} notes={chartNotes} onSelectDate={selectChartDate} />
-        )}
-        {scale === 240 && (
-          <JournalPanel
-            journal={journal}
-            stockNote={stockNote}
-            selectedDate={selectedDate}
-            selectedNote={selectedNote}
-            noteDraft={noteDraft}
-            archivedCount={archivedCount}
-            loading={journalLoading}
-            saving={savingNote}
-            error={journalError}
-            onStart={() => void startJournal()}
-            onSaveStockNote={() => void saveNote()}
-            onNoteDraft={setNoteDraft}
-            onSaveDateNote={() => selectedDate ? void saveNote(selectedDate) : undefined}
-          />
-        )}
+      <section className="kline-body">
+        <div className="kline-chart-frame" style={chartFrameStyle}>
+          {loading ? <div className="loading">Loading...</div> : <EChartsCandles points={chartPoints} onHoverIndex={setHoverIndex} />}
+          <ChartResizeHandle corner="nw" onResizeStart={startChartResize} />
+          <ChartResizeHandle corner="ne" onResizeStart={startChartResize} />
+          <ChartResizeHandle corner="sw" onResizeStart={startChartResize} />
+          <ChartResizeHandle corner="se" onResizeStart={startChartResize} />
+        </div>
       </section>
     </main>
   );
 }
 
-function EChartsCandles({ points, journal, notes, onSelectDate }: { points: KLinePoint[]; journal?: StockJournal; notes: StockJournalNote[]; onSelectDate: (date: string) => void }) {
+function ChartResizeHandle({ corner, onResizeStart }: { corner: ChartResizeCorner; onResizeStart: (corner: ChartResizeCorner, event: ReactPointerEvent<HTMLButtonElement>) => void }) {
+  return (
+    <button
+      type="button"
+      className={`kline-chart-resize-handle ${corner}`}
+      onPointerDown={(event) => onResizeStart(corner, event)}
+      aria-label="调整K线图大小"
+      title="调整K线图大小"
+    />
+  );
+}
+
+function EChartsCandles({ points, onHoverIndex }: { points: KLinePoint[]; onHoverIndex: (index: number | undefined) => void }) {
   const chartRef = useRef<HTMLDivElement>(null);
   const instanceRef = useRef<echarts.ECharts | null>(null);
+  const onHoverIndexRef = useRef(onHoverIndex);
+  const datesRef = useRef<string[]>([]);
+
+  useEffect(() => {
+    onHoverIndexRef.current = onHoverIndex;
+  }, [onHoverIndex]);
 
   useEffect(() => {
     if (!chartRef.current) return;
     const chart = echarts.init(chartRef.current, undefined, { renderer: "canvas" });
     instanceRef.current = chart;
 
+    const selectPoint = (params: unknown) => {
+      onHoverIndexRef.current(resolveKLineHoverIndex(params as KLineChartSelectParam, datesRef.current));
+    };
+    const clearPoint = () => onHoverIndexRef.current(undefined);
+
+    chart.on("updateAxisPointer", selectPoint);
+    chart.on("globalout", clearPoint);
+
     const resizeObserver = new ResizeObserver(() => chart.resize());
     resizeObserver.observe(chartRef.current);
 
     return () => {
+      chart.off("updateAxisPointer", selectPoint);
+      chart.off("globalout", clearPoint);
       resizeObserver.disconnect();
       chart.dispose();
       instanceRef.current = null;
@@ -178,21 +183,25 @@ function EChartsCandles({ points, journal, notes, onSelectDate }: { points: KLin
     if (!chart) return;
 
     if (points.length === 0) {
+      datesRef.current = [];
       chart.clear();
       return;
     }
 
     const dates = points.map((point) => point.day);
+    datesRef.current = dates;
     const candleData = points.map((point) => [point.open, point.close, point.low, point.high]);
     const volumes = points.map((point, index) => [index, point.volume, point.close >= point.open ? 1 : -1]);
-    const noteData = notes
-      .map((note) => {
-        const index = dates.indexOf(note.date ?? "");
-        if (index === -1) return undefined;
-        const point = points[index];
-        return { value: [index, point.high], date: note.date, note };
-      })
-      .filter((item): item is { value: [number, number]; date: string; note: StockJournalNote } => item !== undefined && item.date !== undefined);
+    const movingAverageSeries = movingAveragePeriods.map((period) => ({
+      name: `MA${period}`,
+      type: "line" as const,
+      data: calculateMovingAverage(points, period),
+      smooth: true,
+      showSymbol: false,
+      lineStyle: { width: 1, color: movingAverageColors[period] },
+      itemStyle: { color: movingAverageColors[period] },
+      emphasis: { disabled: true }
+    }));
 
     chart.setOption(
       {
@@ -205,17 +214,26 @@ function EChartsCandles({ points, journal, notes, onSelectDate }: { points: KLin
         },
         tooltip: {
           trigger: "axis",
+          showContent: false,
           axisPointer: { type: "cross" },
           borderColor: "#d4d4d4",
           borderWidth: 1,
           backgroundColor: "rgba(255,255,255,0.96)",
           textStyle: { color: "#333333" }
         },
+        legend: {
+          top: 4,
+          left: 54,
+          itemWidth: 12,
+          itemHeight: 2,
+          textStyle: { color: "#4f4f4f", fontSize: 10 },
+          data: ["Price", "MA5", "MA10", "MA20", "MA30", "MA60"]
+        },
         axisPointer: {
           link: [{ xAxisIndex: "all" }]
         },
         grid: [
-          { left: 54, right: 18, top: 18, height: "68%" },
+          { left: 54, right: 18, top: 28, height: "64%" },
           { left: 54, right: 18, bottom: 24, height: "14%" }
         ],
         xAxis: [
@@ -264,7 +282,7 @@ function EChartsCandles({ points, journal, notes, onSelectDate }: { points: KLin
             height: 14,
             bottom: 4,
             borderColor: "#d4d4d4",
-            fillerColor: "rgba(0,122,204,0.14)",
+            fillerColor: "rgba(32,32,32,0.12)",
             handleSize: 0,
             textStyle: { color: "#6a6a6a", fontSize: 10 }
           }
@@ -274,19 +292,14 @@ function EChartsCandles({ points, journal, notes, onSelectDate }: { points: KLin
             name: "Price",
             type: "candlestick",
             data: candleData,
-            markLine: journal?.followedAt && dates.includes(journal.followedAt) ? {
-              symbol: "none",
-              label: { formatter: "Follow", color: "#6a6a6a" },
-              lineStyle: { color: "#d28721", type: "dashed" },
-              data: [{ xAxis: journal.followedAt }]
-            } : undefined,
             itemStyle: {
-              color: "#d73a49",
-              color0: "#22863a",
-              borderColor: "#d73a49",
-              borderColor0: "#22863a"
+              color: "#202020",
+              color0: "#ffffff",
+              borderColor: "#202020",
+              borderColor0: "#6f6f6f"
             }
           },
+          ...movingAverageSeries,
           {
             name: "Volume",
             type: "bar",
@@ -294,122 +307,181 @@ function EChartsCandles({ points, journal, notes, onSelectDate }: { points: KLin
             yAxisIndex: 1,
             data: volumes,
             itemStyle: {
-              color: (params: { data: [number, number, number] }) => (params.data[2] > 0 ? "rgba(215,58,73,0.42)" : "rgba(34,134,58,0.42)")
-            }
-          },
-          {
-            name: "Notes",
-            type: "scatter",
-            data: noteData,
-            symbol: "pin",
-            symbolSize: 22,
-            itemStyle: { color: "#007acc" },
-            tooltip: {
-              formatter: (params: { data?: { note?: StockJournalNote } }) => escapeHtml(params.data?.note?.content ?? "")
+              color: (params: { data: [number, number, number] }) => (params.data[2] > 0 ? "rgba(38,38,38,0.58)" : "rgba(158,158,158,0.38)")
             }
           }
         ]
       },
       true
     );
-  }, [journal?.followedAt, notes, points]);
-
-  useEffect(() => {
-    const chart = instanceRef.current;
-    if (!chart) return;
-    const handleClick = (params: { componentType?: string; dataIndex?: number; data?: { date?: string } }) => {
-      if (params.componentType !== "series" || params.dataIndex === undefined) return;
-      if (params.data?.date) {
-        onSelectDate(params.data.date);
-        return;
-      }
-      const point = points[params.dataIndex];
-      if (point) onSelectDate(point.day);
-    };
-    chart.on("click", handleClick);
-    return () => {
-      chart.off("click", handleClick);
-    };
-  }, [onSelectDate, points]);
+  }, [points]);
 
   if (points.length === 0) return <div className="loading">No data</div>;
   return <div className="candles" ref={chartRef} role="img" aria-label="Candlestick chart" />;
 }
 
-function JournalPanel({
-  journal,
-  stockNote,
-  selectedDate,
-  selectedNote,
-  noteDraft,
-  archivedCount,
-  loading,
-  saving,
-  error,
-  onStart,
-  onSaveStockNote,
-  onNoteDraft,
-  onSaveDateNote
-}: {
-  journal?: StockJournal;
-  stockNote?: StockJournalNote;
-  selectedDate?: string;
-  selectedNote?: StockJournalNote;
-  noteDraft: string;
-  archivedCount: number;
-  loading: boolean;
-  saving: boolean;
-  error: string;
-  onStart: () => void;
-  onSaveStockNote: () => void;
-  onNoteDraft: (value: string) => void;
-  onSaveDateNote: () => void;
-}) {
+function KLineQuotePanel({ points, hoverIndex }: { points: KLinePoint[]; hoverIndex: number | undefined }) {
+  const index = hoverIndex === undefined ? points.length - 1 : hoverIndex;
+  const point = points[index];
+  if (!point) return <section className="kline-quote-panel muted">--</section>;
+
+  const previous = index > 0 ? points[index - 1] : undefined;
+  const change = previous ? point.close - previous.close : undefined;
+  const changePercent = previous && previous.close > 0 && change !== undefined ? (change / previous.close) * 100 : undefined;
+  const fields = [
+    { label: "收", value: formatPrice(point.close) },
+    { label: "涨", value: change === undefined ? "--" : formatSignedPlain(change, 2) },
+    { label: "幅", value: changePercent === undefined ? "--" : `${formatSignedPlain(changePercent, 2)}%` },
+    { label: "高", value: formatPrice(point.high) },
+    { label: "开", value: formatPrice(point.open) },
+    { label: "量", value: formatVolume(point.volume) },
+    { label: "低", value: formatPrice(point.low) },
+    { label: "换", value: "--" },
+    { label: "额", value: "--" },
+    { label: "日期", value: point.day },
+    ...movingAveragePeriods.map((period) => ({
+      label: `MA${period}`,
+      value: formatPrice(calculateMovingAverageAt(points, period, index))
+    }))
+  ];
+
   return (
-    <aside className="journal-panel">
-      <div className="journal-title">
-        <span>Journal</span>
-        {journal?.followedAt && <small>Since {journal.followedAt}</small>}
-      </div>
-      {loading ? <div className="journal-state">Loading...</div> : (
-        <>
-          {!journal?.followedAt && (
-            <div className="journal-empty">
-              <span>Not tracking yet</span>
-              <button className="tool-button accent compact-text" onClick={onStart}>Start Tracking</button>
-            </div>
-          )}
-          <div className="journal-meta">
-            <span>{archivedCount} daily bars archived</span>
-            <button className="tool-button compact-text" onClick={onSaveStockNote}>Stock Note</button>
-          </div>
-          {stockNote && <div className="journal-stock-note">{stockNote.content}</div>}
-          <div className="journal-date-title">{selectedDate ? `K note ${selectedDate}` : "Click a daily candle"}</div>
-          <textarea
-            value={noteDraft}
-            onChange={(event) => onNoteDraft(event.target.value)}
-            disabled={!selectedDate || !journal?.followedAt}
-            placeholder={journal?.followedAt ? "Record your thought for this K-line date" : "Start tracking first"}
-          />
-          <div className="journal-actions">
-            {selectedNote && <span>Saved {new Date(selectedNote.updatedAt).toLocaleString()}</span>}
-            <button className="tool-button accent compact-text" onClick={onSaveDateNote} disabled={!selectedDate || saving || !journal?.followedAt}>{saving ? "Saving..." : "Save"}</button>
-          </div>
-        </>
-      )}
-      {error && <div className="save-error journal-error">{error}</div>}
-    </aside>
+    <section className="kline-quote-panel" aria-label="K line quote">
+      <Form className="kline-quote-form" layout="inline" size="small" colon={false} component="div">
+        {fields.map((field) => (
+          <KLineQuoteField key={field.label} label={field.label} value={field.value} />
+        ))}
+      </Form>
+    </section>
   );
 }
 
-function todayDate() {
-  const now = new Date();
-  return `${now.getFullYear()}-${`${now.getMonth() + 1}`.padStart(2, "0")}-${`${now.getDate()}`.padStart(2, "0")}`;
+function KLineQuoteField({ label, value }: { label: string; value: string }) {
+  return (
+    <Form.Item className="kline-quote-field" label={label}>
+      <Input readOnly value={value} />
+    </Form.Item>
+  );
 }
 
-function escapeHtml(value: string) {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
+function aggregateKLinePoints(points: KLinePoint[], scale: KLineViewScale): KLinePoint[] {
+  if (scale === "daily") return points;
+  if (scale === "five-day") return aggregateByChunk(points, 5);
+  return aggregateByKey(points, (point) => scale === "weekly" ? weekKey(point.day) : monthKey(point.day));
+}
+
+function aggregateByChunk(points: KLinePoint[], size: number): KLinePoint[] {
+  const result: KLinePoint[] = [];
+  for (let index = 0; index < points.length; index += size) {
+    result.push(mergeKLineGroup(points.slice(index, index + size)));
+  }
+  return result;
+}
+
+function aggregateByKey(points: KLinePoint[], keyOf: (point: KLinePoint) => string): KLinePoint[] {
+  const result: KLinePoint[] = [];
+  let group: KLinePoint[] = [];
+  let currentKey = "";
+
+  for (const point of points) {
+    const key = keyOf(point);
+    if (group.length > 0 && key !== currentKey) {
+      result.push(mergeKLineGroup(group));
+      group = [];
+    }
+    currentKey = key;
+    group.push(point);
+  }
+
+  if (group.length > 0) result.push(mergeKLineGroup(group));
+  return result;
+}
+
+function mergeKLineGroup(group: KLinePoint[]): KLinePoint {
+  const first = group[0];
+  const last = group[group.length - 1];
+  return {
+    day: last.day,
+    open: first.open,
+    high: Math.max(...group.map((point) => point.high)),
+    low: Math.min(...group.map((point) => point.low)),
+    close: last.close,
+    volume: group.reduce((sum, point) => sum + point.volume, 0)
+  };
+}
+
+function weekKey(value: string): string {
+  const date = parseKLineDate(value);
+  const monday = new Date(date);
+  const day = monday.getDay() || 7;
+  monday.setDate(monday.getDate() - day + 1);
+  return dateKey(monday);
+}
+
+function monthKey(value: string): string {
+  return value.slice(0, 7);
+}
+
+function parseKLineDate(value: string): Date {
+  const [year, month, day] = value.slice(0, 10).split("-").map(Number);
+  return new Date(year, month - 1, day);
+}
+
+function dateKey(date: Date): string {
+  return `${date.getFullYear()}-${`${date.getMonth() + 1}`.padStart(2, "0")}-${`${date.getDate()}`.padStart(2, "0")}`;
+}
+
+function calculateMovingAverage(points: KLinePoint[], period: number): Array<number | "-"> {
+  return points.map((_, index) => {
+    if (index < period - 1) return "-";
+    const total = points.slice(index - period + 1, index + 1).reduce((sum, point) => sum + point.close, 0);
+    return Number((total / period).toFixed(3));
+  });
+}
+
+function calculateMovingAverageAt(points: KLinePoint[], period: number, index: number): number | undefined {
+  if (index < period - 1) return undefined;
+  const total = points.slice(index - period + 1, index + 1).reduce((sum, point) => sum + point.close, 0);
+  return Number((total / period).toFixed(3));
+}
+
+function formatPrice(value: number | undefined): string {
+  return value === undefined ? "--" : formatMaybe(value, 3);
+}
+
+function formatVolume(value: number): string {
+  if (value >= 100000000) return `${formatMaybe(value / 100000000, 2)}\u4ebf`;
+  if (value >= 10000) return `${formatMaybe(value / 10000, 2)}\u4e07`;
+  return Math.round(value).toLocaleString();
+}
+
+function formatSignedPlain(value: number, digits: number): string {
+  return `${value > 0 ? "+" : ""}${formatMaybe(value, digits)}`;
+}
+
+type KLineChartSelectParam = {
+  axesInfo?: Array<{ value?: number | string }>;
+  axisValue?: number | string;
+  dataIndex?: number;
+  name?: string;
+};
+
+function resolveKLineHoverIndex(params: KLineChartSelectParam, labels: string[]): number | undefined {
+  if (labels.length === 0) return undefined;
+  if (typeof params.dataIndex === "number" && Number.isFinite(params.dataIndex)) return clamp(Math.round(params.dataIndex), 0, labels.length - 1);
+
+  const axisValue = params.axesInfo?.find((info) => info.value !== undefined)?.value ?? params.axisValue ?? params.name;
+  if (typeof axisValue === "number" && Number.isFinite(axisValue)) return clamp(Math.round(axisValue), 0, labels.length - 1);
+  if (typeof axisValue === "string") {
+    const numericValue = Number(axisValue);
+    if (Number.isFinite(numericValue) && !labels.includes(axisValue)) return clamp(Math.round(numericValue), 0, labels.length - 1);
+    const index = labels.indexOf(axisValue);
+    return index >= 0 ? index : undefined;
+  }
+
+  return undefined;
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max);
 }
