@@ -120,6 +120,14 @@ export class AppCore {
     this.applyConfig(config);
   }
 
+  updateWindowCloseBehavior(behavior: AppConfig["window_close_behavior"]): void {
+    const config = this.configManager.loadOrDefault();
+    config.window_close_behavior = behavior === "close" ? "close" : "tray";
+
+    this.configManager.save(config);
+    this.applyConfig(config);
+  }
+
   updateTheme(themeName: string): void {
     const config = this.configManager.loadOrDefault();
     if (!Object.prototype.hasOwnProperty.call(config.themes, themeName)) return;

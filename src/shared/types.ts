@@ -36,6 +36,7 @@ export type AppConfig = {
   total_investment?: number;
   cash?: number;
   motto: MottoConfig;
+  window_close_behavior: "tray" | "close";
   hide_zero_shares: boolean;
   stocks: StockConfig[];
   stock_groups: string[];
@@ -169,6 +170,7 @@ export type FinBoxApi = {
   removeStock: (code: string) => Promise<void>;
   updateAccountConfig: (patch: Pick<AppConfig, "total_investment" | "cash">) => Promise<void>;
   updateMotto: (motto: MottoConfig) => Promise<void>;
+  updateWindowCloseBehavior: (behavior: AppConfig["window_close_behavior"]) => Promise<void>;
   updateTheme: (themeName: string) => Promise<void>;
   updateStockAlias: (code: string, alias?: string) => Promise<void>;
   updateStockTags: (code: string, tags: string[]) => Promise<void>;

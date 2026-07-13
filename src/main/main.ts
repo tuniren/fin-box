@@ -1,4 +1,4 @@
-import { app, BrowserWindow, globalShortcut, ipcMain, Menu, nativeImage, shell } from "electron";
+import { app, BrowserWindow, globalShortcut, ipcMain, Menu, nativeImage, shell, Tray } from "electron";
 import fs from "node:fs";
 import path from "node:path";
 import { AppCore } from "./core";
@@ -6,15 +6,19 @@ import type { AppConfig, KLinePoint, KLineScale, MottoConfig, NoteTreeItem, Posi
 
 process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = "true";
 
-app.setName("fin-box");
+const APP_USER_MODEL_ID = "com.finbox.desktop.appicon";
+
+app.setName("Code");
 if (process.platform === "win32") {
-  app.setAppUserModelId("com.finbox.desktop");
+  app.setAppUserModelId(APP_USER_MODEL_ID);
 }
 
 let mainWindow: BrowserWindow | undefined;
 let floatWindow: BrowserWindow | undefined;
 let watchFloatWindow: BrowserWindow | undefined;
 let mottoWindow: BrowserWindow | undefined;
+let tray: Tray | undefined;
+let isQuitting = false;
 let core: AppCore;
 const klineWindows = new Map<string, BrowserWindow>();
 let appIcon: Electron.NativeImage | undefined;
@@ -97,7 +101,7 @@ function getAppIcon(): Electron.NativeImage {
   }
 
   if (!appIcon || appIcon.isEmpty()) {
-    const fallbackIconPath = path.join(app.getPath("userData"), "app-icon.ico");
+    const fallbackIconPath = path.join(app.getPath("userData"), "app-icon-svg.ico");
     if (!fs.existsSync(fallbackIconPath)) {
       fs.writeFileSync(fallbackIconPath, createVSCodeStyleIco());
     }
@@ -107,8 +111,8 @@ function getAppIcon(): Electron.NativeImage {
   return appIcon;
 }
 function createIcoFromSvgContent(svg: string): Buffer {
-  const background = readSvgColor(svg, /<rect[^>]*fill="([^"]+)"/, [0, 122, 204, 255]);
-  const primary = readSvgColor(svg, /<path[^>]*fill="([^"]+)"/, [255, 255, 255, 235]);
+  const background = readSvgColor(svg, /<rect[^>]*fill="([^"]+)"/, [0, 0, 0, 0]);
+  const primary = readSvgColor(svg, /<path[^>]*fill="([^"]+)"/, [0, 0, 0, 255]);
   const width = 32;
   const height = 32;
   const pixels = new Uint8ClampedArray(width * height * 4);
@@ -117,7 +121,7 @@ function createIcoFromSvgContent(svg: string): Buffer {
   fillPolygon(pixels, width, height, [[188, 28], [70, 137], [32, 108], [14, 123], [69, 173], [188, 28]], withAlpha(primary, 42));
   fillPolygon(pixels, width, height, [[188, 228], [70, 119], [32, 148], [14, 133], [69, 83], [188, 228]], withAlpha(primary, 72));
   fillPolygon(pixels, width, height, [[188, 28], [238, 52], [238, 204], [188, 228]], withAlpha(primary, 235));
-  fillPolygon(pixels, width, height, [[188, 70], [217, 84], [217, 172], [188, 186]], withAlpha(background, 142));
+  clearPolygon(pixels, width, height, [[188, 70], [217, 84], [217, 172], [188, 186]]);
 
   return createIcoFromPixels(pixels, width, height);
 }
@@ -147,11 +151,10 @@ function createVSCodeStyleIco(): Buffer {
   const height = 32;
   const pixels = new Uint8ClampedArray(width * height * 4);
 
-  fillPolygon(pixels, width, height, [[0, 0], [256, 0], [256, 256], [0, 256]], [0, 122, 204, 255]);
-  fillPolygon(pixels, width, height, [[188, 28], [70, 137], [32, 108], [14, 123], [69, 173], [188, 28]], [255, 255, 255, 42]);
-  fillPolygon(pixels, width, height, [[188, 228], [70, 119], [32, 148], [14, 133], [69, 83], [188, 228]], [255, 255, 255, 72]);
-  fillPolygon(pixels, width, height, [[188, 28], [238, 52], [238, 204], [188, 228]], [255, 255, 255, 235]);
-  fillPolygon(pixels, width, height, [[188, 70], [217, 84], [217, 172], [188, 186]], [0, 92, 158, 142]);
+  fillPolygon(pixels, width, height, [[188, 28], [70, 137], [32, 108], [14, 123], [69, 173], [188, 28]], [0, 0, 0, 120]);
+  fillPolygon(pixels, width, height, [[188, 228], [70, 119], [32, 148], [14, 133], [69, 83], [188, 228]], [0, 0, 0, 170]);
+  fillPolygon(pixels, width, height, [[188, 28], [238, 52], [238, 204], [188, 228]], [0, 0, 0, 255]);
+  clearPolygon(pixels, width, height, [[188, 70], [217, 84], [217, 172], [188, 186]]);
 
   return createIcoFromPixels(pixels, width, height);
 }
@@ -221,6 +224,22 @@ function fillPolygon(pixels: Uint8ClampedArray, width: number, height: number, p
   }
 }
 
+function clearPolygon(pixels: Uint8ClampedArray, width: number, height: number, points: number[][]): void {
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const px = ((x + 0.5) / width) * 256;
+      const py = ((y + 0.5) / height) * 256;
+      if (!insidePolygon(px, py, points)) continue;
+
+      const index = (y * width + x) * 4;
+      pixels[index] = 0;
+      pixels[index + 1] = 0;
+      pixels[index + 2] = 0;
+      pixels[index + 3] = 0;
+    }
+  }
+}
+
 function insidePolygon(x: number, y: number, points: number[][]): boolean {
   let inside = false;
   for (let i = 0, j = points.length - 1; i < points.length; j = i, i += 1) {
@@ -234,13 +253,49 @@ function insidePolygon(x: number, y: number, points: number[][]): boolean {
   return inside;
 }
 
+function createTray(): Tray {
+  if (tray && !tray.isDestroyed()) return tray;
+
+  tray = new Tray(getAppIcon());
+  tray.setToolTip("Code");
+  tray.setContextMenu(Menu.buildFromTemplate([
+    { label: "Show Code", click: () => showMainWindow() },
+    { type: "separator" },
+    { label: "Quit", click: () => quitApp() }
+  ]));
+  tray.on("double-click", () => showMainWindow());
+  return tray;
+}
+
+function showMainWindow(): void {
+  const win = mainWindow && !mainWindow.isDestroyed() ? mainWindow : createMainWindow();
+  if (win.isMinimized()) win.restore();
+  win.show();
+  win.focus();
+}
+
+function quitApp(): void {
+  isQuitting = true;
+  app.quit();
+}
+
+function closeMainWindowByPreference(win: BrowserWindow): void {
+  if (core?.getState().config.window_close_behavior === "close") {
+    win.close();
+    return;
+  }
+
+  createTray();
+  win.hide();
+}
+
 function createMainWindow(): BrowserWindow {
   const win = new BrowserWindow({
     width: 1240,
     height: 780,
     minWidth: 980,
     minHeight: 640,
-    title: "FinBox",
+    title: "Code",
     frame: false,
     icon: getAppIcon(),
     backgroundColor: "#f8f8f8",
@@ -254,6 +309,12 @@ function createMainWindow(): BrowserWindow {
 
   applyWindowIcon(win);
   win.setMenuBarVisibility(false);
+  win.on("close", (event) => {
+    if (isQuitting || core?.getState().config.window_close_behavior === "close") return;
+    event.preventDefault();
+    createTray();
+    win.hide();
+  });
   win.on("closed", () => {
     if (mainWindow === win) mainWindow = undefined;
     closeDerivedWindows();
@@ -448,9 +509,10 @@ async function loadRenderer(win: BrowserWindow, hash = ""): Promise<void> {
 
 app.whenReady().then(() => {
   Menu.setApplicationMenu(null);
-  mainWindow = createMainWindow();
 
   core = new AppCore(() => BrowserWindow.getAllWindows());
+  mainWindow = createMainWindow();
+  createTray();
   core.start();
 
   globalShortcut.register("CommandOrControl+Alt+8", () => {
@@ -490,6 +552,7 @@ app.on("window-all-closed", () => {
 });
 
 app.on("will-quit", () => {
+  isQuitting = true;
   globalShortcut.unregisterAll();
   core?.stop();
 });
@@ -498,12 +561,13 @@ ipcMain.handle("get-state", () => core.getState());
 ipcMain.handle("force-refresh", () => core.forceRefresh());
 ipcMain.handle("open-config-file", () => core.openConfigFile());
 ipcMain.handle("open-config-dir", () => core.openConfigDir());
-ipcMain.handle("quit", () => app.quit());
+ipcMain.handle("quit", () => quitApp());
 ipcMain.handle("search-stocks", (_event, query: string) => core.searchStocks(query));
 ipcMain.handle("add-stock", (_event, code: string, alias?: string) => core.addStock(code, alias));
 ipcMain.handle("remove-stock", (_event, code: string) => core.removeStock(code));
 ipcMain.handle("update-account-config", (_event, patch: Pick<AppConfig, "total_investment" | "cash">) => core.updateAccountConfig(patch));
 ipcMain.handle("update-motto", (_event, motto: MottoConfig) => core.updateMotto(motto));
+ipcMain.handle("update-window-close-behavior", (_event, behavior: AppConfig["window_close_behavior"]) => core.updateWindowCloseBehavior(behavior));
 ipcMain.handle("update-theme", (_event, themeName: string) => core.updateTheme(themeName));
 ipcMain.handle("update-stock-alias", (_event, code: string, alias?: string) => core.updateStockAlias(code, alias));
 ipcMain.handle("update-stock-tags", (_event, code: string, tags: string[]) => core.updateStockTags(code, tags));
@@ -621,5 +685,11 @@ ipcMain.handle("window-toggle-maximize", (event) => {
   }
 });
 ipcMain.handle("window-close", (event) => {
-  BrowserWindow.fromWebContents(event.sender)?.close();
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (!win) return;
+  if (win === mainWindow) {
+    closeMainWindowByPreference(win);
+    return;
+  }
+  win.close();
 });

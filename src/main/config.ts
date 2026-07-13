@@ -36,6 +36,7 @@ export class ConfigManager {
       total_investment: 100000,
       cash: 50000,
       motto: defaultMotto,
+      window_close_behavior: "tray",
       hide_zero_shares: false,
       stock_groups: ["watchlist"],
       stocks: [
@@ -87,6 +88,7 @@ export class ConfigManager {
         total_investment: config.total_investment,
         cash: config.cash,
         motto: normalizeMotto(config.motto),
+        window_close_behavior: config.window_close_behavior === "close" ? "close" : "tray",
         hide_zero_shares: config.hide_zero_shares ?? false,
         stocks: (config.stocks ?? []).map((stock) => ({
           code: stock.code,

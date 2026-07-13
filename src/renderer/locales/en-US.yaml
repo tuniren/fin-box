@@ -1,0 +1,115 @@
+menu:
+  application: Application menu
+  file: File
+  view: View
+  window: Window
+  language: Language
+  addSymbol: Add Symbol
+  refresh: Refresh
+  openConfig: Open Config
+  openConfigFolder: Open Config Folder
+  quit: Quit
+  explorer: Explorer
+  editor: Editor
+  sidePanel: Side Panel
+  statusBar: Status Bar
+  details: Details
+  chart: Chart
+  toggleStockFloat: Toggle Stock Float
+  toggleWatchFloat: Toggle Watch Float
+  toggleMottoWindow: Toggle Motto Window
+language:
+  chinese: 中文
+  english: English
+common:
+  add: Add
+  cancel: Cancel
+  save: Save
+  saving: Saving...
+  load: Load
+  loading: Loading...
+  previousPage: Previous page
+  nextPage: Next page
+detail:
+  selectSymbol: Select a symbol
+  saveAlias: Save alias
+  cancelAliasEdit: Cancel alias edit
+  editAlias: Edit alias
+  toggleMinuteChart: Toggle minute chart
+  closeMinute: Close Minute
+  minute: Minute
+  openChart: Open chart
+  quoteTable: Stock detail quote table
+  lastPrice: Last Price
+  change: Change
+  changePercent: Change %
+  open: Open
+  high: High
+  low: Low
+  prevClose: Prev Close
+  shares: Shares
+  marketValue: Market Value
+  dayProfitLoss: Day P/L
+  totalProfitLoss: Total P/L
+  returnRate: Return
+  quoteTime: Quote Time
+  updated: Updated
+  tags: Tags
+  noTags: No tags
+  removeTag: Remove tag
+  unsavedTagChanges: Unsaved tag changes
+  saveTags: Save Tags
+  positions: Positions
+  row: Row
+  account: Account
+  cost: Cost
+  noPositions: No positions
+  removePosition: Remove position
+  unsavedPositionChanges: Unsaved position changes
+  savePositions: Save Positions
+  discussions: THS Discussions
+  loadDiscussionsHint: Click Load to fetch THS discussions
+  noComments: No comments
+side:
+  openConfigFolder: Open config folder
+  toggleStockFloat: Toggle stock float
+  toggleWatchFloat: Toggle watch float
+  more: More
+  selectedSymbol: Selected Symbol
+  none: None
+  code: Code
+  refresh: Refresh
+  config: Config
+  window: Window
+  closeButton: Close Button
+  minimizeToTray: Minimize to tray
+  close: Close
+  motto: Motto
+  toggleMottoWindow: Toggle motto window
+  mottoPlaceholder: Write a reminder to keep in sight
+  font: Font
+  size: Size
+  color: Color
+  unsavedMotto: Unsaved motto
+  saveMotto: Save Motto
+news:
+  noNews: No news
+status:
+  shIndex: SH Index
+  accountProfitLoss: Account P/L
+  refreshInterval: Refresh
+  accountConfig: Account config
+  totalInvestment: Total Investment
+  cash: Cash
+error:
+  saveMottoFailed: Failed to save motto.
+  loadNewsFailed: Failed to load 7x24 news.
+  invalidNumbers: Enter valid numbers.
+  saveAccountFailed: Failed to save account config.
+  loadCommentsFailed: Failed to load comments.
+  tagEditorUnavailable: Tag editor IPC is not available. Restart the app.
+  saveTagsFailed: Failed to save tags.
+  positionEditorUnavailable: Position editor IPC is not available. Restart the app.
+  savePositionsFailed: Failed to save positions.
+  aliasEditorUnavailable: Alias editor IPC is not available. Restart the app.
+  saveAliasFailed: Failed to save alias.

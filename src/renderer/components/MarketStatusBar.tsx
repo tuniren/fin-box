@@ -3,17 +3,19 @@ import { accountTotalProfit, dayProfit, effectivePrice, marketValue } from "../.
 import { profitColor } from "../../shared/theme";
 import type { AppState, StockStatus, Theme } from "../../shared/types";
 import { formatMaybe, formatSigned } from "../utils";
+import { useI18n } from "../i18n";
 
 const api = window.finBox;
 
 export function MarketStatusBar({ state, theme }: { state: AppState; theme: Theme }) {
+  const { t } = useI18n();
   return (
     <footer className="status-bar">
-      <MarketTile label="SH Index" value={formatMaybe(effectivePrice(state.sh_index), 2)} delta={marketPercent(state.sh_index)} theme={theme} />
-      <MarketTile label="Day P/L" value={formatSigned(sumDayProfit(state.stocks), 0)} delta={sumDayProfit(state.stocks)} theme={theme} />
-      <MarketTile label="Account P/L" value={formatOptionalSigned(accountTotalProfit(state.config, state.stocks), 0)} delta={accountTotalProfit(state.config, state.stocks)} theme={theme} />
-      <MarketTile label="Market Value" value={formatMaybe(sumMarketValue(state.stocks), 0)} theme={theme} />
-      <MarketTile label="Refresh" value="3-5s" theme={theme} />
+      <MarketTile label={t("status.shIndex")} value={formatMaybe(effectivePrice(state.sh_index), 2)} delta={marketPercent(state.sh_index)} theme={theme} />
+      <MarketTile label={t("detail.dayProfitLoss")} value={formatSigned(sumDayProfit(state.stocks), 0)} delta={sumDayProfit(state.stocks)} theme={theme} />
+      <MarketTile label={t("status.accountProfitLoss")} value={formatOptionalSigned(accountTotalProfit(state.config, state.stocks), 0)} delta={accountTotalProfit(state.config, state.stocks)} theme={theme} />
+      <MarketTile label={t("detail.marketValue")} value={formatMaybe(sumMarketValue(state.stocks), 0)} theme={theme} />
+      <MarketTile label={t("status.refreshInterval")} value="3-5s" theme={theme} />
       <AccountConfigPanel state={state} />
     </footer>
   );
@@ -29,6 +31,7 @@ function MarketTile({ label, value, delta, theme }: { label: string; value: stri
 }
 
 function AccountConfigPanel({ state }: { state: AppState }) {
+  const { t } = useI18n();
   const [investmentDraft, setInvestmentDraft] = useState(() => formatConfigDraft(state.config.total_investment));
   const [cashDraft, setCashDraft] = useState(() => formatConfigDraft(state.config.cash));
   const [saving, setSaving] = useState(false);
@@ -52,7 +55,7 @@ function AccountConfigPanel({ state }: { state: AppState }) {
     const totalInvestment = parseOptionalConfigNumber(investmentDraft);
     const cash = parseOptionalConfigNumber(cashDraft);
     if (totalInvestment === null || cash === null) {
-      setError("Enter valid numbers.");
+      setError(t("error.invalidNumbers"));
       return;
     }
 
@@ -61,16 +64,16 @@ function AccountConfigPanel({ state }: { state: AppState }) {
     try {
       await api.updateAccountConfig({ total_investment: totalInvestment, cash });
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : "Failed to save account config.");
+      setError(saveError instanceof Error ? saveError.message : t("error.saveAccountFailed"));
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <div className="account-config-panel" aria-label="Account config">
+    <div className="account-config-panel" aria-label={t("status.accountConfig")}>
       <label>
-        <span>Total Investment</span>
+        <span>{t("status.totalInvestment")}</span>
         <input
           type="number"
           step="0.01"
@@ -79,7 +82,7 @@ function AccountConfigPanel({ state }: { state: AppState }) {
         />
       </label>
       <label>
-        <span>Cash</span>
+        <span>{t("status.cash")}</span>
         <input
           type="number"
           step="0.01"
@@ -87,8 +90,8 @@ function AccountConfigPanel({ state }: { state: AppState }) {
           onChange={(event) => setCashDraft(event.target.value)}
         />
       </label>
-      <button className="tool-button" onClick={reset} disabled={!dirty || saving}>Cancel</button>
-      <button className="tool-button accent" onClick={() => void save()} disabled={!dirty || saving}>{saving ? "Saving..." : "Save"}</button>
+      <button className="tool-button" onClick={reset} disabled={!dirty || saving}>{t("common.cancel")}</button>
+      <button className="tool-button accent" onClick={() => void save()} disabled={!dirty || saving}>{t(saving ? "common.saving" : "common.save")}</button>
       {error && <span className="save-error">{error}</span>}
     </div>
   );

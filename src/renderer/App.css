@@ -48,6 +48,10 @@ textarea {
   user-select: none;
 }
 
+.workspace.hide-status-bar {
+  grid-template-rows: 35px minmax(0, 1fr) 0;
+}
+
 .workspace button,
 .workspace input {
   font-size: 12px;
@@ -1515,6 +1519,20 @@ b {
   white-space: nowrap;
 }
 
+.title-menu-dropdown button.menu-check-option {
+  position: relative;
+  justify-content: flex-start;
+}
+
+.menu-check-slot {
+  position: absolute;
+  left: 10px;
+  display: inline-flex;
+  width: 14px;
+  align-items: center;
+  justify-content: center;
+}
+
 .title-menu-dropdown button kbd {
   margin-left: 24px;
   color: #6a6a6a;
@@ -2631,6 +2649,53 @@ b {
   background: #ffffff;
 }
 
+.help-outline {
+  display: grid;
+  align-content: start;
+  gap: 4px;
+  padding: 12px;
+  color: #555555;
+}
+
+.help-outline strong {
+  margin-bottom: 8px;
+  color: #333333;
+}
+
+.help-outline span {
+  padding: 5px 8px;
+  border-radius: 3px;
+}
+
+.help-outline span:hover {
+  background: #e8e8e8;
+}
+
+.help-document {
+  height: 100%;
+  overflow: auto;
+  padding: 24px 32px 48px;
+  color: #333333;
+  line-height: 1.75;
+  user-select: text;
+}
+
+.help-document h1 {
+  margin: 0 0 20px;
+  font-size: 24px;
+}
+
+.help-document h2 {
+  margin: 22px 0 6px;
+  font-size: 16px;
+}
+
+.help-document p {
+  max-width: 880px;
+  margin: 0;
+  color: #555555;
+}
+
 .market-news-pane {
   display: grid;
   grid-template-rows: 34px minmax(0, 1fr);
@@ -2750,6 +2815,7 @@ b {
   justify-self: start;
 }
 
+.app-settings,
 .motto-editor {
   grid-column: span 2;
   display: grid;
@@ -2790,6 +2856,7 @@ b {
   gap: 8px;
 }
 
+.app-settings label,
 .motto-style-grid label {
   display: grid;
   gap: 4px;
@@ -2797,6 +2864,7 @@ b {
   color: #6a6a6a;
 }
 
+.app-settings select,
 .motto-style-grid input {
   width: 100%;
   min-width: 0;
@@ -2812,6 +2880,7 @@ b {
   padding: 2px;
 }
 
+.app-settings select:focus,
 .motto-style-grid input:focus {
   border-color: #007acc;
 }

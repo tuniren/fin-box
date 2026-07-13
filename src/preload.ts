@@ -14,6 +14,7 @@ const api: FinBoxApi = {
   removeStock: (code: string) => ipcRenderer.invoke("remove-stock", code),
   updateAccountConfig: (patch) => ipcRenderer.invoke("update-account-config", patch),
   updateMotto: (motto: MottoConfig) => ipcRenderer.invoke("update-motto", motto),
+  updateWindowCloseBehavior: (behavior) => ipcRenderer.invoke("update-window-close-behavior", behavior),
   updateTheme: (themeName: string) => ipcRenderer.invoke("update-theme", themeName),
   updateStockAlias: (code: string, alias?: string) => ipcRenderer.invoke("update-stock-alias", code, alias),
   updateStockTags: (code: string, tags: string[]) => ipcRenderer.invoke("update-stock-tags", code, tags),

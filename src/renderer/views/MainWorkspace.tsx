@@ -38,7 +38,7 @@ import {
   totalShares
 } from "../../shared/finance";
 import { currentTheme, profitColor } from "../../shared/theme";
-import type { AppState, MottoConfig, NoteTreeItem, Position, StockCommentItem, StockCommentPage, StockNewsPage, StockSearchResult, StockStatus, Theme } from "../../shared/types";
+import type { AppConfig, AppState, MottoConfig, NoteTreeItem, Position, StockCommentItem, StockCommentPage, StockNewsPage, StockSearchResult, StockStatus, Theme } from "../../shared/types";
 import { KLineView } from "../components/KLineView";
 import { MarketStatusBar } from "../components/MarketStatusBar";
 import { MinutePanel } from "../components/MinutePanel";
@@ -48,13 +48,14 @@ import { TradingIntensityPanel } from "../components/TradingIntensityPanel";
 import { GroupedWatchlist, mergeWatchGroups, normalizeWatchGroupName } from "../components/WatchTree";
 import type { WatchTreeSelection } from "../components/WatchTree";
 import { formatMaybe, formatSigned, stockPercent, themeStyle } from "../utils";
+import { useI18n } from "../i18n";
 
 const api = window.finBox;
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
-type ActivityView = "watchlist" | "news" | "notes";
-type ActiveView = "details" | "chart" | "note";
+type ActivityView = "watchlist" | "news" | "notes" | "help";
+type ActiveView = "details" | "chart" | "note" | "help";
 type StockView = "details" | "chart";
-type TitleMenu = "file" | "view" | "window";
+type TitleMenu = "file" | "view" | "window" | "language";
 type WatchPromptKind = "create-group" | "rename-group" | "edit-alias";
 type WatchPromptState = {
   kind: WatchPromptKind;
@@ -70,6 +71,15 @@ const defaultMotto: MottoConfig = {
   font_size: 14,
   color: "#f8fafc"
 };
+function MenuCheckItem({ checked, radio = false, onClick, children }: { checked: boolean; radio?: boolean; onClick: () => void; children: ReactNode }) {
+  return (
+    <button className="menu-check-option" role={radio ? "menuitemradio" : "menuitemcheckbox"} aria-checked={checked} onClick={onClick}>
+      <span className="menu-check-slot">{checked && <Check size={13} aria-hidden="true" />}</span>
+      <span>{children}</span>
+    </button>
+  );
+}
+
 function useAppState() {
   const [state, setState] = useState<AppState>();
 
@@ -125,6 +135,7 @@ function sameMotto(left: MottoConfig, right: MottoConfig) {
 }
 
 export function MainWorkspace() {
+  const { locale, setLocale, t } = useI18n();
   const state = useAppState();
   const visibleStocks = useVisibleStocks(state);
   const holdStocks = useHoldStocks(visibleStocks);
@@ -141,6 +152,7 @@ export function MainWorkspace() {
   const [explorerVisible, setExplorerVisible] = useState(true);
   const [editorVisible, setEditorVisible] = useState(true);
   const [sideVisible, setSideVisible] = useState(true);
+  const [statusBarVisible, setStatusBarVisible] = useState(true);
   const [activeTitleMenu, setActiveTitleMenu] = useState<TitleMenu>();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [themeError, setThemeError] = useState("");
@@ -222,12 +234,12 @@ export function MainWorkspace() {
 
     setMarketNewsLoading(true);
     setMarketNewsError("");
-    void api.fetchStockNews("", marketNewsPage)
+    void Promise.resolve().then(() => api.fetchStockNews("", marketNewsPage))
       .then((page) => {
         if (!cancelled) setMarketNews(page);
       })
       .catch((error) => {
-        if (!cancelled) setMarketNewsError(error instanceof Error ? error.message : "Failed to load 7x24.");
+        if (!cancelled) setMarketNewsError(error instanceof Error ? error.message : t("error.loadNewsFailed"));
       })
       .finally(() => {
         if (!cancelled) setMarketNewsLoading(false);
@@ -371,6 +383,16 @@ export function MainWorkspace() {
 
   const updateMottoDraft = (patch: Partial<MottoConfig>) => {
     setMottoDraft((motto) => ({ ...motto, ...patch }));
+  };
+
+  const updateWindowCloseBehavior = (behavior: AppConfig["window_close_behavior"]) => {
+    void api.updateWindowCloseBehavior(behavior);
+  };
+
+  const toggleMaximizeFromTitleBar = (event: ReactMouseEvent<HTMLElement>) => {
+    const target = event.target as HTMLElement | null;
+    if (target?.closest("button, select, input, textarea, .no-drag, .title-menu, .layout-actions, .window-controls")) return;
+    void api.toggleMaximizeWindow();
   };
 
   const runTitleMenuAction = (action: () => void) => {
@@ -613,7 +635,7 @@ export function MainWorkspace() {
       await api.updateMotto(mottoDraft);
       setSavedMotto(mottoDraft);
     } catch (error) {
-      setMottoError(error instanceof Error ? error.message : "Failed to save motto.");
+      setMottoError(error instanceof Error ? error.message : t("error.saveMottoFailed"));
     } finally {
       setMottoSaving(false);
     }
@@ -642,28 +664,29 @@ export function MainWorkspace() {
   }
 
   return (
-    <main className="workspace">
-      <header className="title-bar">
-        <nav className="title-menu" aria-label="Application menu">
+    <main className={`workspace ${statusBarVisible ? "" : "hide-status-bar"}`}>
+      <header className="title-bar" onDoubleClick={toggleMaximizeFromTitleBar}>
+        <nav className="title-menu" aria-label={t("menu.application")}>
           <img className="title-logo" src="./assets/app-icon.svg" alt="" />
           <div className={`title-menu-group ${activeTitleMenu === "file" ? "open" : ""}`}>
-            <button className="title-menu-root" aria-haspopup="menu" aria-expanded={activeTitleMenu === "file"} onClick={() => setActiveTitleMenu((menu) => (menu === "file" ? undefined : "file"))}>File</button>
+            <button className="title-menu-root" aria-haspopup="menu" aria-expanded={activeTitleMenu === "file"} onClick={() => setActiveTitleMenu((menu) => (menu === "file" ? undefined : "file"))}>{t("menu.file")}</button>
             <div className="title-menu-dropdown" role="menu">
-              <button role="menuitem" onClick={() => runTitleMenuAction(() => openSearch())}>Add Symbol</button>
-              <button role="menuitem" onClick={() => runTitleMenuAction(() => void api.forceRefresh())}>Refresh</button>
+              <button role="menuitem" onClick={() => runTitleMenuAction(() => openSearch())}>{t("menu.addSymbol")}</button>
+              <button role="menuitem" onClick={() => runTitleMenuAction(() => void api.forceRefresh())}>{t("menu.refresh")}</button>
               <span className="title-menu-separator" />
-              <button role="menuitem" onClick={() => runTitleMenuAction(() => void api.openConfigFile())}>Open Config</button>
-              <button role="menuitem" onClick={() => runTitleMenuAction(() => void api.openConfigDir())}>Open Config Folder</button>
+              <button role="menuitem" onClick={() => runTitleMenuAction(() => void api.openConfigFile())}>{t("menu.openConfig")}</button>
+              <button role="menuitem" onClick={() => runTitleMenuAction(() => void api.openConfigDir())}>{t("menu.openConfigFolder")}</button>
               <span className="title-menu-separator" />
-              <button role="menuitem" onClick={() => runTitleMenuAction(() => void api.quit())}>Quit</button>
+              <button role="menuitem" onClick={() => runTitleMenuAction(() => void api.quit())}>{t("menu.quit")}</button>
             </div>
           </div>
           <div className={`title-menu-group ${activeTitleMenu === "view" ? "open" : ""}`}>
-            <button className="title-menu-root" aria-haspopup="menu" aria-expanded={activeTitleMenu === "view"} onClick={() => setActiveTitleMenu((menu) => (menu === "view" ? undefined : "view"))}>View</button>
+            <button className="title-menu-root" aria-haspopup="menu" aria-expanded={activeTitleMenu === "view"} onClick={() => setActiveTitleMenu((menu) => (menu === "view" ? undefined : "view"))}>{t("menu.view")}</button>
             <div className="title-menu-dropdown" role="menu">
-              <button role="menuitem" onClick={() => runTitleMenuAction(() => setExplorerVisible((value) => !value))}>{explorerVisible ? "Hide Explorer" : "Show Explorer"}</button>
-              <button role="menuitem" onClick={() => runTitleMenuAction(() => setEditorVisible((value) => !value))}>{editorVisible ? "Hide Editor" : "Show Editor"}</button>
-              <button role="menuitem" onClick={() => runTitleMenuAction(() => setSideVisible((value) => !value))}>{sideVisible ? "Hide Side Panel" : "Show Side Panel"}</button>
+              <MenuCheckItem checked={explorerVisible} onClick={() => runTitleMenuAction(() => setExplorerVisible((value) => !value))}>{t("menu.explorer")}</MenuCheckItem>
+              <MenuCheckItem checked={editorVisible} onClick={() => runTitleMenuAction(() => setEditorVisible((value) => !value))}>{t("menu.editor")}</MenuCheckItem>
+              <MenuCheckItem checked={sideVisible} onClick={() => runTitleMenuAction(() => setSideVisible((value) => !value))}>{t("menu.sidePanel")}</MenuCheckItem>
+              <MenuCheckItem checked={statusBarVisible} onClick={() => runTitleMenuAction(() => setStatusBarVisible((value) => !value))}>{t("menu.statusBar")}</MenuCheckItem>
               <span className="title-menu-separator" />
               <button
                 role="menuitem"
@@ -672,7 +695,7 @@ export function MainWorkspace() {
                 })}
                 disabled={!selectedStock}
               >
-                Details
+                {t("menu.details")}
               </button>
               <button
                 role="menuitem"
@@ -681,20 +704,27 @@ export function MainWorkspace() {
                 })}
                 disabled={!selectedStock}
               >
-                Chart
+                {t("menu.chart")}
               </button>
             </div>
           </div>
           <div className={`title-menu-group ${activeTitleMenu === "window" ? "open" : ""}`}>
-            <button className="title-menu-root" aria-haspopup="menu" aria-expanded={activeTitleMenu === "window"} onClick={() => setActiveTitleMenu((menu) => (menu === "window" ? undefined : "window"))}>Window</button>
+            <button className="title-menu-root" aria-haspopup="menu" aria-expanded={activeTitleMenu === "window"} onClick={() => setActiveTitleMenu((menu) => (menu === "window" ? undefined : "window"))}>{t("menu.window")}</button>
             <div className="title-menu-dropdown" role="menu">
-              <button role="menuitem" onClick={() => runTitleMenuAction(() => void api.toggleFloatWindow())}><span>Toggle Stock Float</span><kbd>Ctrl+Alt+9</kbd></button>
-              <button role="menuitem" onClick={() => runTitleMenuAction(() => void api.toggleWatchFloatWindow())}><span>Toggle Watch Float</span><kbd>Ctrl+Alt+0</kbd></button>
-              <button role="menuitem" onClick={() => runTitleMenuAction(() => void api.toggleMottoWindow())}>Toggle Motto Window</button>
+              <button role="menuitem" onClick={() => runTitleMenuAction(() => void api.toggleFloatWindow())}><span>{t("menu.toggleStockFloat")}</span><kbd>Ctrl+Alt+9</kbd></button>
+              <button role="menuitem" onClick={() => runTitleMenuAction(() => void api.toggleWatchFloatWindow())}><span>{t("menu.toggleWatchFloat")}</span><kbd>Ctrl+Alt+0</kbd></button>
+              <button role="menuitem" onClick={() => runTitleMenuAction(() => void api.toggleMottoWindow())}>{t("menu.toggleMottoWindow")}</button>
+            </div>
+          </div>
+          <div className={`title-menu-group ${activeTitleMenu === "language" ? "open" : ""}`}>
+            <button className="title-menu-root" aria-haspopup="menu" aria-expanded={activeTitleMenu === "language"} onClick={() => setActiveTitleMenu((menu) => (menu === "language" ? undefined : "language"))}>{t("menu.language")}</button>
+            <div className="title-menu-dropdown" role="menu">
+              <MenuCheckItem checked={locale === "zh-CN"} radio onClick={() => runTitleMenuAction(() => setLocale("zh-CN"))}>{t("language.chinese")}</MenuCheckItem>
+              <MenuCheckItem checked={locale === "en-US"} radio onClick={() => runTitleMenuAction(() => setLocale("en-US"))}>{t("language.english")}</MenuCheckItem>
             </div>
           </div>
         </nav>
-        <div className="window-title">electron-react</div>
+        <div className="window-title">Code</div>
         <div className="layout-actions" aria-label="Layout actions">
           <button className={explorerVisible ? "active" : ""} onClick={() => setExplorerVisible((value) => !value)} aria-label="Toggle explorer"><PanelLeft size={16} /></button>
           <button className={editorVisible ? "active" : ""} onClick={() => setEditorVisible((value) => !value)} aria-label="Toggle editor"><PanelRight size={16} /></button>
@@ -713,9 +743,9 @@ export function MainWorkspace() {
       >
         <aside className="activity-bar" aria-label="Activity bar">
           <div className="activity-top">
-            <button className={`activity-item ${activityView === "watchlist" ? "active" : ""}`} onClick={() => { setActivityView("watchlist"); setExplorerVisible(true); if (activeView === "note") setActiveView(detailsOpen ? "details" : chartOpen ? "chart" : undefined); }} aria-label="Explorer"><Files size={24} /></button>
+            <button className={`activity-item ${activityView === "watchlist" ? "active" : ""}`} onClick={() => { setActivityView("watchlist"); setExplorerVisible(true); if (activeView === "note" || activeView === "help") setActiveView(detailsOpen ? "details" : chartOpen ? "chart" : undefined); }} aria-label="Explorer"><Files size={24} /></button>
             <button className={`activity-item ${activityView === "news" ? "active" : ""}`} onClick={() => { setActivityView("news"); setExplorerVisible(true); }} aria-label="7x24"><Newspaper size={23} /></button>
-            <button className={`activity-item ${activityView === "notes" ? "active" : ""}`} onClick={() => { setActivityView("notes"); setExplorerVisible(true); setActiveView("note"); }} aria-label="Notes"><BookOpen size={23} /></button>
+            <button className={`activity-item ${activityView === "help" ? "active" : ""}`} onClick={() => { setActivityView("help"); setExplorerVisible(true); setEditorVisible(true); setActiveView("help"); }} aria-label="使用说明" title="使用说明"><BookOpen size={23} /></button>
             <button className="activity-item" aria-label="Source Control"><GitBranch size={23} /><span className="activity-badge">{visibleStocks.length}</span></button>
             <button className="activity-item" aria-label="Extensions"><Blocks size={23} /></button>
           </div>
@@ -738,7 +768,7 @@ export function MainWorkspace() {
         {explorerVisible && (
         <aside className="explorer-panel">
           <div className="explorer-header">
-            {activityView !== "watchlist" && <span>{activityView === "news" ? "7X24" : "NOTES"}</span>}
+            {activityView !== "watchlist" && <span>{activityView === "news" ? "7X24" : "使用说明"}</span>}
             {activityView === "watchlist" ? (
               <div className="explorer-actions">
                 <button onClick={() => openSearch()} title="Add symbol" aria-label="Add symbol"><Plus size={15} /></button>
@@ -746,19 +776,14 @@ export function MainWorkspace() {
                 <button onClick={() => void editSelectedWatchNode()} title="Edit selected" aria-label="Edit selected"><Edit3 size={14} /></button>
                 <button onClick={() => void deleteSelectedWatchNode()} disabled={!selectedWatchNode} title="Delete selected" aria-label="Delete selected"><Trash2 size={14} /></button>
                 <button onClick={() => void api.forceRefresh()} title="Refresh quotes" aria-label="Refresh quotes"><RefreshCw size={14} /></button>
-                <button title="More" aria-label="More"><MoreHorizontal size={15} /></button>
+                <button title={t("side.more")} aria-label={t("side.more")}><MoreHorizontal size={15} /></button>
               </div>
             ) : activityView === "news" ? (
               <div className="explorer-actions">
                 <button onClick={() => { setMarketNewsPage(1); setMarketNewsReload((value) => value + 1); }} disabled={marketNewsLoading} title="Refresh 7x24" aria-label="Refresh 7x24"><RefreshCw size={14} /></button>
               </div>
             ) : (
-              <div className="explorer-actions">
-                <button onClick={() => void createNoteItem("file")} title="New markdown file" aria-label="New markdown file"><FileText size={14} /></button>
-                <button onClick={() => void createNoteItem("directory")} title="New folder" aria-label="New folder"><Folder size={14} /></button>
-                <button onClick={refreshNotes} disabled={notesLoading} title="Refresh notes" aria-label="Refresh notes"><RefreshCw size={14} /></button>
-                <button onClick={() => void api.openNotesDir()} title="Open notes folder" aria-label="Open notes folder"><FolderOpen size={14} /></button>
-              </div>
+              <span />
             )}
           </div>
           {activityView === "news" ? (
@@ -770,22 +795,8 @@ export function MainWorkspace() {
               onPrev={() => setMarketNewsPage((page) => Math.max(1, page - 1))}
               onNext={() => setMarketNewsPage((page) => page + 1)}
             />
-          ) : activityView === "notes" ? (
-            <NotesPanel
-              items={noteTree}
-              selectedPath={selectedNotePath}
-              loading={notesLoading}
-              error={noteError}
-              onSelect={(item) => {
-                setSelectedNotePath(item.path);
-                setActiveView("note");
-                setEditorVisible(true);
-              }}
-              onNewFile={(parentPath) => void createNoteItem("file", parentPath)}
-              onNewFolder={(parentPath) => void createNoteItem("directory", parentPath)}
-              onRename={(item) => void renameNoteItem(item)}
-              onDelete={(item) => void deleteNoteItem(item)}
-            />
+          ) : activityView === "help" ? (
+            <HelpOutline />
           ) : (
             <GroupedWatchlist
               stocks={visibleStocks}
@@ -819,6 +830,12 @@ export function MainWorkspace() {
                 </span>
               </button>
             )}
+            {activeView === "help" && (
+              <button className="editor-tab active">
+                <BookOpen size={14} />
+                使用说明
+              </button>
+            )}
             {chartOpen && (
               <button className={`editor-tab ${activeView === "chart" ? "active" : ""}`} onClick={() => setActiveView("chart")} disabled={!selectedStock}>
                 <span className="react-dot">K</span>
@@ -834,10 +851,12 @@ export function MainWorkspace() {
             <ChevronRight size={14} />
             <span>renderer</span>
             <ChevronRight size={14} />
-            <span>{selectedStock ? selectedStock.config.code : "portfolio"}</span>
+            <span>{activeView === "help" ? "使用说明" : selectedStock ? selectedStock.config.code : "portfolio"}</span>
           </div>
           <div className="editor-panel">
-            {selectedStock && activeView === "details" ? (
+            {activeView === "help" ? (
+              <HelpDocument />
+            ) : selectedStock && activeView === "details" ? (
               <StockDetail state={state} stock={selectedStock} theme={theme} onOpenChart={() => openStockView("chart")} />
             ) : selectedStock && activeView === "chart" ? (
               <KLineView code={selectedStock.config.code} name={displayName(selectedStock)} />
@@ -854,43 +873,56 @@ export function MainWorkspace() {
         <aside className="codex-panel">
           <div className="codex-title">FINBOX</div>
           <div className="codex-toolbar">
-            <button onClick={() => void api.openConfigDir()} title="Open config folder" aria-label="Open config folder"><FolderOpen size={15} /></button>
-            <button onClick={() => void api.toggleFloatWindow()} title="Toggle stock float" aria-label="Toggle stock float"><Maximize2 size={15} /></button>
-            <button onClick={() => void api.toggleWatchFloatWindow()} title="Toggle watch float" aria-label="Toggle watch float"><Files size={15} /></button>
-            <button title="More" aria-label="More"><MoreHorizontal size={15} /></button>
+            <button onClick={() => void api.openConfigDir()} title={t("side.openConfigFolder")} aria-label={t("side.openConfigFolder")}><FolderOpen size={15} /></button>
+            <button onClick={() => void api.toggleFloatWindow()} title={t("side.toggleStockFloat")} aria-label={t("side.toggleStockFloat")}><Maximize2 size={15} /></button>
+            <button onClick={() => void api.toggleWatchFloatWindow()} title={t("side.toggleWatchFloat")} aria-label={t("side.toggleWatchFloat")}><Files size={15} /></button>
+            <button title={t("side.more")} aria-label={t("side.more")}><MoreHorizontal size={15} /></button>
           </div>
           <div className="codex-content">
-            <span className="muted">Selected Symbol</span>
-            <span>{selectedStock ? displayName(selectedStock) : "None"}</span>
-            <span className="muted">Code</span>
+            <span className="muted">{t("side.selectedSymbol")}</span>
+            <span>{selectedStock ? displayName(selectedStock) : t("side.none")}</span>
+            <span className="muted">{t("side.code")}</span>
             <span>{selectedStock?.config.code ?? "--"}</span>
             <button className="tool-button" onClick={() => void api.forceRefresh()}>
               <RefreshCw size={14} />
-              Refresh
+              {t("side.refresh")}
             </button>
             <button className="tool-button" onClick={() => void api.openConfigFile()}>
               <FileText size={14} />
-              Config
+              {t("side.config")}
             </button>
+            <section className="app-settings">
+              <div className="motto-editor-title">
+                <span>{t("side.window")}</span>
+              </div>
+              <label>
+                <span>{t("side.closeButton")}</span>
+                <select value={state.config.window_close_behavior ?? "tray"} onChange={(event) => updateWindowCloseBehavior(event.target.value as AppConfig["window_close_behavior"])}>
+                  <option value="tray">{t("side.minimizeToTray")}</option>
+                  <option value="close">{t("side.close")}</option>
+                </select>
+              </label>
+            </section>
+
             <section className="motto-editor">
               <div className="motto-editor-title">
-                <span>Motto</span>
-                <button className="icon-tool compact" onClick={() => void api.toggleMottoWindow()} title="Toggle motto window" aria-label="Toggle motto window">
+                <span>{t("side.motto")}</span>
+                <button className="icon-tool compact" onClick={() => void api.toggleMottoWindow()} title={t("side.toggleMottoWindow")} aria-label={t("side.toggleMottoWindow")}>
                   <Maximize2 size={14} />
                 </button>
               </div>
               <textarea
                 value={mottoDraft.text}
                 onChange={(event) => updateMottoDraft({ text: event.target.value })}
-                placeholder="Write a reminder to keep in sight"
+                placeholder={t("side.mottoPlaceholder")}
               />
               <div className="motto-style-grid">
                 <label>
-                  <span>Font</span>
+                  <span>{t("side.font")}</span>
                   <input value={mottoDraft.font_family} onChange={(event) => updateMottoDraft({ font_family: event.target.value })} />
                 </label>
                 <label>
-                  <span>Size</span>
+                  <span>{t("side.size")}</span>
                   <input
                     type="number"
                     min="10"
@@ -901,18 +933,18 @@ export function MainWorkspace() {
                   />
                 </label>
                 <label>
-                  <span>Color</span>
+                  <span>{t("side.color")}</span>
                   <input type="color" value={mottoDraft.color} onChange={(event) => updateMottoDraft({ color: event.target.value })} />
                 </label>
               </div>
               <div className="motto-actions">
-                {mottoDirty && <span className="edit-state">Unsaved motto</span>}
+                {mottoDirty && <span className="edit-state">{t("side.unsavedMotto")}</span>}
                 {mottoError && <span className="save-error">{mottoError}</span>}
                 <button className="tool-button" onClick={() => setMottoDraft(savedMotto)} disabled={!mottoDirty || mottoSaving}>
-                  Cancel
+                  {t("common.cancel")}
                 </button>
                 <button className="tool-button accent" onClick={() => void saveMotto()} disabled={!mottoDirty || mottoSaving}>
-                  {mottoSaving ? "Saving..." : "Save Motto"}
+                  {mottoSaving ? t("common.saving") : t("side.saveMotto")}
                 </button>
               </div>
             </section>
@@ -921,7 +953,7 @@ export function MainWorkspace() {
         )}
       </section>
 
-      <MarketStatusBar state={state} theme={theme} />
+      {statusBarVisible && <MarketStatusBar state={state} theme={theme} />}
 
       {searchOpen && (
         <div className="modal-backdrop" onMouseDown={closeSearch}>
@@ -1210,6 +1242,34 @@ export function MottoWindowView() {
   );
 }
 
+function HelpOutline() {
+  return (
+    <nav className="help-outline" aria-label="使用说明目录">
+      <strong>FinBox 使用说明</strong>
+      <span>快速开始</span><span>自选股票</span><span>行情详情</span><span>K线与分时</span><span>资讯与浮窗</span><span>界面与设置</span>
+    </nav>
+  );
+}
+
+function HelpDocument() {
+  return (
+    <article className="help-document">
+      <h1>FinBox 功能使用说明</h1>
+      <p>FinBox 是一款用于查看股票行情、管理自选分组、记录持仓并快速浏览市场资讯的桌面工具。</p>
+      <h2>一、快速开始</h2><p>通过顶部“文件”菜单添加股票或刷新行情。左侧活动栏可切换自选股票、7X24 资讯和使用说明。</p>
+      <h2>二、自选股票与分组</h2><p>在左侧自选区域新建分组，并使用“添加股票”将股票加入指定分组。股票可以拖动到其他分组；按住 Ctrl、Alt 或 Shift 拖动时会复制到目标分组。双击股票可打开详情页。</p>
+      <h2>三、股票详情与持仓</h2><p>详情页展示最新价、涨跌幅、市值、今日盈亏和累计盈亏。可编辑股票别名、标签及不同账户的持仓数量和成本，修改后请点击保存。</p>
+      <h2>四、K线、分时与交易强度</h2><p>在“视图”菜单或详情页打开图表。详情页的“分时”按钮用于查看盘中走势；“交易强度”可展开查看当前成交量、估算成交量和历史排名。</p>
+      <h2>五、7X24 资讯</h2><p>点击左侧报纸图标查看实时市场资讯，可翻页或刷新。数据加载失败时会在资讯面板内显示错误，不影响其他功能。</p>
+      <h2>六、浮窗功能</h2><p>通过“窗口”菜单打开股票浮窗、自选浮窗或格言窗口。股票浮窗快捷键为 Ctrl+Alt+9，自选浮窗快捷键为 Ctrl+Alt+0。</p>
+      <h2>七、界面显示</h2><p>“视图”菜单中的勾选项控制资源管理器、编辑区、侧边栏和状态栏是否显示。勾选表示展示，取消勾选表示隐藏。</p>
+      <h2>八、语言与主题</h2><p>顶部“语言”菜单可切换中文和 English。左下角设置按钮可切换颜色主题。</p>
+      <h2>九、右侧设置</h2><p>右侧面板可刷新行情、打开配置文件、设置关闭按钮行为，并编辑格言内容、字体、大小和颜色。</p>
+      <h2>十、底部状态栏</h2><p>状态栏显示上证指数、今日盈亏、账户盈亏、市值和刷新间隔，还可维护总投资与现金数据。</p>
+    </article>
+  );
+}
+
 function MarketNewsPanel({
   news,
   loading,
@@ -1225,22 +1285,25 @@ function MarketNewsPanel({
   onPrev: () => void;
   onNext: () => void;
 }) {
+  const { t } = useI18n();
+  const items = Array.isArray(news?.items) ? news.items.filter((item) => item && typeof item === "object") : [];
+
   return (
     <div className="market-news-pane">
       <div className="market-news-actions">
-        <button className="icon-tool compact" onClick={onPrev} disabled={page <= 1 || loading} title="Previous page" aria-label="Previous page">
+        <button className="icon-tool compact" onClick={onPrev} disabled={page <= 1 || loading} title={t("common.previousPage")} aria-label={t("common.previousPage")}>
           <ChevronRight className="reverse-icon" size={14} />
         </button>
         <span>{page}</span>
-        <button className="icon-tool compact" onClick={onNext} disabled={loading || news?.hasMore === false} title="Next page" aria-label="Next page">
+        <button className="icon-tool compact" onClick={onNext} disabled={loading || news?.hasMore === false} title={t("common.nextPage")} aria-label={t("common.nextPage")}>
           <ChevronRight size={14} />
         </button>
       </div>
       <div className="market-news-list">
-        {loading && <div className="news-state">Loading...</div>}
+        {loading && <div className="news-state">{t("common.loading")}</div>}
         {error && <div className="save-error market-news-error">{error}</div>}
-        {!loading && !error && news?.items.length === 0 && <div className="news-state">No news</div>}
-        {news?.items.map((item) => (
+        {!loading && !error && items.length === 0 && <div className="news-state">{t("news.noNews")}</div>}
+        {items.map((item) => (
           <a className="market-news-row" href={item.url} target="_blank" rel="noreferrer" key={item.id}>
             <span>{item.title}</span>
             <small>{[item.date, item.source].filter(Boolean).join(" ") || "--"}</small>
@@ -1351,6 +1414,7 @@ function NoteTreeRow({
 }
 
 function StockDetail({ state, stock, theme, onOpenChart }: { state: AppState; stock?: StockStatus; theme: Theme; onOpenChart: () => void }) {
+  const { locale, t } = useI18n();
   const [draft, setDraft] = useState<Position[]>([]);
   const [aliasDraft, setAliasDraft] = useState("");
   const [aliasEditing, setAliasEditing] = useState(false);
@@ -1401,7 +1465,7 @@ function StockDetail({ state, stock, theme, onOpenChart }: { state: AppState; st
         if (!cancelled) setComments(page);
       })
       .catch((error) => {
-        if (!cancelled) setCommentsError(error instanceof Error ? error.message : "Failed to load comments.");
+        if (!cancelled) setCommentsError(error instanceof Error ? error.message : t("error.loadCommentsFailed"));
       })
       .finally(() => {
         if (!cancelled) setCommentsLoading(false);
@@ -1413,7 +1477,7 @@ function StockDetail({ state, stock, theme, onOpenChart }: { state: AppState; st
   }, [stock?.config.code, commentsOpen, commentsPage]);
 
 
-  if (!stock) return <div className="empty-state">Select a symbol</div>;
+  if (!stock) return <div className="empty-state">{t("detail.selectSymbol")}</div>;
 
   const price = effectivePrice(stock.market);
   const priceChange = price !== undefined && stock.market ? price - stock.market.prev_close : undefined;
@@ -1462,12 +1526,12 @@ function StockDetail({ state, stock, theme, onOpenChart }: { state: AppState; st
     setTagError("");
     try {
       if (typeof api.updateStockTags !== "function") {
-        throw new Error("Tag editor IPC is not available. Restart the app.");
+        throw new Error(t("error.tagEditorUnavailable"));
       }
       await api.updateStockTags(stock.config.code, tagDraft);
       setTagDirty(false);
     } catch (error) {
-      setTagError(error instanceof Error ? error.message : "Failed to save tags.");
+      setTagError(error instanceof Error ? error.message : t("error.saveTagsFailed"));
     } finally {
       setTagSaving(false);
     }
@@ -1477,12 +1541,12 @@ function StockDetail({ state, stock, theme, onOpenChart }: { state: AppState; st
     setSaveError("");
     try {
       if (typeof api.updateStockPositions !== "function") {
-        throw new Error("Position editor IPC is not available. Restart the app.");
+        throw new Error(t("error.positionEditorUnavailable"));
       }
       await api.updateStockPositions(stock.config.code, draft);
       setDirty(false);
     } catch (error) {
-      setSaveError(error instanceof Error ? error.message : "Failed to save positions.");
+      setSaveError(error instanceof Error ? error.message : t("error.savePositionsFailed"));
     } finally {
       setSaving(false);
     }
@@ -1503,12 +1567,12 @@ function StockDetail({ state, stock, theme, onOpenChart }: { state: AppState; st
     setAliasError("");
     try {
       if (typeof api.updateStockAlias !== "function") {
-        throw new Error("Alias editor IPC is not available. Restart the app.");
+        throw new Error(t("error.aliasEditorUnavailable"));
       }
       await api.updateStockAlias(stock.config.code, nextAlias || undefined);
       setAliasEditing(false);
     } catch (error) {
-      setAliasError(error instanceof Error ? error.message : "Failed to save alias.");
+      setAliasError(error instanceof Error ? error.message : t("error.saveAliasFailed"));
     } finally {
       setAliasSaving(false);
     }
@@ -1533,54 +1597,54 @@ function StockDetail({ state, stock, theme, onOpenChart }: { state: AppState; st
               }}
               placeholder={stock.market?.name || stock.config.code}
             />
-            <button className="icon-tool compact" onClick={() => void saveAlias()} disabled={aliasSaving} title="Save alias" aria-label="Save alias">
+            <button className="icon-tool compact" onClick={() => void saveAlias()} disabled={aliasSaving} title={t("detail.saveAlias")} aria-label={t("detail.saveAlias")}>
               <Save size={13} />
             </button>
-            <button className="icon-tool compact" onClick={resetAlias} disabled={aliasSaving} title="Cancel alias edit" aria-label="Cancel alias edit">
+            <button className="icon-tool compact" onClick={resetAlias} disabled={aliasSaving} title={t("detail.cancelAliasEdit")} aria-label={t("detail.cancelAliasEdit")}>
               <X size={13} />
             </button>
           </span>
         ) : (
           <span className="detail-heading">
             <span>{displayName(stock)}</span>
-            <button className="icon-tool compact" onClick={() => { setAliasDraft(stock.config.alias ?? ""); setAliasEditing(true); }} disabled={aliasSaving} title="Edit alias" aria-label="Edit alias">
+            <button className="icon-tool compact" onClick={() => { setAliasDraft(stock.config.alias ?? ""); setAliasEditing(true); }} disabled={aliasSaving} title={t("detail.editAlias")} aria-label={t("detail.editAlias")}>
               <Edit3 size={13} />
             </button>
           </span>
         )}
         <div className="detail-actions">
-          <button className="tool-button" onClick={() => setMinuteOpen((value) => !value)} title="Toggle minute chart" aria-label="Toggle minute chart">
+          <button className="tool-button" onClick={() => setMinuteOpen((value) => !value)} title={t("detail.toggleMinuteChart")} aria-label={t("detail.toggleMinuteChart")}>
             <RefreshCw size={14} />
-            {minuteOpen ? "Close Minute" : "Minute"}
+            {t(minuteOpen ? "detail.closeMinute" : "detail.minute")}
           </button>
-          <button className="tool-button" onClick={onOpenChart} title="Open chart" aria-label="Open chart">
+          <button className="tool-button" onClick={onOpenChart} title={t("detail.openChart")} aria-label={t("detail.openChart")}>
             <Maximize2 size={15} />
-            Chart
+            {t("menu.chart")}
           </button>
         </div>
       </div>
       {aliasError && <div className="save-error alias-error">{aliasError}</div>}
-      <div className="detail-table" aria-label="Stock detail quote table">
-        <DetailItem label="Last Price" value={formatMaybe(price, 2)} color={profitColor(theme, percent ?? 0)} strong />
-        <DetailItem label="Change" value={formatOptionalSigned(priceChange, 2)} color={priceChange === undefined ? undefined : profitColor(theme, priceChange)} />
-        <DetailItem label="Change %" value={formatOptionalSigned(percent, 2, "%")} color={percent === undefined ? undefined : profitColor(theme, percent)} />
-        <DetailItem label="Open" value={formatMaybe(stock.market?.open, 2)} />
-        <DetailItem label="High" value={formatMaybe(stock.market?.high, 2)} />
-        <DetailItem label="Low" value={formatMaybe(stock.market?.low, 2)} />
-        <DetailItem label="Prev Close" value={formatMaybe(stock.market?.prev_close, 2)} />
-        <DetailItem label="Shares" value={`${totalShares(stock) || "--"}`} />
-        <DetailItem label="Market Value" value={formatMaybe(marketValue(stock), 0)} />
-        <DetailItem label="Day P/L" value={formatOptionalSigned(dayProfit(stock), 0)} color={profitColor(theme, dayProfit(stock))} />
-        <DetailItem label="Total P/L" value={formatOptionalSigned(totalProfit(stock), 0)} color={profitColor(theme, totalProfit(stock) ?? 0)} />
-        <DetailItem label="Return" value={formatOptionalSigned(totalProfitPoints(stock), 2, "%")} color={profitColor(theme, totalProfitPoints(stock) ?? 0)} />
-        <DetailItem label="Quote Time" value={stock.market?.time || "--"} />
-        <DetailItem label="Updated" value={state.last_market_update ? new Date(state.last_market_update).toLocaleTimeString() : "--"} />
+      <div className="detail-table" aria-label={t("detail.quoteTable")}>
+        <DetailItem label={t("detail.lastPrice")} value={formatMaybe(price, 2)} color={profitColor(theme, percent ?? 0)} strong />
+        <DetailItem label={t("detail.change")} value={formatOptionalSigned(priceChange, 2)} color={priceChange === undefined ? undefined : profitColor(theme, priceChange)} />
+        <DetailItem label={t("detail.changePercent")} value={formatOptionalSigned(percent, 2, "%")} color={percent === undefined ? undefined : profitColor(theme, percent)} />
+        <DetailItem label={t("detail.open")} value={formatMaybe(stock.market?.open, 2)} />
+        <DetailItem label={t("detail.high")} value={formatMaybe(stock.market?.high, 2)} />
+        <DetailItem label={t("detail.low")} value={formatMaybe(stock.market?.low, 2)} />
+        <DetailItem label={t("detail.prevClose")} value={formatMaybe(stock.market?.prev_close, 2)} />
+        <DetailItem label={t("detail.shares")} value={`${totalShares(stock) || "--"}`} />
+        <DetailItem label={t("detail.marketValue")} value={formatMaybe(marketValue(stock), 0)} />
+        <DetailItem label={t("detail.dayProfitLoss")} value={formatOptionalSigned(dayProfit(stock), 0)} color={profitColor(theme, dayProfit(stock))} />
+        <DetailItem label={t("detail.totalProfitLoss")} value={formatOptionalSigned(totalProfit(stock), 0)} color={profitColor(theme, totalProfit(stock) ?? 0)} />
+        <DetailItem label={t("detail.returnRate")} value={formatOptionalSigned(totalProfitPoints(stock), 2, "%")} color={profitColor(theme, totalProfitPoints(stock) ?? 0)} />
+        <DetailItem label={t("detail.quoteTime")} value={stock.market?.time || "--"} />
+        <DetailItem label={t("detail.updated")} value={state.last_market_update ? new Date(state.last_market_update).toLocaleTimeString(locale) : "--"} />
       </div>
       <TradingIntensityPanel stock={stock} theme={theme} />
       {minuteOpen && <MinutePanel stock={stock} theme={theme} onClose={() => setMinuteOpen(false)} />}
       <section className="tags-editor">
         <div className="tags-title">
-          <span>Tags</span>
+          <span>{t("detail.tags")}</span>
           <div className="tag-entry">
             <input
               value={tagInput}
@@ -1594,16 +1658,16 @@ function StockDetail({ state, stock, theme, onOpenChart }: { state: AppState; st
             />
             <button className="tool-button" onClick={addTag}>
               <Plus size={14} />
-              Add
+              {t("common.add")}
             </button>
           </div>
         </div>
         <div className="tag-list">
           {tagDraft.length === 0 ? (
-            <span className="muted">No tags</span>
+            <span className="muted">{t("detail.noTags")}</span>
           ) : (
             tagDraft.map((tag) => (
-              <button className="tag-chip" key={tag} onClick={() => removeTag(tag)} title="Remove tag">
+              <button className="tag-chip" key={tag} onClick={() => removeTag(tag)} title={t("detail.removeTag")}>
                 <Tag size={13} />
                 <span>{tag}</span>
                 <X size={13} />
@@ -1612,31 +1676,31 @@ function StockDetail({ state, stock, theme, onOpenChart }: { state: AppState; st
           )}
         </div>
         <div className="tags-actions">
-          {tagDirty && <span className="edit-state">Unsaved tag changes</span>}
+          {tagDirty && <span className="edit-state">{t("detail.unsavedTagChanges")}</span>}
           {tagError && <span className="save-error">{tagError}</span>}
           <button className="tool-button" onClick={resetTags} disabled={!tagDirty || tagSaving}>
-            Cancel
+            {t("common.cancel")}
           </button>
           <button className="tool-button accent" onClick={() => void saveTags()} disabled={!tagDirty || tagSaving}>
-            {tagSaving ? "Saving..." : "Save Tags"}
+            {t(tagSaving ? "common.saving" : "detail.saveTags")}
           </button>
         </div>
       </section>
       <section className="positions-editor">
         <div className="positions-title">
-          <span>Positions</span>
+          <span>{t("detail.positions")}</span>
           <button className="tool-button" onClick={addPosition}>
             <Plus size={14} />
-            Row
+            {t("detail.row")}
           </button>
         </div>
         <div className="positions-grid">
-          <span>Account</span>
-          <span>Shares</span>
-          <span>Cost</span>
+          <span>{t("detail.account")}</span>
+          <span>{t("detail.shares")}</span>
+          <span>{t("detail.cost")}</span>
           <span />
           {draft.length === 0 ? (
-            <div className="positions-empty">No positions</div>
+            <div className="positions-empty">{t("detail.noPositions")}</div>
           ) : (
             draft.map((position, index) => (
               <div className="position-row" key={`${stock.config.code}-${index}`}>
@@ -1653,7 +1717,7 @@ function StockDetail({ state, stock, theme, onOpenChart }: { state: AppState; st
                   value={position.cost}
                   onChange={(event) => updateDraft(index, { cost: Number(event.target.value) })}
                 />
-                <button className="icon-tool compact" onClick={() => removePosition(index)} aria-label="Remove position">
+                <button className="icon-tool compact" onClick={() => removePosition(index)} aria-label={t("detail.removePosition")}>
                   <X size={14} />
                 </button>
               </div>
@@ -1661,43 +1725,43 @@ function StockDetail({ state, stock, theme, onOpenChart }: { state: AppState; st
           )}
         </div>
         <div className="positions-actions">
-          {dirty && <span className="edit-state">Unsaved position changes</span>}
+          {dirty && <span className="edit-state">{t("detail.unsavedPositionChanges")}</span>}
           {saveError && <span className="save-error">{saveError}</span>}
           <button className="tool-button" onClick={resetPositions} disabled={!dirty || saving}>
-            Cancel
+            {t("common.cancel")}
           </button>
           <button className="tool-button accent" onClick={() => void savePositions()} disabled={!dirty || saving}>
-            {saving ? "Saving..." : "Save Positions"}
+            {t(saving ? "common.saving" : "detail.savePositions")}
           </button>
         </div>
       </section>
       <section className="comments-panel">
         <div className="news-title">
-          <span>THS Discussions</span>
+          <span>{t("detail.discussions")}</span>
           {!commentsOpen ? (
             <button className="tool-button" onClick={openComments}>
               <MessageSquare size={14} />
-              Load
+              {t("common.load")}
             </button>
           ) : (
             <div className="news-actions">
-              <button className="icon-tool compact" onClick={() => setCommentsPage((page) => Math.max(1, page - 1))} disabled={commentsPage <= 1 || commentsLoading} title="Previous page" aria-label="Previous page">
+              <button className="icon-tool compact" onClick={() => setCommentsPage((page) => Math.max(1, page - 1))} disabled={commentsPage <= 1 || commentsLoading} title={t("common.previousPage")} aria-label={t("common.previousPage")}>
                 <ChevronRight className="reverse-icon" size={14} />
               </button>
               <span>{commentsPage}</span>
-              <button className="icon-tool compact" onClick={() => setCommentsPage((page) => page + 1)} disabled={commentsLoading || comments?.hasMore === false} title="Next page" aria-label="Next page">
+              <button className="icon-tool compact" onClick={() => setCommentsPage((page) => page + 1)} disabled={commentsLoading || comments?.hasMore === false} title={t("common.nextPage")} aria-label={t("common.nextPage")}>
                 <ChevronRight size={14} />
               </button>
             </div>
           )}
         </div>
         {!commentsOpen ? (
-          <div className="news-placeholder">Click Load to fetch THS discussions</div>
+          <div className="news-placeholder">{t("detail.loadDiscussionsHint")}</div>
         ) : (
           <div className="comments-list">
-            {commentsLoading && <div className="news-state">Loading...</div>}
+            {commentsLoading && <div className="news-state">{t("common.loading")}</div>}
             {commentsError && <div className="save-error comments-error">{commentsError}</div>}
-            {!commentsLoading && !commentsError && comments?.items.length === 0 && <div className="news-state">No comments</div>}
+            {!commentsLoading && !commentsError && comments?.items.length === 0 && <div className="news-state">{t("detail.noComments")}</div>}
             {comments?.items.map((item) => (
               <a className="comment-row" href={item.url} target="_blank" rel="noreferrer" key={item.id}>
                 <span>{item.text}</span>
