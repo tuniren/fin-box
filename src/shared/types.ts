@@ -40,6 +40,7 @@ export type AppConfig = {
   hide_zero_shares: boolean;
   stocks: StockConfig[];
   stock_groups: string[];
+  stock_group_order: Record<string, string[]>;
   current_theme: string;
   themes: Record<string, Theme>;
 };
@@ -187,6 +188,7 @@ export type FinBoxApi = {
   updateStockAlias: (code: string, alias?: string) => Promise<void>;
   updateStockTags: (code: string, tags: string[]) => Promise<void>;
   updateStockGroups: (groups: string[]) => Promise<void>;
+  updateStockGroupOrder: (tag: string, codes: string[]) => Promise<void>;
   updateStockPositions: (code: string, positions: Position[]) => Promise<void>;
   fetchKLine: (code: string, scale: KLineScale, force?: boolean) => Promise<KLinePoint[]>;
   getStockJournal: (code: string) => Promise<StockJournal>;

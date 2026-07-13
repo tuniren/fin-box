@@ -7,7 +7,8 @@ const thsSourcePagesPerResultPage = 8;
 
 export async function fetchMultipleStocks(codes: string[]): Promise<Map<string, MarketData>> {
   if (codes.length === 0) return new Map();
-  const url = `http://hq.sinajs.cn/list=${codes.join(",")}`;
+  const quoteCodes = codes.map(toSinaQuoteCode);
+  const url = `http://hq.sinajs.cn/list=${quoteCodes.join(",")}`;
   const response = await fetch(url, {
     headers: {
       Referer: referer,
@@ -22,11 +23,18 @@ export async function searchStocks(query: string): Promise<StockSearchResult[]> 
   const url = `http://suggest3.sinajs.cn/suggest/type=&key=${encodeURIComponent(query)}&name=suggestdata_${Date.now()}`;
   const response = await fetch(url, { headers: { Referer: referer } });
   const bytes = Buffer.from(await response.arrayBuffer());
-  return parseSuggest(iconv.decode(bytes, "gbk"));
+  const results = parseSuggest(iconv.decode(bytes, "gbk"));
+  const directHongKongCode = normalizeHongKongSearchCode(query);
+  if (directHongKongCode && !results.some((item) => item.code === directHongKongCode)) {
+    results.unshift({ code: directHongKongCode, name: directHongKongCode });
+  }
+  return results;
 }
 
 export async function fetchKLineData(code: string, scale: KLineScale): Promise<KLinePoint[]> {
   const symbol = code.toLowerCase();
+  if (isHongKongCode(symbol)) return fetchTencentKLineData(symbol, scale);
+
   const url =
     `http://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketData.getKLineData` +
     `?symbol=${symbol}&scale=${scale}&ma=no&datalen=300`;
@@ -41,6 +49,22 @@ export async function fetchKLineData(code: string, scale: KLineScale): Promise<K
     close: Number(point.close),
     volume: Number(point.volume)
   }));
+}
+
+async function fetchTencentKLineData(symbol: string, scale: KLineScale): Promise<KLinePoint[]> {
+  const period = scale === 240 ? "day" : `m${scale}`;
+  const url = `https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=${encodeURIComponent(`${symbol},${period},,,300,qfq`)}`;
+  const response = await fetch(url, {
+    headers: {
+      Referer: "https://gu.qq.com/",
+      "User-Agent": "Mozilla/5.0",
+      Accept: "application/json, text/plain, */*"
+    }
+  });
+  const payload = await response.json() as TencentKLineResponse;
+  const root = payload.data?.[symbol] ?? payload.data?.[symbol.toUpperCase()];
+  const rows = root?.[`qfq${period}`] ?? root?.[period] ?? [];
+  return rows.map(parseTencentKLineRow).filter((point): point is KLinePoint => point !== undefined);
 }
 
 export async function fetchTencentMinuteData(code: string): Promise<MinutePoint[]> {
@@ -158,13 +182,27 @@ function parseSinaQuote(body: string): Map<string, MarketData> {
     if (eqIndex < 0) continue;
 
     const varPart = line.slice(0, eqIndex);
-    const code = varPart.slice(varPart.lastIndexOf("_") + 1).trim().toLowerCase();
+    const quoteCode = varPart.slice(varPart.lastIndexOf("str_") + 4).trim().toLowerCase();
+    const code = fromSinaQuoteCode(quoteCode);
     const startQuote = line.indexOf('"', eqIndex);
     const endQuote = line.lastIndexOf('"');
     if (startQuote < 0 || endQuote <= startQuote) continue;
 
     const parts = line.slice(startQuote + 1, endQuote).split(",");
     if (parts.length < 4) continue;
+
+    if (isHongKongCode(code)) {
+      result.set(code, {
+        name: parts[1] || parts[0] || code,
+        open: numberAt(parts, 2),
+        prev_close: numberAt(parts, 3),
+        current_price: numberAt(parts, 6),
+        high: numberAt(parts, 4),
+        low: numberAt(parts, 5),
+        time: `${parts[17] ?? ""} ${parts[18] ?? ""}`.trim()
+      });
+      continue;
+    }
 
     result.set(code, {
       name: parts[0],
@@ -191,13 +229,28 @@ function parseTencentMinuteData(body: string, symbol: string): MinutePoint[] {
   let previousVolume = 0;
 
   for (const row of rows) {
-    const point = parseTencentMinuteRow(row, prevClose, previousVolume);
+    const point = parseTencentMinuteRow(row, prevClose, previousVolume, isHongKongCode(symbol) ? 1 : 100);
     if (!point) continue;
     previousVolume = point.cumulativeVolume;
     points.push(point.value);
   }
 
   return points;
+}
+
+type TencentKLineResponse = {
+  data?: Record<string, Record<string, unknown[][]>>;
+};
+
+function parseTencentKLineRow(row: unknown[]): KLinePoint | undefined {
+  if (!Array.isArray(row) || row.length < 6) return undefined;
+  const open = Number(row[1]);
+  const close = Number(row[2]);
+  const high = Number(row[3]);
+  const low = Number(row[4]);
+  const volume = Number(row[5]);
+  if (![open, close, high, low, volume].every(Number.isFinite)) return undefined;
+  return { day: String(row[0]), open, high, low, close, volume };
 }
 
 type TencentMinuteResponse = {
@@ -211,7 +264,7 @@ type TencentMinuteRoot = {
   qt?: Record<string, unknown[]>;
 };
 
-function parseTencentMinuteRow(row: unknown, prevClose: number | undefined, previousVolume: number): { value: MinutePoint; cumulativeVolume: number } | undefined {
+function parseTencentMinuteRow(row: unknown, prevClose: number | undefined, previousVolume: number, volumeUnit: number): { value: MinutePoint; cumulativeVolume: number } | undefined {
   const parts = Array.isArray(row) ? row.map(String) : String(row).trim().split(/\s+/);
   if (parts.length < 2) return undefined;
 
@@ -222,7 +275,7 @@ function parseTencentMinuteRow(row: unknown, prevClose: number | undefined, prev
   const cumulativeAmount = numberOrUndefined(parts[3]);
   const avgPrice =
     cumulativeAmount !== undefined && cumulativeVolume > 0
-      ? cumulativeAmount / (cumulativeVolume * 100)
+      ? cumulativeAmount / (cumulativeVolume * volumeUnit)
       : undefined;
   return {
     value: {
@@ -437,7 +490,7 @@ function parseThsDiscussionCounts(rowText: string): { replyCount?: number; readC
 }
 
 function stockNewsTerms(code: string, keyword: string | undefined): string[] {
-  const simpleCode = code.replace(/^(sh|sz|bj)/i, "");
+  const simpleCode = code.replace(/^(sh|sz|bj|hk)/i, "");
   const rawTerms = [code, simpleCode, ...(keyword ?? "").split(/\s+/)];
   return [...new Set(rawTerms.map((term) => normalizeSearchTerm(term)).filter((term) => term.length >= 2))];
 }
@@ -606,25 +659,46 @@ function pickSuggestResult(parts: string[]): StockSearchResult | undefined {
   }
 
   if (!code) {
-    const simpleCode = [parts[3], parts[2], parts[0]].find((part) => /^\d{6}$/.test(part ?? ""));
+    const simpleCode = [parts[3], parts[2], parts[0]].find((part) => /^\d{5,6}$/.test(part ?? ""));
     if (simpleCode) {
       code = prefixSimpleCode(simpleCode);
       name = parts[3] === simpleCode ? parts[4] ?? "" : parts[2] ?? "";
     }
   }
 
-  return code ? { code, name: name || code } : undefined;
+  return code ? { code: code.toLowerCase(), name: name || code } : undefined;
 }
 
 function isPrefixedCode(value: string): boolean {
-  return /^(sh|sz|bj)\d+$/i.test(value);
+  return /^(sh|sz|bj)\d+$/i.test(value) || /^hk\d{5}$/i.test(value);
 }
 
 function prefixSimpleCode(value: string): string {
+  if (/^\d{5}$/.test(value)) return `hk${value}`;
   if (value.startsWith("6")) return `sh${value}`;
   if (value.startsWith("0") || value.startsWith("3")) return `sz${value}`;
   if (value.startsWith("4") || value.startsWith("8")) return `bj${value}`;
   return value;
+}
+
+function normalizeHongKongSearchCode(query: string): string | undefined {
+  const normalized = query.trim().toLowerCase();
+  if (/^\d{5}$/.test(normalized)) return `hk${normalized}`;
+  return isHongKongCode(normalized) ? normalized : undefined;
+}
+
+function isHongKongCode(code: string): boolean {
+  return /^hk\d{5}$/i.test(code);
+}
+
+function toSinaQuoteCode(code: string): string {
+  const normalized = code.trim().toLowerCase();
+  return isHongKongCode(normalized) ? `rt_${normalized}` : normalized;
+}
+
+function fromSinaQuoteCode(code: string): string {
+  const normalized = code.trim().toLowerCase();
+  return normalized.startsWith("rt_hk") ? normalized.slice(3) : normalized;
 }
 
 function numberAt(parts: string[], index: number): number {

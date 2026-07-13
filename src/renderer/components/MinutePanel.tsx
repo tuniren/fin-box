@@ -136,7 +136,7 @@ export function MinutePanel({ stock, theme, onClose }: { stock: StockStatus; the
           <MinuteChart points={points} theme={theme} fill subtle markerPrice={isFiniteNumber(markerPrice) ? markerPrice : undefined} selectedIndex={selectedMinuteIndex} onSelectPoint={setSelectedMinuteIndex} />
         )}
       </div>
-      <MinuteWidgetDeck points={points} history={history} theme={theme} activeWidget={activeWidget} selectedIndex={selectedMinuteIndex} selectedPoint={selectedMinutePoint} onActiveWidgetChange={setActiveWidget} onSelectPoint={setSelectedMinuteIndex} />
+      <MinuteWidgetDeck points={points} history={history} theme={theme} hongKong={/^hk\d{5}$/i.test(stock.config.code)} activeWidget={activeWidget} selectedIndex={selectedMinuteIndex} selectedPoint={selectedMinutePoint} onActiveWidgetChange={setActiveWidget} onSelectPoint={setSelectedMinuteIndex} />
       <button className="minute-resize-handle embedded-minute-resize-handle" onMouseDown={startResize} aria-label="Resize minute chart" title="Resize" />
     </section>
   );
@@ -460,6 +460,7 @@ function MinuteWidgetDeck({
   points,
   history,
   theme,
+  hongKong,
   activeWidget,
   selectedIndex,
   selectedPoint,
@@ -469,13 +470,14 @@ function MinuteWidgetDeck({
   points: MinutePoint[];
   history: KLinePoint[];
   theme: Theme;
+  hongKong: boolean;
   activeWidget: MinuteWidgetKind;
   selectedIndex?: number;
   selectedPoint?: MinutePoint;
   onActiveWidgetChange: (widget: MinuteWidgetKind) => void;
   onSelectPoint: (index: number) => void;
 }) {
-  const volumeStats = useMemo(() => calculateMinuteVolumeStats(history, points), [history, points]);
+  const volumeStats = useMemo(() => calculateMinuteVolumeStats(history, points, hongKong), [history, points, hongKong]);
   const macd = useMemo(() => calculateMinuteMacd(points), [points]);
   const latestPoint = points[points.length - 1];
   const displayPoint = selectedPoint ?? latestPoint;
@@ -527,6 +529,7 @@ function MinuteVolumeWidget({ points, selectedIndex, onSelectPoint }: { points: 
   const instanceRef = useRef<echarts.ECharts | null>(null);
   const onSelectPointRef = useRef(onSelectPoint);
   const timeLabelsRef = useRef<string[]>([]);
+  const hasPoints = points.length > 0;
 
   useEffect(() => {
     onSelectPointRef.current = onSelectPoint;
@@ -555,7 +558,7 @@ function MinuteVolumeWidget({ points, selectedIndex, onSelectPoint }: { points: 
       chart.dispose();
       instanceRef.current = null;
     };
-  }, []);
+  }, [hasPoints]);
 
   useEffect(() => {
     const chart = instanceRef.current;
@@ -691,10 +694,10 @@ type MinuteMacdPoint = {
   macd: number;
 };
 
-function calculateMinuteVolumeStats(history: KLinePoint[], points: MinutePoint[]): MinuteVolumeStats {
+function calculateMinuteVolumeStats(history: KLinePoint[], points: MinutePoint[], hongKong: boolean): MinuteVolumeStats {
   const currentVolume = points.reduce((sum, point) => sum + Math.max(0, point.volume), 0);
   const latestVolume = Math.max(0, points[points.length - 1]?.volume ?? 0);
-  const progress = tradingProgress(points);
+  const progress = tradingProgress(points, hongKong);
   const projectedVolume = currentVolume > 0 ? currentVolume / progress : 0;
   const baseline = history.length > 1 ? history.slice(0, -1) : history;
   const historicalVolumes = baseline.map((point) => point.volume).filter((value) => Number.isFinite(value) && value > 0);
@@ -729,28 +732,29 @@ function calculateMinuteMacd(points: MinutePoint[]): MinuteMacdPoint | undefined
   return { dif, dea, macd: (dif - dea) * 2 };
 }
 
-function tradingProgress(points: MinutePoint[]): number {
+function tradingProgress(points: MinutePoint[], hongKong: boolean): number {
   const latest = points[points.length - 1]?.time;
-  const elapsed = latest ? elapsedTradingMinutes(latest) : points.length;
-  return clamp(elapsed / TRADING_MINUTES_PER_DAY, 0.05, 1);
+  const elapsed = latest ? elapsedTradingMinutes(latest, hongKong) : points.length;
+  return clamp(elapsed / (hongKong ? 330 : TRADING_MINUTES_PER_DAY), 0.05, 1);
 }
 
-function elapsedTradingMinutes(time: string): number {
+function elapsedTradingMinutes(time: string, hongKong: boolean): number {
   const match = time.match(/(\d{1,2}):(\d{2})/);
   if (!match) return 0;
   const hour = Number(match[1]);
   const minute = Number(match[2]);
   const value = hour * 60 + minute;
   const morningStart = 9 * 60 + 30;
-  const morningEnd = 11 * 60 + 30;
+  const morningEnd = hongKong ? 12 * 60 : 11 * 60 + 30;
+  const morningMinutes = hongKong ? 150 : 120;
   const afternoonStart = 13 * 60;
-  const afternoonEnd = 15 * 60;
+  const afternoonEnd = hongKong ? 16 * 60 : 15 * 60;
 
   if (value <= morningStart) return 1;
   if (value <= morningEnd) return value - morningStart;
-  if (value < afternoonStart) return 120;
-  if (value <= afternoonEnd) return 120 + value - afternoonStart;
-  return TRADING_MINUTES_PER_DAY;
+  if (value < afternoonStart) return morningMinutes;
+  if (value <= afternoonEnd) return morningMinutes + value - afternoonStart;
+  return hongKong ? 330 : TRADING_MINUTES_PER_DAY;
 }
 
 function formatFullVolume(value: number): string {

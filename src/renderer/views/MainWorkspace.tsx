@@ -27,7 +27,7 @@ import {
   UserCircle,
   X
 } from "lucide-react";
-import type { CSSProperties, FormEvent, MouseEvent as ReactMouseEvent } from "react";
+import type { CSSProperties, FormEvent, MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import {
   dayProfit,
   displayName,
@@ -531,6 +531,8 @@ export function MainWorkspace() {
         await api.updateStockTags(stock.config.code, mergeWatchGroups(stock.config.tags.map((stockTag) => (stockTag === oldTag ? nextName : stockTag))));
       }
       await api.updateStockGroups(nextGroups);
+      const previousOrder = state.config.stock_group_order[oldTag];
+      if (previousOrder) await api.updateStockGroupOrder(nextName, previousOrder);
       setSelectedWatchNode((selection) => {
         if (!selection || selection.tag !== oldTag) return selection;
         return selection.type === "group" ? { type: "group", tag: nextName } : { ...selection, tag: nextName };
@@ -552,18 +554,29 @@ export function MainWorkspace() {
     }
   };
 
-  const moveStockToWatchGroup = async (code: string, sourceTag: string, targetTag: string, copy: boolean) => {
-    if (!state || sourceTag === targetTag) return;
+  const moveStockToWatchGroup = async (
+    code: string,
+    sourceTag: string,
+    targetTag: string,
+    copy: boolean,
+    sourceOrder: string[],
+    targetOrder: string[]
+  ) => {
+    if (!state) return;
     const stock = state.stocks.find((item) => item.config.code.toLowerCase() === code.toLowerCase());
     if (!stock) return;
 
-    const currentTags = stock.config.tags.length ? stock.config.tags : ["watchlist"];
-    const nextTags = copy
-      ? mergeWatchGroups([...currentTags, targetTag])
-      : mergeWatchGroups([...currentTags.filter((tag) => tag !== sourceTag), targetTag]);
-    await api.updateStockTags(stock.config.code, nextTags);
-  };
+    if (sourceTag !== targetTag) {
+      const currentTags = stock.config.tags.length ? stock.config.tags : ["watchlist"];
+      const nextTags = copy
+        ? mergeWatchGroups([...currentTags, targetTag])
+        : mergeWatchGroups([...currentTags.filter((tag) => tag !== sourceTag), targetTag]);
+      await api.updateStockTags(stock.config.code, nextTags);
+      if (!copy) await api.updateStockGroupOrder(sourceTag, sourceOrder);
+    }
 
+    await api.updateStockGroupOrder(targetTag, targetOrder);
+  };
   const deleteSelectedWatchNode = async () => {
     if (!state || !selectedWatchNode) return;
 
@@ -742,7 +755,7 @@ export function MainWorkspace() {
             </div>
           </div>
         </nav>
-        <div className="window-title">Code</div>
+        <div className="window-title">FinBox</div>
         <div className="layout-actions" aria-label="Layout actions">
           <button className={explorerVisible ? "active" : ""} onClick={() => setExplorerVisible((value) => !value)} aria-label="Toggle explorer"><PanelLeft size={16} /></button>
           <button className={editorVisible ? "active" : ""} onClick={() => setEditorVisible((value) => !value)} aria-label="Toggle editor"><PanelRight size={16} /></button>
@@ -819,12 +832,16 @@ export function MainWorkspace() {
             <GroupedWatchlist
               stocks={visibleStocks}
               groupNames={state.config.stock_groups}
+              groupOrder={state.config.stock_group_order}
               selectedCode={selectedStock?.config.code}
               selectedSelection={selectedWatchNode}
               theme={theme}
               onCreateGroup={() => void createWatchGroup()}
               onAddStockToGroup={(tag) => void addStockToWatchGroup(tag)}
-              onMoveStockToGroup={(code, sourceTag, targetTag, copy) => void moveStockToWatchGroup(code, sourceTag, targetTag, copy)}
+              onMoveStockToGroup={(code, sourceTag, targetTag, copy, sourceOrder, targetOrder) =>
+                void moveStockToWatchGroup(code, sourceTag, targetTag, copy, sourceOrder, targetOrder)
+              }
+              onReorderGroups={(groups) => void api.updateStockGroups(groups)}
               onSelectNode={setSelectedWatchNode}
               onSelect={(stock) => setSelectedCode(stock.config.code)}
               onOpenDetails={(stock) => { setSelectedCode(stock.config.code); openStockView("details"); }}

@@ -1,6 +1,6 @@
 {
   "name": "fin-box-electron-react",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "private": true,
   "description": "FinBox rewritten with Electron, React and TypeScript.",
   "main": "dist-electron/main/main.js",
@@ -20,13 +20,15 @@
     "typecheck": "tsc --noEmit"
   },
   "build": {
-    "appId": "com.finbox.desktop.appicon",
-    "productName": "Code",
+    "appId": "com.finbox.desktop",
+    "productName": "FinBox",
     "asar": true,
+    "compression": "maximum",
+    "electronLanguages": ["en-US", "zh-CN"],
     "directories": {
       "output": "release"
     },
-    "publish": [{ "provider": "github", "owner": "tuniren", "repo": "fin-box" }],
+    "publish": [{ "provider": "github", "owner": "tuniren", "repo": "fin-box", "releaseType": "release" }],
     "files": [
       "dist/**/*",
       "dist-electron/**/*",
@@ -46,7 +48,7 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Code",
+      "shortcutName": "FinBox",
       "installerIcon": "public/assets/app-icon.ico",
       "uninstallerIcon": "public/assets/app-icon.ico"
     },
@@ -71,17 +73,17 @@
     }
   },
   "dependencies": {
+    "electron-updater": "^6.8.9"
+  },
+  "devDependencies": {
     "@vitejs/plugin-react": "latest",
     "antd": "latest",
     "echarts": "^6.1.0",
-    "electron-updater": "^6.8.9",
     "iconv-lite": "latest",
     "js-yaml": "latest",
     "lucide-react": "latest",
     "react": "latest",
-    "react-dom": "latest"
-  },
-  "devDependencies": {
+    "react-dom": "latest",
     "@types/js-yaml": "latest",
     "@types/node": "latest",
     "@types/react": "latest",

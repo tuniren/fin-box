@@ -155,7 +155,7 @@ export class AppCore {
     if (!stock) return;
 
     stock.tags = normalizeTags(tags);
-    config.stock_groups = normalizeTags([...(config.stock_groups ?? []), ...stock.tags]);
+    config.stock_groups = normalizeOrderedTags([...(config.stock_groups ?? []), ...stock.tags]);
 
     this.configManager.save(config);
     this.applyConfig(config);
@@ -163,7 +163,24 @@ export class AppCore {
 
   updateStockGroups(groups: string[]): void {
     const config = this.configManager.loadOrDefault();
-    config.stock_groups = normalizeTags(groups);
+    config.stock_groups = normalizeOrderedTags(groups);
+    const activeGroups = new Set([...config.stock_groups, ...config.stocks.flatMap((stock) => stock.tags)]);
+    config.stock_group_order = Object.fromEntries(
+      Object.entries(config.stock_group_order).filter(([tag]) => activeGroups.has(tag))
+    );
+
+    this.configManager.save(config);
+    this.applyConfig(config);
+  }
+
+  updateStockGroupOrder(tag: string, codes: string[]): void {
+    const config = this.configManager.loadOrDefault();
+    const normalizedTag = tag.trim();
+    if (!normalizedTag) return;
+
+    const knownCodes = new Map(config.stocks.map((stock) => [stock.code.toLowerCase(), stock.code]));
+    const orderedCodes = [...new Set(codes.map((code) => knownCodes.get(code.toLowerCase())).filter((code): code is string => Boolean(code)))];
+    config.stock_group_order[normalizedTag] = orderedCodes;
 
     this.configManager.save(config);
     this.applyConfig(config);
@@ -288,7 +305,7 @@ export class AppCore {
 
   private scheduleNextRefresh(): void {
     if (this.timer) clearTimeout(this.timer);
-    const interval = dataRefreshIntervalMs();
+    const interval = dataRefreshIntervalMs(this.state.config.stocks.some((stock) => /^hk\d{5}$/i.test(stock.code)));
     this.state.next_market_refresh = Date.now() + interval;
     this.broadcast();
     this.timer = setTimeout(() => {
@@ -422,6 +439,9 @@ function normalizeTags(tags: string[]): string[] {
   return [...new Set(tags.map((tag) => tag.trim()).filter(Boolean))].sort((left, right) => left.localeCompare(right));
 }
 
+function normalizeOrderedTags(tags: string[]): string[] {
+  return [...new Set(tags.map((tag) => tag.trim()).filter(Boolean))];
+}
 function stockJournalRoot(): string {
   return path.join(app.getPath("userData"), "stock-journals");
 }
@@ -535,8 +555,8 @@ function createState(config: AppConfig): AppState {
   };
 }
 
-function dataRefreshIntervalMs(): number {
-  if (!isTradingTime()) return OFF_HOURS_REFRESH_MS;
+function dataRefreshIntervalMs(hasHongKongStocks: boolean): number {
+  if (!isTradingTime(hasHongKongStocks)) return OFF_HOURS_REFRESH_MS;
   return TRADING_REFRESH_MIN_MS + Math.floor(Math.random() * TRADING_REFRESH_JITTER_MS);
 }
 
@@ -546,10 +566,12 @@ function nextLocalDayStart(now: number): number {
   return next.getTime() || now + DAY_MS;
 }
 
-function isTradingTime(): boolean {
+function isTradingTime(hasHongKongStocks: boolean): boolean {
   const now = new Date();
   const day = now.getDay();
   if (day === 0 || day === 6) return false;
   const value = now.getHours() * 100 + now.getMinutes();
-  return (value >= 915 && value <= 1130) || (value >= 1300 && value <= 1500);
+  const morningClose = hasHongKongStocks ? 1200 : 1130;
+  const afternoonClose = hasHongKongStocks ? 1600 : 1500;
+  return (value >= 915 && value <= morningClose) || (value >= 1300 && value <= afternoonClose);
 }

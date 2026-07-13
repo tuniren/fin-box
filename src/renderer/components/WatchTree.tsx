@@ -25,12 +25,14 @@ export type WatchTreeSelection = { type: "group"; tag: string } | { type: "stock
 export function GroupedWatchlist({
   stocks,
   groupNames,
+  groupOrder,
   selectedCode,
   selectedSelection,
   theme,
   onCreateGroup,
   onAddStockToGroup,
   onMoveStockToGroup,
+  onReorderGroups,
   onSelectNode,
   onSelect,
   onOpenDetails,
@@ -38,18 +40,20 @@ export function GroupedWatchlist({
 }: {
   stocks: StockStatus[];
   groupNames: string[];
+  groupOrder: Record<string, string[]>;
   selectedCode?: string;
   selectedSelection?: WatchTreeSelection;
   theme: Theme;
   onCreateGroup?: () => void;
   onAddStockToGroup?: (tag: string) => void;
-  onMoveStockToGroup?: (code: string, sourceTag: string, targetTag: string, copy: boolean) => void;
+  onMoveStockToGroup?: (code: string, sourceTag: string, targetTag: string, copy: boolean, sourceOrder: string[], targetOrder: string[]) => void;
+  onReorderGroups?: (groups: string[]) => void;
   onSelectNode?: (selection: WatchTreeSelection) => void;
   onSelect: (stock: StockStatus) => void;
   onOpenDetails?: (stock: StockStatus) => void;
   readOnly?: boolean;
 }) {
-  const groups = useMemo(() => groupStocksByTag(stocks, groupNames), [stocks, groupNames]);
+  const groups = useMemo(() => groupStocksByTag(stocks, groupNames, groupOrder), [stocks, groupNames, groupOrder]);
   const [expandedKeys, setExpandedKeys] = useState<string[]>([WATCH_ROOT_KEY]);
   const selectedWatchKey = watchSelectionKey(selectedSelection);
 
@@ -105,11 +109,47 @@ export function GroupedWatchlist({
   };
 
   const handleDrop = (info: any) => {
-    const targetTag = parseWatchGroupKey(String(info.node.key));
+    const dropPosition = relativeDropPosition(info);
+    const draggedGroup = parseWatchGroupKey(String(info.dragNode.key));
+    if (draggedGroup) {
+      const targetGroup = parseWatchGroupKey(String(info.node.key));
+      if (!targetGroup || targetGroup === draggedGroup || !onReorderGroups || dropPosition === 0) return;
+      const nextGroups = groups.map((group) => group.tag).filter((tag) => tag !== draggedGroup);
+      const targetIndex = nextGroups.indexOf(targetGroup);
+      nextGroups.splice(Math.max(0, targetIndex + (dropPosition > 0 ? 1 : 0)), 0, draggedGroup);
+      onReorderGroups(nextGroups);
+      return;
+    }
     const payload = parseWatchStockKey(String(info.dragNode.key));
-    if (!targetTag || !payload || !onMoveStockToGroup) return;
-    const copy = info.event.ctrlKey || info.event.altKey || info.event.shiftKey;
-    onMoveStockToGroup(payload.code, payload.sourceTag, targetTag, copy);
+    if (!payload || !onMoveStockToGroup) return;
+
+    const targetStock = parseWatchStockKey(String(info.node.key));
+    if (targetStock?.sourceTag === payload.sourceTag && targetStock.code.toLowerCase() === payload.code.toLowerCase()) return;
+    const targetTag = parseWatchGroupKey(String(info.node.key)) ?? targetStock?.sourceTag;
+    if (!targetTag) return;
+
+    const copy = Boolean(info.event.ctrlKey || info.event.altKey || info.event.shiftKey);
+    const sourceOrder = groups.find((group) => group.tag === payload.sourceTag)?.stocks.map((stock) => stock.config.code) ?? [];
+    const targetOrder = groups.find((group) => group.tag === targetTag)?.stocks.map((stock) => stock.config.code) ?? [];
+    const nextSourceOrder = sourceOrder.filter((code) => code.toLowerCase() !== payload.code.toLowerCase());
+    const nextTargetOrder = targetOrder.filter((code) => code.toLowerCase() !== payload.code.toLowerCase());
+
+    if (targetStock) {
+      const targetIndex = nextTargetOrder.findIndex((code) => code.toLowerCase() === targetStock.code.toLowerCase());
+      const insertAt = Math.max(0, targetIndex + (dropPosition > 0 ? 1 : 0));
+      nextTargetOrder.splice(insertAt, 0, payload.code);
+    } else {
+      nextTargetOrder.push(payload.code);
+    }
+
+    onMoveStockToGroup(
+      payload.code,
+      payload.sourceTag,
+      targetTag,
+      copy,
+      payload.sourceTag === targetTag ? nextTargetOrder : nextSourceOrder,
+      nextTargetOrder
+    );
   };
 
   const handleSelect = (_keys: unknown[], info: any) => {
@@ -150,8 +190,20 @@ export function GroupedWatchlist({
     <Tree<WatchTreeNode>
       className="watch-tree"
       blockNode
-      draggable={!readOnly && onMoveStockToGroup ? { icon: false, nodeDraggable: (node) => parseWatchStockKey(String(node.key)) !== undefined } : false}
-      allowDrop={({ dropNode, dropPosition }) => !readOnly && dropPosition === 0 && parseWatchGroupKey(String(dropNode.key)) !== undefined}
+      draggable={!readOnly && (onMoveStockToGroup || onReorderGroups) ? {
+        icon: false,
+        nodeDraggable: (node) => Boolean(
+          (onMoveStockToGroup && parseWatchStockKey(String(node.key))) ||
+          (onReorderGroups && parseWatchGroupKey(String(node.key)))
+        )
+      } : false}
+      allowDrop={({ dragNode, dropNode, dropPosition }) =>
+        !readOnly && (
+          (dropPosition === 0 && parseWatchGroupKey(String(dropNode.key)) !== undefined && parseWatchStockKey(String(dragNode.key)) !== undefined) ||
+          (dropPosition !== 0 && parseWatchStockKey(String(dropNode.key)) !== undefined && parseWatchStockKey(String(dragNode.key)) !== undefined) ||
+          (dropPosition !== 0 && parseWatchGroupKey(String(dropNode.key)) !== undefined && parseWatchGroupKey(String(dragNode.key)) !== undefined)
+        )
+      }
       expandedKeys={expandedKeys}
       treeData={treeData}
       titleRender={renderTitle}
@@ -163,6 +215,11 @@ export function GroupedWatchlist({
   );
 }
 
+function relativeDropPosition(info: { dropPosition: number; node: { pos?: string } }): number {
+  const positionParts = String(info.node.pos ?? "").split("-");
+  const positionIndex = Number(positionParts[positionParts.length - 1]);
+  return Number.isFinite(positionIndex) ? info.dropPosition - positionIndex : info.dropPosition;
+}
 function stopTreeEvent(event: { stopPropagation: () => void }) {
   event.stopPropagation();
 }
@@ -244,7 +301,7 @@ function WatchStockTitle({
   );
 }
 
-function groupStocksByTag(stocks: StockStatus[], groupNames: string[]) {
+function groupStocksByTag(stocks: StockStatus[], groupNames: string[], groupOrder: Record<string, string[]>) {
   const groups = new Map<string, StockStatus[]>();
   for (const tag of mergeWatchGroups(groupNames)) {
     groups.set(tag, []);
@@ -258,8 +315,19 @@ function groupStocksByTag(stocks: StockStatus[], groupNames: string[]) {
     }
   }
   return [...groups.entries()]
-    .sort(([left], [right]) => left.localeCompare(right))
-    .map(([tag, groupStocks]) => ({ tag, stocks: groupStocks }));
+    .map(([tag, groupStocks]) => {
+      const positions = new Map((groupOrder[tag] ?? []).map((code, index) => [code.toLowerCase(), index]));
+      const stocksWithIndex = groupStocks.map((stock, index) => ({ stock, index }));
+      stocksWithIndex.sort((left, right) => {
+        const leftPosition = positions.get(left.stock.config.code.toLowerCase());
+        const rightPosition = positions.get(right.stock.config.code.toLowerCase());
+        if (leftPosition === undefined && rightPosition === undefined) return left.index - right.index;
+        if (leftPosition === undefined) return 1;
+        if (rightPosition === undefined) return -1;
+        return leftPosition - rightPosition;
+      });
+      return { tag, stocks: stocksWithIndex.map(({ stock }) => stock) };
+    });
 }
 
 export function normalizeWatchGroupName(value: string | undefined | null): string {
@@ -270,7 +338,7 @@ export function mergeWatchGroups(groups: string[]): string[] {
   const normalized = groups
     .map((group) => normalizeWatchGroupName(group))
     .filter(Boolean);
-  return [...new Set(normalized)].sort((left, right) => left.localeCompare(right));
+  return [...new Set(normalized)];
 }
 
 function watchSelectionKey(selection: WatchTreeSelection | undefined): string | undefined {

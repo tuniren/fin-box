@@ -23,6 +23,7 @@ const api: FinBoxApi = {
   updateStockAlias: (code: string, alias?: string) => ipcRenderer.invoke("update-stock-alias", code, alias),
   updateStockTags: (code: string, tags: string[]) => ipcRenderer.invoke("update-stock-tags", code, tags),
   updateStockGroups: (groups: string[]) => ipcRenderer.invoke("update-stock-groups", groups),
+  updateStockGroupOrder: (tag: string, codes: string[]) => ipcRenderer.invoke("update-stock-group-order", tag, codes),
   updateStockPositions: (code: string, positions) => ipcRenderer.invoke("update-stock-positions", code, positions),
   fetchKLine: (code: string, scale: KLineScale, force?: boolean) => ipcRenderer.invoke("fetch-kline", code, scale, force),
   getStockJournal: (code: string) => ipcRenderer.invoke("get-stock-journal", code),

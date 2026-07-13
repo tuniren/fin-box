@@ -39,6 +39,7 @@ export class ConfigManager {
       window_close_behavior: "tray",
       hide_zero_shares: false,
       stock_groups: ["watchlist"],
+      stock_group_order: {},
       stocks: [
         {
           code: "sz002594",
@@ -83,7 +84,7 @@ export class ConfigManager {
       const raw = fs.readFileSync(this.configPath, "utf8");
       const config = yaml.load(raw) as Partial<AppConfig> | undefined;
       if (!config) return undefined;
-      const stockGroups = normalizeTags(config.stock_groups);
+      const stockGroups = normalizeOrderedTags(config.stock_groups);
       const normalized: AppConfig = {
         total_investment: config.total_investment,
         cash: config.cash,
@@ -97,6 +98,7 @@ export class ConfigManager {
           positions: stock.positions ?? []
         })),
         stock_groups: stockGroups.length ? stockGroups : ["watchlist"],
+        stock_group_order: normalizeStockGroupOrder(config.stock_group_order),
         current_theme: config.current_theme ?? "simple",
         themes: { ...defaultThemes, ...(config.themes ?? {}) }
       };
@@ -138,4 +140,20 @@ function normalizeTags(tags: unknown): string[] {
     .map((tag) => String(tag).trim())
     .filter(Boolean);
   return [...new Set(normalized)].sort((left, right) => left.localeCompare(right));
+}
+
+function normalizeOrderedTags(tags: unknown): string[] {
+  if (!Array.isArray(tags)) return [];
+  return [...new Set(tags.map((tag) => String(tag).trim()).filter(Boolean))];
+}
+
+function normalizeStockGroupOrder(value: unknown): Record<string, string[]> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const result: Record<string, string[]> = {};
+  for (const [tag, codes] of Object.entries(value)) {
+    const normalizedTag = tag.trim();
+    if (!normalizedTag || !Array.isArray(codes)) continue;
+    result[normalizedTag] = [...new Set(codes.map((code) => String(code).trim()).filter(Boolean))];
+  }
+  return result;
 }

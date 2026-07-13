@@ -7,9 +7,9 @@ import type { AppConfig, KLinePoint, KLineScale, MottoConfig, NoteTreeItem, Posi
 
 process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = "true";
 
-const APP_USER_MODEL_ID = "com.finbox.desktop.appicon";
+const APP_USER_MODEL_ID = "com.finbox.desktop";
 
-app.setName("Code");
+app.setName("FinBox");
 if (process.platform === "win32") {
   app.setAppUserModelId(APP_USER_MODEL_ID);
 }
@@ -307,9 +307,9 @@ function createTray(): Tray {
   if (tray && !tray.isDestroyed()) return tray;
 
   tray = new Tray(getAppIcon());
-  tray.setToolTip("Code");
+  tray.setToolTip("FinBox");
   tray.setContextMenu(Menu.buildFromTemplate([
-    { label: "Show Code", click: () => showMainWindow() },
+    { label: "Show FinBox", click: () => showMainWindow() },
     { type: "separator" },
     { label: "Quit", click: () => quitApp() }
   ]));
@@ -345,7 +345,7 @@ function createMainWindow(): BrowserWindow {
     height: 780,
     minWidth: 980,
     minHeight: 640,
-    title: "Code",
+    title: "FinBox",
     frame: false,
     icon: getAppIcon(),
     backgroundColor: "#f8f8f8",
@@ -631,6 +631,7 @@ ipcMain.handle("update-theme", (_event, themeName: string) => core.updateTheme(t
 ipcMain.handle("update-stock-alias", (_event, code: string, alias?: string) => core.updateStockAlias(code, alias));
 ipcMain.handle("update-stock-tags", (_event, code: string, tags: string[]) => core.updateStockTags(code, tags));
 ipcMain.handle("update-stock-groups", (_event, groups: string[]) => core.updateStockGroups(groups));
+ipcMain.handle("update-stock-group-order", (_event, tag: string, codes: string[]) => core.updateStockGroupOrder(tag, codes));
 ipcMain.handle("update-stock-positions", (_event, code: string, positions: Position[]) => core.updateStockPositions(code, positions));
 ipcMain.handle("fetch-kline", (_event, code: string, scale: KLineScale, force?: boolean) => core.fetchKLine(code, scale, force));
 ipcMain.handle("get-stock-journal", (_event, code: string) => core.getStockJournal(code));
