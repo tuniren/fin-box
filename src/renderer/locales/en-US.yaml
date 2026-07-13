@@ -6,6 +6,7 @@ menu:
   language: Language
   help: Help
   usageGuide: User Guide
+  about: About
   addSymbol: Add Symbol
   refresh: Refresh
   openConfig: Open Config
@@ -23,6 +24,10 @@ menu:
 language:
   chinese: 中文
   english: English
+about:
+  title: About FinBox
+  version: Version
+  description: A lightweight desktop workspace for following markets and managing investment notes.
 common:
   add: Add
   cancel: Cancel

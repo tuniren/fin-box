@@ -6,6 +6,7 @@ menu:
   language: 语言
   help: 帮助
   usageGuide: 使用说明
+  about: 关于
   addSymbol: 添加股票
   refresh: 刷新
   openConfig: 打开配置文件
@@ -23,6 +24,10 @@ menu:
 language:
   chinese: 中文
   english: English
+about:
+  title: 关于 FinBox
+  version: 版本
+  description: 一款用于关注市场行情和管理投资记录的轻量桌面工具。
 common:
   add: 添加
   cancel: 取消

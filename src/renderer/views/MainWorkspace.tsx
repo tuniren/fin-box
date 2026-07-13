@@ -155,6 +155,7 @@ export function MainWorkspace() {
   const [statusBarVisible, setStatusBarVisible] = useState(true);
   const [activeTitleMenu, setActiveTitleMenu] = useState<TitleMenu>();
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [aboutOpen, setAboutOpen] = useState(false);
   const [themeError, setThemeError] = useState("");
   const [explorerWidth, setExplorerWidth] = useState(332);
   const [sideWidth, setSideWidth] = useState(420);
@@ -752,6 +753,8 @@ export function MainWorkspace() {
               <button role="menuitem" disabled={updateStatus.state === "checking" || updateStatus.state === "downloading"} onClick={() => runTitleMenuAction(() => updateStatus.state === "downloaded" ? void api.installUpdate() : updateStatus.state === "available" ? void api.downloadUpdate() : void api.checkForUpdates())}>{updateStatus.state === "downloaded" ? t("update.restartInstall") : updateStatus.state === "available" ? t("update.download") : updateStatus.state === "checking" ? t("update.checking") : updateStatus.state === "downloading" ? `${t("update.downloading")} ${updateStatus.percent ?? 0}%` : t("update.check")}</button>
               {updateStatus.state === "error" && <button className="update-menu-status" role="menuitem" disabled>{t("update.failed")}{updateStatus.message ? `: ${updateStatus.message}` : ""}</button>}
               {updateStatus.state === "not-available" && <button className="update-menu-status" role="menuitem" disabled>{t("update.latest")}</button>}
+              <span className="title-menu-separator" />
+              <button role="menuitem" onClick={() => runTitleMenuAction(() => setAboutOpen(true))}>{t("menu.about")}</button>
             </div>
           </div>
         </nav>
@@ -1042,6 +1045,23 @@ export function MainWorkspace() {
           </form>
         </div>
       )}
+      {aboutOpen && (
+        <div className="modal-backdrop" onMouseDown={() => setAboutOpen(false)}>
+          <section className="search-modal about-modal" role="dialog" aria-modal="true" aria-labelledby="about-title" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="modal-title">
+              <span id="about-title">{t("about.title")}</span>
+              <button className="icon-tool compact" onClick={() => setAboutOpen(false)} aria-label="Close">
+                <X size={16} />
+              </button>
+            </div>
+            <div className="about-content">
+              <strong>FinBox</strong>
+              <span>{t("about.version")} {updateStatus.currentVersion || "--"}</span>
+              <p>{t("about.description")}</p>
+            </div>
+          </section>
+        </div>
+      )}
     </main>
   );
 }
@@ -1273,6 +1293,7 @@ export function MottoWindowView() {
         {motto.text}
       </div>
       <button className="motto-resize-handle no-drag" onMouseDown={startMottoResize} aria-label="Resize motto window" title="Resize" />
+
     </main>
   );
 }
