@@ -55,21 +55,34 @@ export const defaultThemes: Record<string, Theme> = {
   },
   transparent: {
     background: "transparent",
-    border: "#3C3C3C",
-    text_normal: "#D3D3D3",
-    text_white: "#FFFFFF",
+    border: "#00000000",
+    text_normal: "#86868B",
+    text_white: "#86868B",
     text_gray: "#A0A0A0",
-    color_up: "#FF6464",
-    color_down: "#64FF64",
-    accent: "#FFA500",
-    menu_bg: "transparent",
+    color_up: "#86868B",
+    color_down: "#86868B",
+    accent: "#86868B",
+    menu_bg: "#86868B",
     rounding: 8,
+    border_width: 0
+  },
+  simple: {
+    background: "#F5F5F7F2",
+    border: "#86868B",
+    text_normal: "#86868B",
+    text_white: "#000000",
+    text_gray: "#86868B",
+    color_up: "#86868B",
+    color_down: "#86868B",
+    accent: "#86868B",
+    menu_bg: "#FFFFFF",
+    rounding: 6,
     border_width: 1
   }
 };
 
 export function currentTheme(config: { current_theme: string; themes: Record<string, Theme> }): Theme {
-  return config.themes[config.current_theme] ?? config.themes.default ?? Object.values(config.themes)[0] ?? defaultThemes.default;
+  return config.themes[config.current_theme] ?? config.themes.simple ?? config.themes.default ?? Object.values(config.themes)[0] ?? defaultThemes.simple;
 }
 
 export function profitColor(theme: Pick<Theme, "color_up" | "color_down">, value: number): string {

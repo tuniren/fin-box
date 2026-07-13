@@ -1,4 +1,4 @@
-import yaml from "js-yaml";
+import * as yaml from "js-yaml";
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import enUsYaml from "./locales/en-US.yaml?raw";
@@ -6,10 +6,11 @@ import zhCnYaml from "./locales/zh-CN.yaml?raw";
 
 export type Locale = "zh-CN" | "en-US";
 export type TranslationKey =
-  | `menu.${"application" | "file" | "view" | "window" | "language" | "addSymbol" | "refresh" | "openConfig" | "openConfigFolder" | "quit" | "explorer" | "editor" | "sidePanel" | "statusBar" | "details" | "chart" | "toggleStockFloat" | "toggleWatchFloat" | "toggleMottoWindow"}`
+  | `menu.${"application" | "file" | "view" | "window" | "language" | "help" | "usageGuide" | "addSymbol" | "refresh" | "openConfig" | "openConfigFolder" | "quit" | "explorer" | "editor" | "sidePanel" | "statusBar" | "details" | "chart" | "toggleStockFloat" | "toggleWatchFloat" | "toggleMottoWindow"}`
   | `language.${"chinese" | "english"}`
   | `common.${"add" | "cancel" | "save" | "saving" | "load" | "loading" | "previousPage" | "nextPage"}`
   | `detail.${"selectSymbol" | "saveAlias" | "cancelAliasEdit" | "editAlias" | "toggleMinuteChart" | "closeMinute" | "minute" | "openChart" | "quoteTable" | "lastPrice" | "change" | "changePercent" | "open" | "high" | "low" | "prevClose" | "shares" | "marketValue" | "dayProfitLoss" | "totalProfitLoss" | "returnRate" | "quoteTime" | "updated" | "tags" | "noTags" | "removeTag" | "unsavedTagChanges" | "saveTags" | "positions" | "row" | "account" | "cost" | "noPositions" | "removePosition" | "unsavedPositionChanges" | "savePositions" | "discussions" | "loadDiscussionsHint" | "noComments"}`
+  | `update.${"title" | "check" | "download" | "checking" | "available" | "downloading" | "downloaded" | "latest" | "failed" | "packagedOnly" | "autoCheck" | "restartInstall"}`
   | `side.${"openConfigFolder" | "toggleStockFloat" | "toggleWatchFloat" | "more" | "selectedSymbol" | "none" | "code" | "refresh" | "config" | "window" | "closeButton" | "minimizeToTray" | "close" | "motto" | "toggleMottoWindow" | "mottoPlaceholder" | "font" | "size" | "color" | "unsavedMotto" | "saveMotto"}`
   | `news.${"noNews"}`
   | `status.${"shIndex" | "accountProfitLoss" | "refreshInterval" | "accountConfig" | "totalInvestment" | "cash"}`

@@ -38,7 +38,7 @@ import {
   totalShares
 } from "../../shared/finance";
 import { currentTheme, profitColor } from "../../shared/theme";
-import type { AppConfig, AppState, MottoConfig, NoteTreeItem, Position, StockCommentItem, StockCommentPage, StockNewsPage, StockSearchResult, StockStatus, Theme } from "../../shared/types";
+import type { AppConfig, AppState, MottoConfig, NoteTreeItem, Position, StockCommentItem, StockCommentPage, StockNewsPage, StockSearchResult, StockStatus, Theme, UpdateStatus } from "../../shared/types";
 import { KLineView } from "../components/KLineView";
 import { MarketStatusBar } from "../components/MarketStatusBar";
 import { MinutePanel } from "../components/MinutePanel";
@@ -55,7 +55,7 @@ const clamp = (value: number, min: number, max: number) => Math.min(Math.max(val
 type ActivityView = "watchlist" | "news" | "notes" | "help";
 type ActiveView = "details" | "chart" | "note" | "help";
 type StockView = "details" | "chart";
-type TitleMenu = "file" | "view" | "window" | "language";
+type TitleMenu = "file" | "view" | "window" | "language" | "help";
 type WatchPromptKind = "create-group" | "rename-group" | "edit-alias";
 type WatchPromptState = {
   kind: WatchPromptKind;
@@ -163,6 +163,7 @@ export function MainWorkspace() {
   const [marketNews, setMarketNews] = useState<StockNewsPage>();
   const [marketNewsLoading, setMarketNewsLoading] = useState(false);
   const [marketNewsError, setMarketNewsError] = useState("");
+  const [updateStatus, setUpdateStatus] = useState<UpdateStatus>({ state: "idle", currentVersion: "" });
   const [marketNewsReload, setMarketNewsReload] = useState(0);
   const [noteTree, setNoteTree] = useState<NoteTreeItem[]>([]);
   const [selectedNotePath, setSelectedNotePath] = useState("");
@@ -217,6 +218,13 @@ export function MainWorkspace() {
     });
     return offCycle;
   }, [holdStocks]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void api.getUpdateStatus().then((status) => { if (!cancelled) setUpdateStatus(status); }).catch(() => undefined);
+    const unsubscribe = api.onUpdateStatus(setUpdateStatus);
+    return () => { cancelled = true; unsubscribe(); };
+  }, []);
 
   useEffect(() => {
     const onMouseDown = (event: MouseEvent) => {
@@ -723,6 +731,16 @@ export function MainWorkspace() {
               <MenuCheckItem checked={locale === "en-US"} radio onClick={() => runTitleMenuAction(() => setLocale("en-US"))}>{t("language.english")}</MenuCheckItem>
             </div>
           </div>
+          <div className={`title-menu-group ${activeTitleMenu === "help" ? "open" : ""}`}>
+            <button className="title-menu-root" aria-haspopup="menu" aria-expanded={activeTitleMenu === "help"} onClick={() => setActiveTitleMenu((menu) => (menu === "help" ? undefined : "help"))}>{t("menu.help")}</button>
+            <div className="title-menu-dropdown" role="menu">
+              <button role="menuitem" onClick={() => runTitleMenuAction(() => { setActivityView("help"); setExplorerVisible(true); setEditorVisible(true); setActiveView("help"); })}>{t("menu.usageGuide")}</button>
+              <span className="title-menu-separator" />
+              <button role="menuitem" disabled={updateStatus.state === "checking" || updateStatus.state === "downloading"} onClick={() => runTitleMenuAction(() => updateStatus.state === "downloaded" ? void api.installUpdate() : updateStatus.state === "available" ? void api.downloadUpdate() : void api.checkForUpdates())}>{updateStatus.state === "downloaded" ? t("update.restartInstall") : updateStatus.state === "available" ? t("update.download") : updateStatus.state === "checking" ? t("update.checking") : updateStatus.state === "downloading" ? `${t("update.downloading")} ${updateStatus.percent ?? 0}%` : t("update.check")}</button>
+              {updateStatus.state === "error" && <button className="update-menu-status" role="menuitem" disabled>{t("update.failed")}{updateStatus.message ? `: ${updateStatus.message}` : ""}</button>}
+              {updateStatus.state === "not-available" && <button className="update-menu-status" role="menuitem" disabled>{t("update.latest")}</button>}
+            </div>
+          </div>
         </nav>
         <div className="window-title">Code</div>
         <div className="layout-actions" aria-label="Layout actions">
@@ -891,7 +909,7 @@ export function MainWorkspace() {
               <FileText size={14} />
               {t("side.config")}
             </button>
-            <section className="app-settings">
+                        <section className="app-settings">
               <div className="motto-editor-title">
                 <span>{t("side.window")}</span>
               </div>

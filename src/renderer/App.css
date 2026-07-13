@@ -1548,6 +1548,12 @@ b {
   color: #a8a8a8;
 }
 
+.title-menu-dropdown button.update-menu-status {
+  max-width: 360px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .title-menu-dropdown button:disabled:hover {
   background: transparent;
 }

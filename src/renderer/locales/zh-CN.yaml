@@ -4,6 +4,8 @@ menu:
   view: 视图
   window: 窗口
   language: 语言
+  help: 帮助
+  usageGuide: 使用说明
   addSymbol: 添加股票
   refresh: 刷新
   openConfig: 打开配置文件
@@ -70,6 +72,19 @@ detail:
   discussions: 同花顺讨论
   loadDiscussionsHint: 点击加载同花顺讨论
   noComments: 暂无评论
+update:
+  title: 软件更新
+  check: 检查更新
+  download: 下载更新
+  checking: 正在检查更新...
+  available: 发现新版本，请选择是否下载。
+  downloading: 正在下载更新
+  downloaded: 更新已下载，可以重启安装。
+  latest: 当前已是最新版本。
+  failed: 检查更新失败
+  packagedOnly: 开发环境不检查更新。
+  autoCheck: 软件会自动检查 GitHub 更新。
+  restartInstall: 重启并安装更新
 side:
   openConfigFolder: 打开配置目录
   toggleStockFloat: 切换股票浮窗

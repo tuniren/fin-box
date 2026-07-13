@@ -1,8 +1,9 @@
 import { app, BrowserWindow, globalShortcut, ipcMain, Menu, nativeImage, shell, Tray } from "electron";
+import { autoUpdater } from "electron-updater";
 import fs from "node:fs";
 import path from "node:path";
 import { AppCore } from "./core";
-import type { AppConfig, KLinePoint, KLineScale, MottoConfig, NoteTreeItem, Position, StockJournalNote } from "../shared/types";
+import type { AppConfig, KLinePoint, KLineScale, MottoConfig, NoteTreeItem, Position, StockJournalNote, UpdateStatus } from "../shared/types";
 
 process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = "true";
 
@@ -251,6 +252,55 @@ function insidePolygon(x: number, y: number, points: number[][]): boolean {
     if (intersect) inside = !inside;
   }
   return inside;
+}
+
+let updateStatus: UpdateStatus = { state: "idle", currentVersion: app.getVersion() };
+
+function publishUpdateStatus(patch: Partial<UpdateStatus>): UpdateStatus {
+  updateStatus = { ...updateStatus, ...patch, currentVersion: app.getVersion() };
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win.isDestroyed()) win.webContents.send("update-status", updateStatus);
+  }
+  return updateStatus;
+}
+
+function configureAutoUpdater(): void {
+  if (!app.isPackaged) {
+    publishUpdateStatus({ state: "disabled", message: "Updates are available in packaged builds only." });
+    return;
+  }
+  autoUpdater.autoDownload = false;
+  autoUpdater.autoInstallOnAppQuit = true;
+  autoUpdater.on("checking-for-update", () => publishUpdateStatus({ state: "checking", message: undefined, percent: undefined }));
+  autoUpdater.on("update-available", (info) => publishUpdateStatus({ state: "available", version: info.version, percent: 0 }));
+  autoUpdater.on("update-not-available", (info) => publishUpdateStatus({ state: "not-available", version: info.version, percent: undefined }));
+  autoUpdater.on("download-progress", (progress) => publishUpdateStatus({ state: "downloading", percent: Math.round(progress.percent * 10) / 10 }));
+  autoUpdater.on("update-downloaded", (info) => publishUpdateStatus({ state: "downloaded", version: info.version, percent: 100 }));
+  autoUpdater.on("error", (error) => publishUpdateStatus({ state: "error", message: error.message, percent: undefined }));
+  setTimeout(() => void checkForUpdates(), 10000);
+}
+
+async function downloadUpdate(): Promise<UpdateStatus> {
+  if (!app.isPackaged) return publishUpdateStatus({ state: "disabled", message: "Updates are available in packaged builds only." });
+  if (updateStatus.state !== "available") return updateStatus;
+  try {
+    publishUpdateStatus({ state: "downloading", percent: 0, message: undefined });
+    await autoUpdater.downloadUpdate();
+  } catch (error) {
+    publishUpdateStatus({ state: "error", message: error instanceof Error ? error.message : String(error), percent: undefined });
+  }
+  return updateStatus;
+}
+
+async function checkForUpdates(): Promise<UpdateStatus> {
+  if (!app.isPackaged) return publishUpdateStatus({ state: "disabled", message: "Updates are available in packaged builds only." });
+  try {
+    publishUpdateStatus({ state: "checking", message: undefined, percent: undefined });
+    await autoUpdater.checkForUpdates();
+  } catch (error) {
+    publishUpdateStatus({ state: "error", message: error instanceof Error ? error.message : String(error) });
+  }
+  return updateStatus;
 }
 
 function createTray(): Tray {
@@ -514,6 +564,7 @@ app.whenReady().then(() => {
   mainWindow = createMainWindow();
   createTray();
   core.start();
+  configureAutoUpdater();
 
   globalShortcut.register("CommandOrControl+Alt+8", () => {
     mainWindow?.webContents.send("cycle-stock");
@@ -559,6 +610,14 @@ app.on("will-quit", () => {
 
 ipcMain.handle("get-state", () => core.getState());
 ipcMain.handle("force-refresh", () => core.forceRefresh());
+ipcMain.handle("get-update-status", () => updateStatus);
+ipcMain.handle("check-for-updates", () => checkForUpdates());
+ipcMain.handle("download-update", () => downloadUpdate());
+ipcMain.handle("install-update", () => {
+  if (updateStatus.state !== "downloaded") return;
+  isQuitting = true;
+  autoUpdater.quitAndInstall(false, true);
+});
 ipcMain.handle("open-config-file", () => core.openConfigFile());
 ipcMain.handle("open-config-dir", () => core.openConfigDir());
 ipcMain.handle("quit", () => quitApp());

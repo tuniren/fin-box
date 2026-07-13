@@ -1,4 +1,6 @@
 const { spawn } = require("node:child_process");
+const os = require("node:os");
+const path = require("node:path");
 const electronPath = require("electron");
 
 const env = {
@@ -8,7 +10,14 @@ const env = {
 
 delete env.ELECTRON_RUN_AS_NODE;
 
-const child = spawn(electronPath, ["."], {
+const devDataDir = path.join(os.tmpdir(), "fin-box-electron-dev");
+const devCacheDir = path.join(devDataDir, "cache");
+
+const child = spawn(electronPath, [
+  ".",
+  `--user-data-dir=${devDataDir}`,
+  `--disk-cache-dir=${devCacheDir}`
+], {
   env,
   stdio: "inherit",
   windowsHide: false

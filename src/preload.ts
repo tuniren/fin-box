@@ -1,11 +1,15 @@
 import { contextBridge, ipcRenderer } from "electron";
-import type { AppState, FinBoxApi, KLineScale, MottoConfig } from "./shared/types";
+import type { AppState, FinBoxApi, KLineScale, MottoConfig, UpdateStatus } from "./shared/types";
 
 // Expose only the FinBox IPC surface to the renderer.
 // React can still manage windows and market state while contextIsolation stays on.
 const api: FinBoxApi = {
   getState: () => ipcRenderer.invoke("get-state"),
   forceRefresh: () => ipcRenderer.invoke("force-refresh"),
+  getUpdateStatus: () => ipcRenderer.invoke("get-update-status"),
+  checkForUpdates: () => ipcRenderer.invoke("check-for-updates"),
+  downloadUpdate: () => ipcRenderer.invoke("download-update"),
+  installUpdate: () => ipcRenderer.invoke("install-update"),
   openConfigFile: () => ipcRenderer.invoke("open-config-file"),
   openConfigDir: () => ipcRenderer.invoke("open-config-dir"),
   quit: () => ipcRenderer.invoke("quit"),
@@ -50,6 +54,11 @@ const api: FinBoxApi = {
     const listener = (_event: Electron.IpcRendererEvent, state: AppState) => callback(state);
     ipcRenderer.on("state", listener);
     return () => ipcRenderer.off("state", listener);
+  },
+  onUpdateStatus: (callback: (status: UpdateStatus) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, status: UpdateStatus) => callback(status);
+    ipcRenderer.on("update-status", listener);
+    return () => ipcRenderer.off("update-status", listener);
   },
   onCycleStock: (callback: () => void) => {
     const listener = () => callback();

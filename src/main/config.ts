@@ -1,7 +1,7 @@
 import { app } from "electron";
 import fs from "node:fs";
 import path from "node:path";
-import yaml from "js-yaml";
+import * as yaml from "js-yaml";
 import { defaultThemes } from "../shared/theme";
 import type { AppConfig, MottoConfig } from "../shared/types";
 
@@ -47,7 +47,7 @@ export class ConfigManager {
           positions: [{ account: "Account A", shares: 100, cost: 250 }]
         }
       ],
-      current_theme: "default",
+      current_theme: "simple",
       themes: { ...defaultThemes }
     };
     this.save(config);
@@ -97,7 +97,7 @@ export class ConfigManager {
           positions: stock.positions ?? []
         })),
         stock_groups: stockGroups.length ? stockGroups : ["watchlist"],
-        current_theme: config.current_theme ?? "default",
+        current_theme: config.current_theme ?? "simple",
         themes: { ...defaultThemes, ...(config.themes ?? {}) }
       };
       this.refreshModifiedTime();

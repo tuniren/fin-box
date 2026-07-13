@@ -4,6 +4,8 @@ menu:
   view: View
   window: Window
   language: Language
+  help: Help
+  usageGuide: User Guide
   addSymbol: Add Symbol
   refresh: Refresh
   openConfig: Open Config
@@ -70,6 +72,19 @@ detail:
   discussions: THS Discussions
   loadDiscussionsHint: Click Load to fetch THS discussions
   noComments: No comments
+update:
+  title: Software Update
+  check: Check for Updates
+  download: Download Update
+  checking: Checking for updates...
+  available: New version found. Choose whether to download it.
+  downloading: Downloading update
+  downloaded: Update downloaded. Restart to install.
+  latest: You are using the latest version.
+  failed: Update check failed
+  packagedOnly: Updates are disabled in development.
+  autoCheck: Updates are checked automatically on GitHub.
+  restartInstall: Restart and Install
 side:
   openConfigFolder: Open config folder
   toggleStockFloat: Toggle stock float

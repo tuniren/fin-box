@@ -159,9 +159,21 @@ export type AppState = {
   next_market_refresh?: number;
 };
 
+export type UpdateStatus = {
+  state: "idle" | "checking" | "available" | "downloading" | "downloaded" | "not-available" | "error" | "disabled";
+  currentVersion: string;
+  version?: string;
+  percent?: number;
+  message?: string;
+};
+
 export type FinBoxApi = {
   getState: () => Promise<AppState>;
   forceRefresh: () => Promise<void>;
+  getUpdateStatus: () => Promise<UpdateStatus>;
+  checkForUpdates: () => Promise<UpdateStatus>;
+  downloadUpdate: () => Promise<UpdateStatus>;
+  installUpdate: () => Promise<void>;
   openConfigFile: () => Promise<void>;
   openConfigDir: () => Promise<void>;
   quit: () => Promise<void>;
@@ -202,6 +214,7 @@ export type FinBoxApi = {
   toggleMaximizeWindow: () => Promise<void>;
   closeWindow: () => Promise<void>;
   onState: (callback: (state: AppState) => void) => () => void;
+  onUpdateStatus: (callback: (status: UpdateStatus) => void) => () => void;
   onCycleStock: (callback: () => void) => () => void;
   onToggleExpand: (callback: () => void) => () => void;
 };
