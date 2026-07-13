@@ -1,9 +1,9 @@
 # FinBox Electron + React 版本
 
-这是 FinBox 的 Electron + React + TypeScript 重写版本，位于独立目录 `electron-react`，不影响仓库根目录下现有 Rust 工程。
+FinBox 盯盘软件
 
 ## 下载
-https://github.com/tuniren/fin-box/releases/tag/electron-v1.0.0
+https://github.com/tuniren/fin-box/releases
 
 ## 技术栈
 
