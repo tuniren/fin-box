@@ -14,6 +14,11 @@ if (process.platform === "win32") {
   app.setAppUserModelId(APP_USER_MODEL_ID);
 }
 
+const singleInstanceLock = app.requestSingleInstanceLock();
+if (!singleInstanceLock) {
+  app.quit();
+}
+
 let mainWindow: BrowserWindow | undefined;
 let floatWindow: BrowserWindow | undefined;
 let watchFloatWindow: BrowserWindow | undefined;
@@ -321,6 +326,7 @@ function showMainWindow(): void {
   const win = mainWindow && !mainWindow.isDestroyed() ? mainWindow : createMainWindow();
   if (win.isMinimized()) win.restore();
   win.show();
+  win.moveTop();
   win.focus();
 }
 
@@ -556,6 +562,11 @@ async function loadRenderer(win: BrowserWindow, hash = ""): Promise<void> {
     await win.loadFile(path.join(__dirname, "../../dist/index.html"), { hash: hash.replace(/^#/, "") });
   }
 }
+
+app.on("second-instance", () => {
+  if (!app.isReady()) return;
+  showMainWindow();
+});
 
 app.whenReady().then(() => {
   Menu.setApplicationMenu(null);
