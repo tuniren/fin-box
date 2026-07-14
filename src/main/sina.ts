@@ -1,5 +1,5 @@
 import iconv from "iconv-lite";
-import type { KLinePoint, KLineScale, MarketData, MinutePoint, StockCommentItem, StockCommentPage, StockNewsArticle, StockNewsItem, StockNewsPage, StockSearchResult } from "../shared/types";
+import type { FiveDayMinutePoint, KLinePoint, KLineScale, MarketData, MinutePoint, StockCommentItem, StockCommentPage, StockNewsArticle, StockNewsItem, StockNewsPage, StockSearchResult } from "../shared/types";
 
 const referer = "https://finance.sina.com.cn/";
 const thsNewsPageSize = 20;
@@ -65,6 +65,42 @@ async function fetchTencentKLineData(symbol: string, scale: KLineScale): Promise
   const root = payload.data?.[symbol] ?? payload.data?.[symbol.toUpperCase()];
   const rows = root?.[`qfq${period}`] ?? root?.[period] ?? [];
   return rows.map(parseTencentKLineRow).filter((point): point is KLinePoint => point !== undefined);
+}
+
+export async function fetchTencentFiveDayMinuteData(code: string): Promise<FiveDayMinutePoint[]> {
+  const symbol = code.toLowerCase();
+  const url = `https://web.ifzq.gtimg.cn/appstock/app/day/query?code=${encodeURIComponent(symbol)}`;
+  const response = await fetch(url, {
+    headers: {
+      Referer: "https://gu.qq.com/",
+      "User-Agent": "Mozilla/5.0",
+      Accept: "application/json, text/plain, */*"
+    }
+  });
+  const payload = await response.json() as TencentFiveDayResponse;
+  const root = payload.data?.[symbol] ?? payload.data?.[symbol.toUpperCase()];
+  if (!root) return [];
+
+  const volumeUnit = isHongKongCode(symbol) ? 1 : 100;
+  const previousClose = parseTencentPrevClose(root);
+  const days = (Array.isArray(root.data) ? root.data : []).slice(-5);
+  const result: FiveDayMinutePoint[] = [];
+
+  for (const day of days) {
+    if (!day || typeof day.date !== "string" || !Array.isArray(day.data)) continue;
+    const normalizedDay = normalizeTencentDay(day.date);
+    const dayPreviousClose = numberOrUndefined(day.prec) ?? previousClose;
+    let previousVolume = 0;
+    for (const row of day.data) {
+      const timeValue = String(row).trim().split(/\s+/)[0] ?? "";
+      if (!isRegularTradingMinute(timeValue, isHongKongCode(symbol))) continue;
+      const point = parseTencentMinuteRow(row, dayPreviousClose, previousVolume, volumeUnit);
+      if (!point) continue;
+      previousVolume = point.cumulativeVolume;
+      result.push({ ...point.value, day: normalizedDay });
+    }
+  }
+  return result;
 }
 
 export async function fetchTencentMinuteData(code: string): Promise<MinutePoint[]> {
@@ -238,6 +274,14 @@ function parseTencentMinuteData(body: string, symbol: string): MinutePoint[] {
   return points;
 }
 
+type TencentFiveDayResponse = {
+  data?: Record<string, TencentFiveDayRoot>;
+};
+
+type TencentFiveDayRoot = {
+  data?: Array<{ date?: string; data?: unknown[]; prec?: string }>;
+  qt?: Record<string, unknown[]>;
+};
 type TencentKLineResponse = {
   data?: Record<string, Record<string, unknown[][]>>;
 };
@@ -289,7 +333,7 @@ function parseTencentMinuteRow(row: unknown, prevClose: number | undefined, prev
   };
 }
 
-function parseTencentPrevClose(root: TencentMinuteRoot): number | undefined {
+function parseTencentPrevClose(root: { qt?: Record<string, unknown[]> }): number | undefined {
   const qtItems = Object.values(root.qt ?? {});
   for (const item of qtItems) {
     const prevClose = numberOrUndefined(item[4]);
@@ -308,6 +352,19 @@ function parseJsonLike(body: string): unknown {
   return JSON.parse(trimmed.slice(start, end + 1));
 }
 
+function normalizeTencentDay(value: string): string {
+  const digits = value.replace(/\D/g, "");
+  if (digits.length !== 8) return value;
+  return `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6, 8)}`;
+}
+
+function isRegularTradingMinute(value: string, hongKong: boolean): boolean {
+  const digits = value.replace(/\D/g, "").slice(-4).padStart(4, "0");
+  const time = Number(digits);
+  const morningClose = hongKong ? 1200 : 1130;
+  const afternoonClose = hongKong ? 1600 : 1500;
+  return (time >= 930 && time <= morningClose) || (time >= 1300 && time <= afternoonClose);
+}
 function formatMinuteLabel(value: string): string {
   const digits = value.replace(/\D/g, "");
   const time = digits.length >= 4 ? digits.slice(-4) : digits.padStart(4, "0");

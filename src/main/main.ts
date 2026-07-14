@@ -650,6 +650,7 @@ ipcMain.handle("start-stock-journal", (_event, code: string, followedAt: string)
 ipcMain.handle("save-stock-journal-note", (_event, code: string, note: Pick<StockJournalNote, "id" | "date" | "content">) => core.saveStockJournalNote(code, note));
 ipcMain.handle("archive-daily-kline", (_event, code: string, points: KLinePoint[]) => core.archiveDailyKLine(code, points));
 ipcMain.handle("fetch-minute-data", (_event, code: string) => core.fetchMinuteData(code));
+ipcMain.handle("fetch-five-day-minute-data", (_event, code: string) => core.fetchFiveDayMinuteData(code));
 ipcMain.handle("fetch-stock-news", (_event, code: string, page: number, keyword?: string) => core.fetchStockNews(code, page, keyword));
 ipcMain.handle("fetch-stock-news-article", (_event, url: string) => core.fetchStockNewsArticle(url));
 ipcMain.handle("fetch-stock-comments", (_event, code: string, page: number) => core.fetchStockComments(code, page));

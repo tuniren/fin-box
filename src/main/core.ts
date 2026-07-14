@@ -2,7 +2,7 @@ import { app, BrowserWindow, shell } from "electron";
 import fs from "node:fs";
 import path from "node:path";
 import { ConfigManager } from "./config";
-import { fetchKLineData, fetchMultipleStocks, fetchStockComments as fetchThsStockComments, fetchStockNews as fetchSinaStockNews, fetchStockNewsArticle as fetchSinaStockNewsArticle, fetchTencentMinuteData, searchStocks } from "./sina";
+import { fetchKLineData, fetchMultipleStocks, fetchStockComments as fetchThsStockComments, fetchStockNews as fetchSinaStockNews, fetchStockNewsArticle as fetchSinaStockNewsArticle, fetchTencentFiveDayMinuteData, fetchTencentMinuteData, searchStocks } from "./sina";
 import type { AppConfig, AppState, KLinePoint, KLineScale, MottoConfig, Position, StockConfig, StockJournal, StockJournalNote } from "../shared/types";
 
 const INDEX_CODE = "sh000001";
@@ -289,6 +289,10 @@ export class AppCore {
 
   fetchMinuteData(code: string) {
     return fetchTencentMinuteData(code);
+  }
+
+  fetchFiveDayMinuteData(code: string) {
+    return fetchTencentFiveDayMinuteData(code);
   }
 
   fetchStockNews(code: string, page: number, keyword?: string) {

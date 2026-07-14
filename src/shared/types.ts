@@ -100,6 +100,9 @@ export type MinutePoint = {
   prevClose?: number;
 };
 
+export type FiveDayMinutePoint = MinutePoint & {
+  day: string;
+};
 export type StockNewsItem = {
   id: string;
   title: string;
@@ -196,6 +199,7 @@ export type FinBoxApi = {
   saveStockJournalNote: (code: string, note: Pick<StockJournalNote, "id" | "date" | "content">) => Promise<StockJournal>;
   archiveDailyKLine: (code: string, points: KLinePoint[]) => Promise<StockJournal>;
   fetchMinuteData: (code: string) => Promise<MinutePoint[]>;
+  fetchFiveDayMinuteData: (code: string) => Promise<FiveDayMinutePoint[]>;
   fetchStockNews: (code: string, page: number, keyword?: string) => Promise<StockNewsPage>;
   fetchStockNewsArticle: (url: string) => Promise<StockNewsArticle>;
   fetchStockComments: (code: string, page: number) => Promise<StockCommentPage>;

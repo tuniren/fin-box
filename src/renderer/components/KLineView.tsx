@@ -4,7 +4,7 @@ import { Form, Input } from "antd";
 import { RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, PointerEvent as ReactPointerEvent } from "react";
-import type { KLinePoint } from "../../shared/types";
+import type { FiveDayMinutePoint, KLinePoint } from "../../shared/types";
 import { formatMaybe } from "../utils";
 
 const api = window.finBox;
@@ -41,6 +41,7 @@ type ChartFrameSize = { width?: number; height: number };
 export function KLineView({ code, name }: KLineViewProps) {
   const [viewScale, setViewScale] = useState<KLineViewScale>("daily");
   const [points, setPoints] = useState<KLinePoint[]>([]);
+  const [fiveDayPoints, setFiveDayPoints] = useState<FiveDayMinutePoint[]>([]);
   const [hoverIndex, setHoverIndex] = useState<number | undefined>();
   const [loading, setLoading] = useState(true);
   const [chartFrameSize, setChartFrameSize] = useState<ChartFrameSize>({ height: DEFAULT_CHART_HEIGHT });
@@ -48,11 +49,11 @@ export function KLineView({ code, name }: KLineViewProps) {
   const loadKLine = useCallback((force = false) => {
     setLoading(true);
     setHoverIndex(undefined);
-    void api.fetchKLine(code, DAILY_SCALE, force)
-      .then(setPoints)
-      .finally(() => setLoading(false));
-  }, [code]);
-
+    const request = viewScale === "five-day"
+      ? api.fetchFiveDayMinuteData(code).then(setFiveDayPoints)
+      : api.fetchKLine(code, DAILY_SCALE, force).then(setPoints);
+    void request.finally(() => setLoading(false));
+  }, [code, viewScale]);
   useEffect(() => {
     loadKLine();
   }, [loadKLine]);
@@ -99,7 +100,9 @@ export function KLineView({ code, name }: KLineViewProps) {
 
   return (
     <main className="kline-view">
-      <KLineQuotePanel points={chartPoints} hoverIndex={hoverIndex} />
+      {viewScale === "five-day"
+        ? <FiveDayQuotePanel points={fiveDayPoints} hoverIndex={hoverIndex} />
+        : <KLineQuotePanel points={chartPoints} hoverIndex={hoverIndex} />}
       <header>
         <h1>
           {name} - {code}
@@ -120,7 +123,11 @@ export function KLineView({ code, name }: KLineViewProps) {
       </header>
       <section className="kline-body">
         <div className="kline-chart-frame" style={chartFrameStyle}>
-          {loading ? <div className="loading">Loading...</div> : <EChartsCandles points={chartPoints} onHoverIndex={setHoverIndex} />}
+          {loading
+            ? <div className="loading">Loading...</div>
+            : viewScale === "five-day"
+              ? <FiveDayMinuteChart points={fiveDayPoints} onHoverIndex={setHoverIndex} />
+              : <EChartsCandles points={chartPoints} onHoverIndex={setHoverIndex} />}
           <ChartResizeHandle corner="nw" onResizeStart={startChartResize} />
           <ChartResizeHandle corner="ne" onResizeStart={startChartResize} />
           <ChartResizeHandle corner="sw" onResizeStart={startChartResize} />
@@ -143,6 +150,138 @@ function ChartResizeHandle({ corner, onResizeStart }: { corner: ChartResizeCorne
   );
 }
 
+function FiveDayMinuteChart({ points, onHoverIndex }: { points: FiveDayMinutePoint[]; onHoverIndex: (index: number | undefined) => void }) {
+  const chartRef = useRef<HTMLDivElement>(null);
+  const instanceRef = useRef<echarts.ECharts | null>(null);
+  const onHoverIndexRef = useRef(onHoverIndex);
+  const labelsRef = useRef<string[]>([]);
+  const hasPoints = points.length > 0;
+
+  useEffect(() => {
+    onHoverIndexRef.current = onHoverIndex;
+  }, [onHoverIndex]);
+
+  useEffect(() => {
+    if (!chartRef.current) return;
+    const chart = echarts.init(chartRef.current, undefined, { renderer: "canvas" });
+    instanceRef.current = chart;
+    const selectPoint = (params: unknown) => onHoverIndexRef.current(resolveKLineHoverIndex(params as KLineChartSelectParam, labelsRef.current));
+    const clearPoint = () => onHoverIndexRef.current(undefined);
+    chart.on("updateAxisPointer", selectPoint);
+    chart.on("globalout", clearPoint);
+    const resizeObserver = new ResizeObserver(() => chart.resize());
+    resizeObserver.observe(chartRef.current);
+    return () => {
+      chart.off("updateAxisPointer", selectPoint);
+      chart.off("globalout", clearPoint);
+      resizeObserver.disconnect();
+      chart.dispose();
+      instanceRef.current = null;
+    };
+  }, [hasPoints]);
+
+  useEffect(() => {
+    const chart = instanceRef.current;
+    if (!chart || points.length === 0) return;
+    const labels = points.map((point) => `${point.day} ${point.time}`);
+    labelsRef.current = labels;
+    const prices = points.map((point) => point.price);
+    const averages = points.map((point) => point.avgPrice ?? point.price);
+    const volumes = points.map((point, index) => [index, point.volume, index > 0 && point.price < points[index - 1].price ? -1 : 1]);
+    const dayStarts = points.flatMap((point, index) => index > 0 && point.day !== points[index - 1].day ? [{ xAxis: labels[index] }] : []);
+
+    chart.setOption({
+      animation: false,
+      backgroundColor: "#ffffff",
+      tooltip: { trigger: "axis", showContent: false, axisPointer: { type: "cross" } },
+      legend: { top: 4, left: 54, data: ["Price", "Average"], textStyle: { color: "#4f4f4f", fontSize: 10 } },
+      axisPointer: { link: [{ xAxisIndex: "all" }] },
+      grid: [
+        { left: 54, right: 18, top: 28, height: "64%" },
+        { left: 54, right: 18, bottom: 24, height: "14%" }
+      ],
+      xAxis: [
+        {
+          type: "category",
+          data: labels,
+          boundaryGap: false,
+          axisLine: { lineStyle: { color: "#d4d4d4" } },
+          axisTick: { show: false },
+          axisLabel: { show: false },
+          splitLine: { show: false }
+        },
+        {
+          type: "category",
+          gridIndex: 1,
+          data: labels,
+          boundaryGap: false,
+          axisLine: { lineStyle: { color: "#d4d4d4" } },
+          axisTick: { show: false },
+          axisLabel: {
+            color: "#6a6a6a",
+            fontSize: 10,
+            interval: (index: number) => index === 0 || points[index]?.day !== points[index - 1]?.day,
+            formatter: (_value: string, index: number) => points[index]?.day.slice(5) ?? ""
+          },
+          splitLine: { show: false }
+        }
+      ],
+      yAxis: [
+        { scale: true, axisLine: { show: false }, axisTick: { show: false }, axisLabel: { color: "#6a6a6a", fontSize: 10 }, splitLine: { lineStyle: { color: "#eeeeee" } } },
+        { scale: true, gridIndex: 1, axisLine: { show: false }, axisTick: { show: false }, axisLabel: { show: false }, splitLine: { show: false } }
+      ],
+      dataZoom: [
+        { type: "inside", xAxisIndex: [0, 1], start: 0, end: 100 },
+        { type: "slider", xAxisIndex: [0, 1], height: 14, bottom: 4, borderColor: "#d4d4d4", fillerColor: "rgba(32,32,32,0.12)", handleSize: 0 }
+      ],
+      series: [
+        {
+          name: "Price",
+          type: "line",
+          data: prices,
+          showSymbol: false,
+          connectNulls: false,
+          lineStyle: { width: 1.4, color: "#202020" },
+          markLine: { silent: true, symbol: "none", label: { show: false }, lineStyle: { color: "#d9d9d9", width: 1 }, data: dayStarts }
+        },
+        { name: "Average", type: "line", data: averages, showSymbol: false, lineStyle: { width: 1, color: "#d18f00" } },
+        {
+          name: "Volume",
+          type: "bar",
+          xAxisIndex: 1,
+          yAxisIndex: 1,
+          data: volumes,
+          itemStyle: { color: (params: { data: [number, number, number] }) => params.data[2] > 0 ? "rgba(38,38,38,0.58)" : "rgba(158,158,158,0.38)" }
+        }
+      ]
+    }, true);
+  }, [points]);
+
+  if (points.length === 0) return <div className="loading">No five-day minute data</div>;
+  return <div className="candles" ref={chartRef} role="img" aria-label="Five-day minute chart" />;
+}
+
+function FiveDayQuotePanel({ points, hoverIndex }: { points: FiveDayMinutePoint[]; hoverIndex: number | undefined }) {
+  const index = hoverIndex === undefined ? points.length - 1 : hoverIndex;
+  const point = points[index];
+  if (!point) return <section className="kline-quote-panel muted">--</section>;
+  const previous = index > 0 ? points[index - 1] : undefined;
+  const change = previous ? point.price - previous.price : undefined;
+  const fields = [
+    { label: "价格", value: formatPrice(point.price) },
+    { label: "涨跌", value: change === undefined ? "--" : formatSignedPlain(change, 3) },
+    { label: "均价", value: formatPrice(point.avgPrice) },
+    { label: "成交量", value: formatVolume(point.volume) },
+    { label: "时间", value: `${point.day} ${point.time}` }
+  ];
+  return (
+    <section className="kline-quote-panel" aria-label="Five-day minute quote">
+      <Form className="kline-quote-form" layout="inline" size="small" colon={false} component="div">
+        {fields.map((field) => <KLineQuoteField key={field.label} label={field.label} value={field.value} />)}
+      </Form>
+    </section>
+  );
+}
 function EChartsCandles({ points, onHoverIndex }: { points: KLinePoint[]; onHoverIndex: (index: number | undefined) => void }) {
   const chartRef = useRef<HTMLDivElement>(null);
   const instanceRef = useRef<echarts.ECharts | null>(null);
@@ -365,17 +504,9 @@ function KLineQuoteField({ label, value }: { label: string; value: string }) {
 }
 
 function aggregateKLinePoints(points: KLinePoint[], scale: KLineViewScale): KLinePoint[] {
+  if (scale === "five-day") return [];
   if (scale === "daily") return points;
-  if (scale === "five-day") return aggregateByChunk(points, 5);
   return aggregateByKey(points, (point) => scale === "weekly" ? weekKey(point.day) : monthKey(point.day));
-}
-
-function aggregateByChunk(points: KLinePoint[], size: number): KLinePoint[] {
-  const result: KLinePoint[] = [];
-  for (let index = 0; index < points.length; index += size) {
-    result.push(mergeKLineGroup(points.slice(index, index + size)));
-  }
-  return result;
 }
 
 function aggregateByKey(points: KLinePoint[], keyOf: (point: KLinePoint) => string): KLinePoint[] {

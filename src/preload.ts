@@ -31,6 +31,7 @@ const api: FinBoxApi = {
   saveStockJournalNote: (code, note) => ipcRenderer.invoke("save-stock-journal-note", code, note),
   archiveDailyKLine: (code, points) => ipcRenderer.invoke("archive-daily-kline", code, points),
   fetchMinuteData: (code: string) => ipcRenderer.invoke("fetch-minute-data", code),
+  fetchFiveDayMinuteData: (code: string) => ipcRenderer.invoke("fetch-five-day-minute-data", code),
   fetchStockNews: (code: string, page: number, keyword?: string) => ipcRenderer.invoke("fetch-stock-news", code, page, keyword),
   fetchStockNewsArticle: (url: string) => ipcRenderer.invoke("fetch-stock-news-article", url),
   fetchStockComments: (code: string, page: number) => ipcRenderer.invoke("fetch-stock-comments", code, page),
