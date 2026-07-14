@@ -36,7 +36,7 @@ export class ConfigManager {
       total_investment: 100000,
       cash: 50000,
       motto: defaultMotto,
-      window_close_behavior: "tray",
+      window_close_behavior: "close",
       hide_zero_shares: false,
       stock_groups: ["watchlist"],
       stock_group_order: {},

@@ -11,10 +11,11 @@ menu:
   refresh: 刷新
   openConfig: 打开配置文件
   openConfigFolder: 打开配置目录
+  openNotesFolder: 打开笔记目录
   quit: 退出
   explorer: 资源管理器
   editor: 编辑区
-  sidePanel: 侧边栏
+  sidePanel: 笔记
   statusBar: 状态栏
   details: 详情
   chart: 图表
@@ -104,6 +105,7 @@ side:
   closeButton: 关闭按钮
   minimizeToTray: 最小化到托盘
   close: 关闭
+  theme: 主题
   motto: 格言
   toggleMottoWindow: 切换格言窗口
   mottoPlaceholder: 写下一句随时提醒自己的话
@@ -112,6 +114,18 @@ side:
   color: 颜色
   unsavedMotto: 格言修改未保存
   saveMotto: 保存格言
+stockNotes:
+  title: 笔记
+  empty: 打开某只股票的详情页后，在这里记录策略和每日复盘。
+  strategy: 策略笔记
+  strategyPlaceholder: 记录这只股票的操作策略、买卖条件、仓位计划。
+  daily: 每日笔记
+  dailyPlaceholder: 当天的观察、盘中变化、复盘结论。
+  previousDay: 前一天
+  nextDay: 后一天
+  resizePanels: 调整笔记板块大小
+  unsaved: 未保存
+  saveShortcut: 按 Ctrl+S 保存
 news:
   noNews: 暂无资讯
 status:

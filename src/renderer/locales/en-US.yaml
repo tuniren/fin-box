@@ -11,10 +11,11 @@ menu:
   refresh: Refresh
   openConfig: Open Config
   openConfigFolder: Open Config Folder
+  openNotesFolder: Open Notes Folder
   quit: Quit
   explorer: Explorer
   editor: Editor
-  sidePanel: Side Panel
+  sidePanel: Notes
   statusBar: Status Bar
   details: Details
   chart: Chart
@@ -104,6 +105,7 @@ side:
   closeButton: Close Button
   minimizeToTray: Minimize to tray
   close: Close
+  theme: Theme
   motto: Motto
   toggleMottoWindow: Toggle motto window
   mottoPlaceholder: Write a reminder to keep in sight
@@ -112,6 +114,18 @@ side:
   color: Color
   unsavedMotto: Unsaved motto
   saveMotto: Save Motto
+stockNotes:
+  title: Notes
+  empty: Open a stock detail page to write strategy and daily notes here.
+  strategy: Strategy Notes
+  strategyPlaceholder: Record strategy, entry and exit rules, and position plans for this stock.
+  daily: Daily Notes
+  dailyPlaceholder: Observations, intraday changes, and review conclusions for this day.
+  previousDay: Previous day
+  nextDay: Next day
+  resizePanels: Resize note sections
+  unsaved: Unsaved
+  saveShortcut: Press Ctrl+S to save
 news:
   noNews: No news
 status:

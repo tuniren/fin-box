@@ -2807,7 +2807,7 @@ b {
 
 .codex-panel {
   display: grid;
-  grid-template-rows: 42px 38px minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   min-width: 0;
   min-height: 0;
   border-left: 1px solid #e5e5e5;
@@ -2847,6 +2847,302 @@ b {
 .codex-content .tool-button {
   grid-column: span 2;
   justify-self: start;
+}
+
+.stock-notes-panel {
+  display: grid;
+  grid-template-rows: auto auto minmax(120px, var(--strategy-note-size, 0.46fr)) 6px minmax(180px, var(--daily-note-size, 0.54fr));
+  gap: 0;
+  min-width: 0;
+  min-height: 0;
+  color: #333333;
+}
+
+.stock-notes-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  height: 42px;
+  padding: 0 14px;
+  border-bottom: 1px solid #e5e5e5;
+  background: #f7f7f7;
+}
+
+.stock-notes-header div,
+.stock-notes-empty {
+  display: grid;
+  min-width: 0;
+}
+
+.stock-notes-header strong,
+.stock-notes-empty strong {
+  overflow: hidden;
+  color: #1f2933;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stock-notes-header span,
+.stock-notes-header small,
+.stock-notes-empty span {
+  color: #6a6a6a;
+}
+
+.stock-notes-empty {
+  align-content: start;
+  gap: 8px;
+  padding: 18px 16px;
+  color: #6a6a6a;
+}
+
+.stock-notes-error {
+  grid-row: 2;
+  margin: 8px 12px 0;
+}
+
+.stock-note-section {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 8px;
+  min-width: 0;
+  min-height: 0;
+  padding: 12px;
+  border-bottom: 1px solid #e5e5e5;
+}
+
+.strategy-note-section {
+  grid-row: 3;
+}
+
+.daily-note-section {
+  grid-row: 5;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  border-bottom: 0;
+}
+
+.stock-note-splitter {
+  grid-row: 4;
+  min-height: 6px;
+  border-top: 1px solid #e2e2e2;
+  border-bottom: 1px solid #e2e2e2;
+  background: #f3f3f3;
+  cursor: row-resize;
+}
+
+.stock-note-splitter:hover,
+.stock-note-splitter:active {
+  border-color: #007acc;
+  background: #dceeff;
+}
+
+.stock-note-title,
+.stock-note-calendar-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.stock-note-title span {
+  flex: 0 1 auto;
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stock-note-title small {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: #b45309;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stock-note-section textarea {
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  padding: 9px;
+  resize: none;
+  border: 1px solid #d4d4d4;
+  outline: 0;
+  background: #ffffff;
+  color: #333333;
+  line-height: 1.5;
+}
+
+.stock-note-section textarea:focus {
+  border-color: #007acc;
+  box-shadow: 0 0 0 1px rgba(0, 122, 204, 0.18);
+}
+
+.stock-note-calendar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  height: 34px;
+  padding: 4px 6px;
+  border: 1px solid #e2e2e2;
+  background: #ffffff;
+}
+
+.stock-note-date-field {
+  position: relative;
+  display: block;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.stock-note-date-field.has-note::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  width: 4px;
+  height: 4px;
+  margin-top: -2px;
+  border-radius: 999px;
+  background: #007acc;
+  pointer-events: none;
+}
+
+.stock-note-date-field input {
+  width: 100%;
+  min-width: 0;
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid #d4d4d4;
+  outline: 0;
+  background: #ffffff;
+  color: #333333;
+}
+
+.stock-note-date-field input:focus {
+  border-color: #007acc;
+  box-shadow: 0 0 0 1px rgba(0, 122, 204, 0.18);
+}
+
+.settings-page {
+  display: grid;
+  align-content: start;
+  gap: 0;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  max-width: 880px;
+  padding: 0 0 32px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  background: #ffffff;
+  color: #25313d;
+}
+
+.settings-header {
+  display: grid;
+  justify-items: start;
+  gap: 14px;
+  padding: 24px 28px 18px;
+  border-bottom: 1px solid #dbe3ee;
+  background: #fbfdff;
+}
+
+.settings-header h2,
+.settings-section h3 {
+  margin: 0;
+  color: #1f2933;
+  font-weight: 600;
+}
+
+.settings-header h2 {
+  font-size: 22px;
+}
+
+.settings-header p,
+.settings-section-title p {
+  margin: 6px 0 0;
+  color: #6a6a6a;
+  line-height: 1.45;
+}
+
+.settings-header-actions,
+.settings-motto-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  gap: 8px;
+}
+
+.settings-section {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: start;
+  gap: 12px;
+  padding: 22px 28px;
+  border-bottom: 1px solid #eeeeee;
+}
+
+.settings-section-title {
+  min-width: 0;
+  max-width: 620px;
+}
+
+.settings-section h3 {
+  font-size: 15px;
+}
+
+.settings-field {
+  display: grid;
+  gap: 6px;
+  align-content: start;
+  width: min(100%, 420px);
+  color: #4a5560;
+}
+
+.settings-field select,
+.settings-textarea,
+.settings-page .motto-style-grid input {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid #d4d4d4;
+  outline: 0;
+  background: #ffffff;
+  color: #333333;
+}
+
+.settings-field select,
+.settings-page .motto-style-grid input {
+  height: 28px;
+  padding: 0 8px;
+}
+
+.settings-field select:focus,
+.settings-textarea:focus,
+.settings-page .motto-style-grid input:focus {
+  border-color: #007acc;
+  box-shadow: 0 0 0 1px rgba(0, 122, 204, 0.18);
+}
+
+.settings-textarea {
+  width: min(100%, 620px);
+  min-height: 104px;
+  padding: 9px;
+  resize: vertical;
+  line-height: 1.5;
+}
+
+.settings-section .motto-style-grid,
+.settings-section .motto-actions,
+.settings-section .settings-textarea,
+.settings-section .settings-motto-actions {
+  grid-column: 1;
 }
 
 .app-settings,
@@ -3006,5 +3302,27 @@ b {
 @media (max-width: 1040px) {
   .codex-panel {
     display: none;
+  }
+
+  .settings-header,
+  .settings-section {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .settings-header {
+    display: grid;
+    align-items: start;
+  }
+
+  .settings-header-actions,
+  .settings-motto-actions {
+    justify-content: flex-start;
+  }
+
+  .settings-section .motto-style-grid,
+  .settings-section .motto-actions,
+  .settings-section .settings-textarea,
+  .settings-section .settings-motto-actions {
+    grid-column: 1;
   }
 }

@@ -1,6 +1,7 @@
 import { app, BrowserWindow, shell } from "electron";
 import fs from "node:fs";
 import path from "node:path";
+import * as yaml from "js-yaml";
 import { ConfigManager } from "./config";
 import { fetchKLineData, fetchMultipleStocks, fetchStockComments as fetchThsStockComments, fetchStockNews as fetchSinaStockNews, fetchStockNewsArticle as fetchSinaStockNewsArticle, fetchTencentFiveDayMinuteData, fetchTencentMinuteData, searchStocks } from "./sina";
 import type { AppConfig, AppState, KLinePoint, KLineScale, MottoConfig, Position, StockConfig, StockJournal, StockJournalNote } from "../shared/types";
@@ -30,6 +31,13 @@ type StockJournalDayFile = {
   date?: string;
   kline?: Partial<KLinePoint>;
   notes?: Partial<StockJournalNote>[];
+  updatedAt?: number;
+};
+
+type StockNotesFile = {
+  code?: string;
+  strategy?: string;
+  daily?: Record<string, string>;
   updatedAt?: number;
 };
 
@@ -67,6 +75,11 @@ export class AppCore {
 
   openConfigDir(): void {
     void shell.openPath(this.configManager.dir());
+  }
+
+  openStockNotesDir(): void {
+    fs.mkdirSync(stockNotesRoot(), { recursive: true });
+    void shell.openPath(stockNotesRoot());
   }
 
   async searchStocks(query: string) {
@@ -390,6 +403,35 @@ export class AppCore {
       // No per-day records yet.
     }
 
+    try {
+      const noteFile = yaml.load(fs.readFileSync(stockNotesPath(normalizedCode), "utf8")) as StockNotesFile | undefined;
+      const now = Number(noteFile?.updatedAt) || Date.now();
+      const strategy = noteFile?.strategy?.trim();
+      if (strategy) {
+        upsertJournalNote(journal, {
+          id: "strategy",
+          content: strategy,
+          createdAt: now,
+          updatedAt: now
+        });
+      }
+      for (const [dateValue, contentValue] of Object.entries(noteFile?.daily ?? {})) {
+        const date = normalizeDate(dateValue);
+        const content = contentValue.trim();
+        if (!date || !content) continue;
+        upsertJournalNote(journal, {
+          id: `daily-${date}`,
+          date,
+          content,
+          createdAt: now,
+          updatedAt: now
+        });
+      }
+      journal.updatedAt = Math.max(journal.updatedAt, now);
+    } catch {
+      // Stock notes are created lazily per symbol.
+    }
+
     journal.dailyKLine.sort((left, right) => left.day.localeCompare(right.day));
     journal.notes.sort(compareJournalNotes);
     return journal;
@@ -400,11 +442,10 @@ export class AppCore {
     const dir = stockJournalCodeDir(normalizedCode);
     fs.mkdirSync(dir, { recursive: true });
 
-    const metaNotes = journal.notes.filter((note) => !note.date);
     const meta: StockJournalMetaFile = {
       code: normalizedCode,
       followedAt: journal.followedAt,
-      notes: metaNotes,
+      notes: [],
       updatedAt: journal.updatedAt
     };
     fs.writeFileSync(stockJournalMetaPath(normalizedCode), `${JSON.stringify(meta, null, 2)}\n`, "utf8");
@@ -420,7 +461,7 @@ export class AppCore {
         code: normalizedCode,
         date: day,
         kline: journal.dailyKLine.find((point) => point.day === day),
-        notes: journal.notes.filter((note) => note.date === day),
+        notes: [],
         updatedAt: journal.updatedAt
       };
       fs.writeFileSync(stockJournalDayPath(normalizedCode, day), `${JSON.stringify(daily, null, 2)}\n`, "utf8");
@@ -435,6 +476,8 @@ export class AppCore {
     } catch {
       // The directory was just created above, so this is only a defensive guard.
     }
+
+    writeStockNotes(journal);
   }
 
 }
@@ -450,6 +493,10 @@ function stockJournalRoot(): string {
   return path.join(app.getPath("userData"), "stock-journals");
 }
 
+function stockNotesRoot(): string {
+  return path.join(app.getPath("userData"), "stock-notes");
+}
+
 function stockJournalCodeDir(code: string): string {
   return path.join(stockJournalRoot(), normalizeCode(code));
 }
@@ -462,6 +509,10 @@ function stockJournalDayPath(code: string, day: string): string {
   const normalizedDay = normalizeDate(day);
   if (!normalizedDay) throw new Error("Invalid journal date.");
   return path.join(stockJournalCodeDir(code), `${normalizedDay}.json`);
+}
+
+function stockNotesPath(code: string): string {
+  return path.join(stockNotesRoot(), `${normalizeCode(code)}.yaml`);
 }
 
 function normalizeCode(code: string): string {
@@ -495,6 +546,26 @@ function upsertJournalNote(journal: StockJournal, note: StockJournalNote): void 
   } else if (note.updatedAt >= journal.notes[index].updatedAt) {
     journal.notes[index] = note;
   }
+}
+
+function writeStockNotes(journal: StockJournal): void {
+  const normalizedCode = normalizeCode(journal.code);
+  const strategy = journal.notes.find((note) => !note.date)?.content.trim() ?? "";
+  const daily = Object.fromEntries(
+    journal.notes
+      .filter((note) => note.date && note.content.trim())
+      .sort(compareJournalNotes)
+      .map((note) => [note.date as string, note.content.trim()])
+  );
+  const data: StockNotesFile = {
+    code: normalizedCode,
+    strategy,
+    daily,
+    updatedAt: journal.updatedAt
+  };
+
+  fs.mkdirSync(stockNotesRoot(), { recursive: true });
+  fs.writeFileSync(stockNotesPath(normalizedCode), yaml.dump(data, { lineWidth: 120 }), "utf8");
 }
 
 function normalizeKLinePoint(point: Partial<KLinePoint> | undefined): KLinePoint | undefined {

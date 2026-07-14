@@ -699,7 +699,7 @@ ipcMain.handle("delete-note", async (_event, notePath: string) => {
   return readNotesTree();
 });
 ipcMain.handle("open-notes-dir", () => {
-  void shell.openPath(ensureNotesRoot());
+  core.openStockNotesDir();
 });
 ipcMain.handle("resize-window", (event, width: number, height: number) => {
   const win = BrowserWindow.fromWebContents(event.sender);

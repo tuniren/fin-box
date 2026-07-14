@@ -3,6 +3,7 @@ import {
   Blocks,
   BookOpen,
   Check,
+  ChevronLeft,
   ChevronRight,
   Edit3,
   Files,
@@ -27,7 +28,7 @@ import {
   UserCircle,
   X
 } from "lucide-react";
-import type { CSSProperties, FormEvent, MouseEvent as ReactMouseEvent, ReactNode } from "react";
+import type { CSSProperties, FormEvent, KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import {
   dayProfit,
   displayName,
@@ -38,7 +39,7 @@ import {
   totalShares
 } from "../../shared/finance";
 import { currentTheme, profitColor } from "../../shared/theme";
-import type { AppConfig, AppState, MottoConfig, NoteTreeItem, Position, StockCommentItem, StockCommentPage, StockNewsPage, StockSearchResult, StockStatus, Theme, UpdateStatus } from "../../shared/types";
+import type { AppConfig, AppState, MottoConfig, NoteTreeItem, Position, StockCommentItem, StockCommentPage, StockJournal, StockNewsPage, StockSearchResult, StockStatus, Theme, UpdateStatus } from "../../shared/types";
 import { KLineView } from "../components/KLineView";
 import { MarketStatusBar } from "../components/MarketStatusBar";
 import { MinutePanel } from "../components/MinutePanel";
@@ -52,8 +53,9 @@ import { useI18n } from "../i18n";
 
 const api = window.finBox;
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
+const STOCK_NOTES_SPLIT_STORAGE_KEY = "fin-box.stockNotesSplit";
 type ActivityView = "watchlist" | "news" | "notes" | "help";
-type ActiveView = "details" | "chart" | "note" | "help";
+type ActiveView = "details" | "chart" | "note" | "help" | "settings";
 type StockView = "details" | "chart";
 type TitleMenu = "file" | "view" | "window" | "language" | "help";
 type WatchPromptKind = "create-group" | "rename-group" | "edit-alias";
@@ -134,6 +136,23 @@ function sameMotto(left: MottoConfig, right: MottoConfig) {
   return left.text === right.text && left.font_family === right.font_family && left.font_size === right.font_size && left.color === right.color;
 }
 
+function formatLocalDate(date: Date) {
+  const month = `${date.getMonth() + 1}`.padStart(2, "0");
+  const day = `${date.getDate()}`.padStart(2, "0");
+  return `${date.getFullYear()}-${month}-${day}`;
+}
+
+function parseLocalDate(value: string) {
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return new Date();
+  return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+}
+
+function monthStart(value: string) {
+  const date = parseLocalDate(value);
+  return new Date(date.getFullYear(), date.getMonth(), 1);
+}
+
 export function MainWorkspace() {
   const { locale, setLocale, t } = useI18n();
   const state = useAppState();
@@ -154,7 +173,6 @@ export function MainWorkspace() {
   const [sideVisible, setSideVisible] = useState(true);
   const [statusBarVisible, setStatusBarVisible] = useState(true);
   const [activeTitleMenu, setActiveTitleMenu] = useState<TitleMenu>();
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [themeError, setThemeError] = useState("");
   const [explorerWidth, setExplorerWidth] = useState(332);
@@ -179,6 +197,17 @@ export function MainWorkspace() {
   const [savedMotto, setSavedMotto] = useState<MottoConfig>(defaultMotto);
   const [mottoSaving, setMottoSaving] = useState(false);
   const [mottoError, setMottoError] = useState("");
+  const [stockJournal, setStockJournal] = useState<StockJournal>();
+  const [journalLoading, setJournalLoading] = useState(false);
+  const [journalSaving, setJournalSaving] = useState(false);
+  const [journalError, setJournalError] = useState("");
+  const [strategyDraft, setStrategyDraft] = useState("");
+  const [savedStrategy, setSavedStrategy] = useState("");
+  const [dailyNoteDate, setDailyNoteDate] = useState(() => formatLocalDate(new Date()));
+  const [dailyNoteDraft, setDailyNoteDraft] = useState("");
+  const [savedDailyNote, setSavedDailyNote] = useState("");
+  const selectedStock = visibleStocks.find((stock) => stock.config.code === selectedCode) ?? visibleStocks[0];
+  const detailStockCode = activeView === "details" && selectedStock ? selectedStock.config.code : "";
 
   useEffect(() => {
     if (!visibleStocks.length) {
@@ -320,6 +349,49 @@ export function MainWorkspace() {
   }, [state?.config.motto.text, state?.config.motto.font_family, state?.config.motto.font_size, state?.config.motto.color]);
 
   useEffect(() => {
+    let cancelled = false;
+    if (!detailStockCode) {
+      setStockJournal(undefined);
+      setStrategyDraft("");
+      setSavedStrategy("");
+      setDailyNoteDraft("");
+      setSavedDailyNote("");
+      setJournalError("");
+      setJournalLoading(false);
+      return;
+    }
+
+    setJournalLoading(true);
+    setJournalError("");
+    void api.getStockJournal(detailStockCode)
+      .then((journal) => {
+        if (!cancelled) setStockJournal(journal);
+      })
+      .catch((error) => {
+        if (!cancelled) setJournalError(error instanceof Error ? error.message : "Failed to load stock notes.");
+      })
+      .finally(() => {
+        if (!cancelled) setJournalLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [detailStockCode]);
+
+  useEffect(() => {
+    const strategy = stockJournal?.notes.find((note) => !note.date)?.content ?? "";
+    setSavedStrategy(strategy);
+    setStrategyDraft(strategy);
+  }, [stockJournal?.code, stockJournal?.updatedAt]);
+
+  useEffect(() => {
+    const daily = stockJournal?.notes.find((note) => note.date === dailyNoteDate)?.content ?? "";
+    setSavedDailyNote(daily);
+    setDailyNoteDraft(daily);
+  }, [stockJournal?.code, stockJournal?.updatedAt, dailyNoteDate]);
+
+  useEffect(() => {
     if (!searchOpen && !watchPrompt) return;
 
     const onKeyDown = (event: KeyboardEvent) => {
@@ -336,7 +408,6 @@ export function MainWorkspace() {
   }, [searchOpen, watchPrompt]);
 
   const theme = state ? currentTheme(state.config) : undefined;
-  const selectedStock = visibleStocks.find((stock) => stock.config.code === selectedCode) ?? visibleStocks[0];
   const selectedNoteName = selectedNotePath ? selectedNotePath.split("/").pop() ?? selectedNotePath : "";
   const noteDirty = noteContent !== savedNoteContent;
   const mottoDirty = !sameMotto(mottoDraft, savedMotto);
@@ -413,7 +484,6 @@ export function MainWorkspace() {
     setThemeError("");
     try {
       await api.updateTheme(themeName);
-      setSettingsOpen(false);
     } catch (error) {
       setThemeError(error instanceof Error ? error.message : "Failed to switch theme.");
     }
@@ -677,6 +747,61 @@ export function MainWorkspace() {
     }
   };
 
+  const saveStrategyNote = async () => {
+    if (!detailStockCode) return;
+    setJournalSaving(true);
+    setJournalError("");
+    try {
+      const journal = await api.saveStockJournalNote(detailStockCode, {
+        id: "strategy",
+        content: strategyDraft
+      });
+      setStockJournal(journal);
+      setSavedStrategy(strategyDraft.trim());
+    } catch (error) {
+      setJournalError(error instanceof Error ? error.message : "Failed to save stock note.");
+    } finally {
+      setJournalSaving(false);
+    }
+  };
+
+  const saveDailyStockNote = async () => {
+    if (!detailStockCode) return;
+    setJournalSaving(true);
+    setJournalError("");
+    try {
+      const journal = await api.saveStockJournalNote(detailStockCode, {
+        id: `daily-${dailyNoteDate}`,
+        date: dailyNoteDate,
+        content: dailyNoteDraft
+      });
+      setStockJournal(journal);
+      setSavedDailyNote(dailyNoteDraft.trim());
+    } catch (error) {
+      setJournalError(error instanceof Error ? error.message : "Failed to save daily note.");
+    } finally {
+      setJournalSaving(false);
+    }
+  };
+
+  const toggleActivityPane = (view: ActivityView) => {
+    if (activityView === view && explorerVisible) {
+      setExplorerVisible(false);
+      return;
+    }
+
+    setActivityView(view);
+    setExplorerVisible(true);
+    if (view === "help") {
+      setEditorVisible(true);
+      setActiveView("help");
+      return;
+    }
+    if (view === "watchlist" && (activeView === "note" || activeView === "help" || activeView === "settings")) {
+      setActiveView(detailsOpen ? "details" : chartOpen ? "chart" : undefined);
+    }
+  };
+
   if (!state || !theme) {
     return (
       <main className="workspace loading-screen">
@@ -698,6 +823,7 @@ export function MainWorkspace() {
               <span className="title-menu-separator" />
               <button role="menuitem" onClick={() => runTitleMenuAction(() => void api.openConfigFile())}>{t("menu.openConfig")}</button>
               <button role="menuitem" onClick={() => runTitleMenuAction(() => void api.openConfigDir())}>{t("menu.openConfigFolder")}</button>
+              <button role="menuitem" onClick={() => runTitleMenuAction(() => void api.openNotesDir())}>{t("menu.openNotesFolder")}</button>
               <span className="title-menu-separator" />
               <button role="menuitem" onClick={() => runTitleMenuAction(() => void api.quit())}>{t("menu.quit")}</button>
             </div>
@@ -762,7 +888,7 @@ export function MainWorkspace() {
         <div className="layout-actions" aria-label="Layout actions">
           <button className={explorerVisible ? "active" : ""} onClick={() => setExplorerVisible((value) => !value)} aria-label="Toggle explorer"><PanelLeft size={16} /></button>
           <button className={editorVisible ? "active" : ""} onClick={() => setEditorVisible((value) => !value)} aria-label="Toggle editor"><PanelRight size={16} /></button>
-          <button className={sideVisible ? "active" : ""} onClick={() => setSideVisible((value) => !value)} aria-label="Toggle side panel"><PanelRight size={16} /></button>
+          <button className={sideVisible ? "active" : ""} onClick={() => setSideVisible((value) => !value)} aria-label={t("menu.sidePanel")}><PanelRight size={16} /></button>
         </div>
         <div className="window-controls" aria-label="Window controls">
           <button onClick={() => void api.minimizeWindow()} aria-label="Minimize"><Minus size={15} /></button>
@@ -777,27 +903,17 @@ export function MainWorkspace() {
       >
         <aside className="activity-bar" aria-label="Activity bar">
           <div className="activity-top">
-            <button className={`activity-item ${activityView === "watchlist" ? "active" : ""}`} onClick={() => { setActivityView("watchlist"); setExplorerVisible(true); if (activeView === "note" || activeView === "help") setActiveView(detailsOpen ? "details" : chartOpen ? "chart" : undefined); }} aria-label="Explorer"><Files size={24} /></button>
-            <button className={`activity-item ${activityView === "news" ? "active" : ""}`} onClick={() => { setActivityView("news"); setExplorerVisible(true); }} aria-label="7x24"><Newspaper size={23} /></button>
-            <button className={`activity-item ${activityView === "help" ? "active" : ""}`} onClick={() => { setActivityView("help"); setExplorerVisible(true); setEditorVisible(true); setActiveView("help"); }} aria-label="使用说明" title="使用说明"><BookOpen size={23} /></button>
+            <button className={`activity-item ${activityView === "watchlist" ? "active" : ""}`} onClick={() => toggleActivityPane("watchlist")} aria-label="Explorer"><Files size={24} /></button>
+            <button className={`activity-item ${activityView === "news" ? "active" : ""}`} onClick={() => toggleActivityPane("news")} aria-label="7x24"><Newspaper size={23} /></button>
+            <button className={`activity-item ${activityView === "help" ? "active" : ""}`} onClick={() => toggleActivityPane("help")} aria-label="使用说明" title="使用说明"><BookOpen size={23} /></button>
             <button className="activity-item" aria-label="Source Control"><GitBranch size={23} /><span className="activity-badge">{visibleStocks.length}</span></button>
             <button className="activity-item" aria-label="Extensions"><Blocks size={23} /></button>
           </div>
           <div className="activity-bottom">
             <button className="activity-item" aria-label="Accounts"><UserCircle size={24} /></button>
-            <button className={`activity-item ${settingsOpen ? "active" : ""}`} onClick={() => setSettingsOpen((value) => !value)} aria-label="Settings"><Settings size={23} /></button>
+            <button className={`activity-item ${activeView === "settings" ? "active" : ""}`} onClick={() => { setEditorVisible(true); setActiveView("settings"); }} aria-label="Settings"><Settings size={23} /></button>
           </div>
         </aside>
-
-        {settingsOpen && (
-          <ThemeQuickPick
-            currentThemeName={state.config.current_theme}
-            themes={state.config.themes}
-            error={themeError}
-            onClose={() => setSettingsOpen(false)}
-            onSelect={(themeName) => void selectTheme(themeName)}
-          />
-        )}
 
         {explorerVisible && (
         <aside className="explorer-panel">
@@ -874,6 +990,12 @@ export function MainWorkspace() {
                 使用说明
               </button>
             )}
+            {activeView === "settings" && (
+              <button className="editor-tab active">
+                <Settings size={14} />
+                设置
+              </button>
+            )}
             {chartOpen && (
               <button className={`editor-tab ${activeView === "chart" ? "active" : ""}`} onClick={() => setActiveView("chart")} disabled={!selectedStock}>
                 <span className="react-dot">K</span>
@@ -889,11 +1011,29 @@ export function MainWorkspace() {
             <ChevronRight size={14} />
             <span>renderer</span>
             <ChevronRight size={14} />
-            <span>{activeView === "help" ? "使用说明" : selectedStock ? selectedStock.config.code : "portfolio"}</span>
+            <span>{activeView === "help" ? "使用说明" : activeView === "settings" ? "settings" : selectedStock ? selectedStock.config.code : "portfolio"}</span>
           </div>
           <div className="editor-panel">
             {activeView === "help" ? (
               <HelpDocument />
+            ) : activeView === "settings" ? (
+              <SettingsPage
+                state={state}
+                mottoDraft={mottoDraft}
+                savedMotto={savedMotto}
+                mottoDirty={mottoDirty}
+                mottoSaving={mottoSaving}
+                mottoError={mottoError}
+                themeError={themeError}
+                onWindowCloseBehaviorChange={updateWindowCloseBehavior}
+                onThemeSelect={(themeName) => void selectTheme(themeName)}
+                onOpenConfigFile={() => void api.openConfigFile()}
+                onOpenConfigDir={() => void api.openConfigDir()}
+                onToggleMottoWindow={() => void api.toggleMottoWindow()}
+                onMottoDraftChange={updateMottoDraft}
+                onCancelMotto={() => setMottoDraft(savedMotto)}
+                onSaveMotto={() => void saveMotto()}
+              />
             ) : selectedStock && activeView === "details" ? (
               <StockDetail state={state} stock={selectedStock} theme={theme} onOpenChart={() => openStockView("chart")} />
             ) : selectedStock && activeView === "chart" ? (
@@ -909,84 +1049,23 @@ export function MainWorkspace() {
 
         {sideVisible && (
         <aside className="codex-panel">
-          <div className="codex-title">FINBOX</div>
-          <div className="codex-toolbar">
-            <button onClick={() => void api.openConfigDir()} title={t("side.openConfigFolder")} aria-label={t("side.openConfigFolder")}><FolderOpen size={15} /></button>
-            <button onClick={() => void api.toggleFloatWindow()} title={t("side.toggleStockFloat")} aria-label={t("side.toggleStockFloat")}><Maximize2 size={15} /></button>
-            <button onClick={() => void api.toggleWatchFloatWindow()} title={t("side.toggleWatchFloat")} aria-label={t("side.toggleWatchFloat")}><Files size={15} /></button>
-            <button title={t("side.more")} aria-label={t("side.more")}><MoreHorizontal size={15} /></button>
-          </div>
-          <div className="codex-content">
-            <span className="muted">{t("side.selectedSymbol")}</span>
-            <span>{selectedStock ? displayName(selectedStock) : t("side.none")}</span>
-            <span className="muted">{t("side.code")}</span>
-            <span>{selectedStock?.config.code ?? "--"}</span>
-            <button className="tool-button" onClick={() => void api.forceRefresh()}>
-              <RefreshCw size={14} />
-              {t("side.refresh")}
-            </button>
-            <button className="tool-button" onClick={() => void api.openConfigFile()}>
-              <FileText size={14} />
-              {t("side.config")}
-            </button>
-                        <section className="app-settings">
-              <div className="motto-editor-title">
-                <span>{t("side.window")}</span>
-              </div>
-              <label>
-                <span>{t("side.closeButton")}</span>
-                <select value={state.config.window_close_behavior ?? "tray"} onChange={(event) => updateWindowCloseBehavior(event.target.value as AppConfig["window_close_behavior"])}>
-                  <option value="tray">{t("side.minimizeToTray")}</option>
-                  <option value="close">{t("side.close")}</option>
-                </select>
-              </label>
-            </section>
-
-            <section className="motto-editor">
-              <div className="motto-editor-title">
-                <span>{t("side.motto")}</span>
-                <button className="icon-tool compact" onClick={() => void api.toggleMottoWindow()} title={t("side.toggleMottoWindow")} aria-label={t("side.toggleMottoWindow")}>
-                  <Maximize2 size={14} />
-                </button>
-              </div>
-              <textarea
-                value={mottoDraft.text}
-                onChange={(event) => updateMottoDraft({ text: event.target.value })}
-                placeholder={t("side.mottoPlaceholder")}
-              />
-              <div className="motto-style-grid">
-                <label>
-                  <span>{t("side.font")}</span>
-                  <input value={mottoDraft.font_family} onChange={(event) => updateMottoDraft({ font_family: event.target.value })} />
-                </label>
-                <label>
-                  <span>{t("side.size")}</span>
-                  <input
-                    type="number"
-                    min="10"
-                    max="36"
-                    step="1"
-                    value={mottoDraft.font_size || ""}
-                    onChange={(event) => updateMottoDraft({ font_size: event.target.value === "" ? 0 : clamp(Number(event.target.value), 10, 36) })}
-                  />
-                </label>
-                <label>
-                  <span>{t("side.color")}</span>
-                  <input type="color" value={mottoDraft.color} onChange={(event) => updateMottoDraft({ color: event.target.value })} />
-                </label>
-              </div>
-              <div className="motto-actions">
-                {mottoDirty && <span className="edit-state">{t("side.unsavedMotto")}</span>}
-                {mottoError && <span className="save-error">{mottoError}</span>}
-                <button className="tool-button" onClick={() => setMottoDraft(savedMotto)} disabled={!mottoDirty || mottoSaving}>
-                  {t("common.cancel")}
-                </button>
-                <button className="tool-button accent" onClick={() => void saveMotto()} disabled={!mottoDirty || mottoSaving}>
-                  {mottoSaving ? t("common.saving") : t("side.saveMotto")}
-                </button>
-              </div>
-            </section>
-          </div>
+          <StockNotesPanelView
+            stock={activeView === "details" ? selectedStock : undefined}
+            journal={stockJournal}
+            loading={journalLoading}
+            saving={journalSaving}
+            error={journalError}
+            strategyDraft={strategyDraft}
+            savedStrategy={savedStrategy}
+            dailyDate={dailyNoteDate}
+            dailyDraft={dailyNoteDraft}
+            savedDaily={savedDailyNote}
+            onStrategyChange={setStrategyDraft}
+            onDailyDateChange={setDailyNoteDate}
+            onDailyChange={setDailyNoteDraft}
+            onSaveStrategy={() => void saveStrategyNote()}
+            onSaveDaily={() => void saveDailyStockNote()}
+          />
         </aside>
         )}
       </section>
@@ -1304,6 +1383,315 @@ function HelpOutline() {
       <strong>FinBox 使用说明</strong>
       <span>快速开始</span><span>自选股票</span><span>行情详情</span><span>K线与分时</span><span>资讯与浮窗</span><span>界面与设置</span>
     </nav>
+  );
+}
+
+function StockNotesPanelView({
+  stock,
+  journal,
+  loading,
+  saving,
+  error,
+  strategyDraft,
+  savedStrategy,
+  dailyDate,
+  dailyDraft,
+  savedDaily,
+  onStrategyChange,
+  onDailyDateChange,
+  onDailyChange,
+  onSaveStrategy,
+  onSaveDaily
+}: {
+  stock?: StockStatus;
+  journal?: StockJournal;
+  loading: boolean;
+  saving: boolean;
+  error: string;
+  strategyDraft: string;
+  savedStrategy: string;
+  dailyDate: string;
+  dailyDraft: string;
+  savedDaily: string;
+  onStrategyChange: (value: string) => void;
+  onDailyDateChange: (value: string) => void;
+  onDailyChange: (value: string) => void;
+  onSaveStrategy: () => void;
+  onSaveDaily: () => void;
+}) {
+  const { t } = useI18n();
+  const panelRef = useRef<HTMLDivElement>(null);
+  const headerRef = useRef<HTMLElement>(null);
+  const errorRef = useRef<HTMLDivElement>(null);
+  const [splitRatio, setSplitRatio] = useState(() => {
+    const saved = Number(window.localStorage.getItem(STOCK_NOTES_SPLIT_STORAGE_KEY));
+    return Number.isFinite(saved) ? clamp(saved, 0.25, 0.75) : 0.46;
+  });
+  const notedDates = useMemo(() => new Set((journal?.notes ?? []).map((note) => note.date).filter((date): date is string => Boolean(date))), [journal]);
+  const strategyDirty = strategyDraft.trim() !== savedStrategy.trim();
+  const dailyDirty = dailyDraft.trim() !== savedDaily.trim();
+  const onNoteKeyDown = (event: ReactKeyboardEvent<HTMLTextAreaElement>, dirty: boolean, save: () => void) => {
+    if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== "s") return;
+    event.preventDefault();
+    if (!saving && dirty) save();
+  };
+
+  useEffect(() => {
+    window.localStorage.setItem(STOCK_NOTES_SPLIT_STORAGE_KEY, splitRatio.toFixed(3));
+  }, [splitRatio]);
+
+  const startPanelResize = (event: ReactMouseEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    const panel = panelRef.current;
+    if (!panel) return;
+
+    const resize = (clientY: number) => {
+      const panelRect = panel.getBoundingClientRect();
+      const headerHeight = headerRef.current?.getBoundingClientRect().height ?? 0;
+      const errorHeight = errorRef.current?.getBoundingClientRect().height ?? 0;
+      const splitterHeight = 6;
+      const available = panelRect.height - headerHeight - errorHeight - splitterHeight;
+      if (available <= 0) return;
+      const next = (clientY - panelRect.top - headerHeight - errorHeight) / available;
+      setSplitRatio(clamp(next, 0.25, 0.75));
+    };
+
+    const onMouseMove = (moveEvent: MouseEvent) => resize(moveEvent.clientY);
+    const onMouseUp = () => {
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+    };
+
+    resize(event.clientY);
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+  };
+
+  if (!stock) {
+    return (
+      <div className="stock-notes-empty">
+        <strong>{t("stockNotes.title")}</strong>
+        <span>{t("stockNotes.empty")}</span>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="stock-notes-panel"
+      ref={panelRef}
+      style={{ "--strategy-note-size": `${splitRatio}fr`, "--daily-note-size": `${1 - splitRatio}fr` } as CSSProperties}
+    >
+      <header className="stock-notes-header" ref={headerRef}>
+        <div>
+          <strong>{t("stockNotes.title")}</strong>
+          <span>{displayName(stock)} · {stock.config.code}</span>
+        </div>
+        {loading && <small>{t("common.loading")}</small>}
+      </header>
+
+      {error && <div className="save-error stock-notes-error" ref={errorRef}>{error}</div>}
+
+      <section className="stock-note-section strategy-note-section">
+        <div className="stock-note-title">
+          <span>{t("stockNotes.strategy")}</span>
+          {strategyDirty && <small>{t("stockNotes.unsaved")} · {t("stockNotes.saveShortcut")}</small>}
+          <button className="tool-button compact-text" onClick={onSaveStrategy} disabled={saving || !strategyDirty}>
+            <Save size={13} />
+            {saving ? t("common.saving") : t("common.save")}
+          </button>
+        </div>
+        <textarea
+          value={strategyDraft}
+          onChange={(event) => onStrategyChange(event.target.value)}
+          onKeyDown={(event) => onNoteKeyDown(event, strategyDirty, onSaveStrategy)}
+          placeholder={t("stockNotes.strategyPlaceholder")}
+        />
+      </section>
+
+      <div className="stock-note-splitter" onMouseDown={startPanelResize} role="separator" aria-orientation="horizontal" aria-label={t("stockNotes.resizePanels")} />
+
+      <section className="stock-note-section daily-note-section">
+        <div className="stock-note-title">
+          <span>{t("stockNotes.daily")}</span>
+          {dailyDirty && <small>{t("stockNotes.unsaved")} · {t("stockNotes.saveShortcut")}</small>}
+          <button className="tool-button compact-text" onClick={onSaveDaily} disabled={saving || !dailyDirty}>
+            <Save size={13} />
+            {saving ? t("common.saving") : t("common.save")}
+          </button>
+        </div>
+        <StockNoteCalendarView value={dailyDate} notedDates={notedDates} onChange={onDailyDateChange} />
+        <textarea
+          value={dailyDraft}
+          onChange={(event) => onDailyChange(event.target.value)}
+          onKeyDown={(event) => onNoteKeyDown(event, dailyDirty, onSaveDaily)}
+          placeholder={`${dailyDate} ${t("stockNotes.dailyPlaceholder")}`}
+        />
+      </section>
+    </div>
+  );
+}
+
+function StockNoteCalendarView({ value, notedDates, onChange }: { value: string; notedDates: Set<string>; onChange: (value: string) => void }) {
+  const { t } = useI18n();
+  const shiftDay = (offset: number) => {
+    const date = parseLocalDate(value);
+    date.setDate(date.getDate() + offset);
+    onChange(formatLocalDate(date));
+  };
+
+  return (
+    <div className="stock-note-calendar">
+      <button className="icon-tool compact" onClick={() => shiftDay(-1)} aria-label={t("stockNotes.previousDay")} title={t("stockNotes.previousDay")}>
+        <ChevronLeft size={14} />
+      </button>
+      <label className={`stock-note-date-field ${notedDates.has(value) ? "has-note" : ""}`}>
+        <input type="date" value={value} onChange={(event) => onChange(event.target.value || value)} />
+      </label>
+      <button className="icon-tool compact" onClick={() => shiftDay(1)} aria-label={t("stockNotes.nextDay")} title={t("stockNotes.nextDay")}>
+        <ChevronRight size={14} />
+      </button>
+    </div>
+  );
+}
+
+function StockNotesPanel({
+  stock,
+  journal,
+  loading,
+  saving,
+  error,
+  strategyDraft,
+  savedStrategy,
+  dailyDate,
+  dailyDraft,
+  savedDaily,
+  onStrategyChange,
+  onDailyDateChange,
+  onDailyChange,
+  onSaveStrategy,
+  onSaveDaily
+}: {
+  stock?: StockStatus;
+  journal?: StockJournal;
+  loading: boolean;
+  saving: boolean;
+  error: string;
+  strategyDraft: string;
+  savedStrategy: string;
+  dailyDate: string;
+  dailyDraft: string;
+  savedDaily: string;
+  onStrategyChange: (value: string) => void;
+  onDailyDateChange: (value: string) => void;
+  onDailyChange: (value: string) => void;
+  onSaveStrategy: () => void;
+  onSaveDaily: () => void;
+}) {
+  const { t } = useI18n();
+  const notedDates = useMemo(() => new Set((journal?.notes ?? []).map((note) => note.date).filter((date): date is string => Boolean(date))), [journal]);
+  const strategyDirty = strategyDraft.trim() !== savedStrategy.trim();
+  const dailyDirty = dailyDraft.trim() !== savedDaily.trim();
+
+  if (!stock) {
+    return (
+      <div className="stock-notes-empty">
+        <strong>股票笔记</strong>
+        <span>打开某只股票的详情页后，在这里记录策略和每日复盘。</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="stock-notes-panel">
+      <header className="stock-notes-header">
+        <div>
+          <strong>{displayName(stock)}</strong>
+          <span>{stock.config.code}</span>
+        </div>
+        {loading && <small>加载中...</small>}
+      </header>
+
+      {error && <div className="save-error stock-notes-error">{error}</div>}
+
+      <section className="stock-note-section strategy-note-section">
+        <div className="stock-note-title">
+          <span>策略笔记</span>
+          <button className="tool-button compact-text" onClick={onSaveStrategy} disabled={saving || !strategyDirty}>
+            <Save size={13} />
+            保存
+          </button>
+        </div>
+        <textarea
+          value={strategyDraft}
+          onChange={(event) => onStrategyChange(event.target.value)}
+          placeholder="记录这只股票的操作策略、买卖条件、仓位计划。"
+        />
+      </section>
+
+      <section className="stock-note-section daily-note-section">
+        <div className="stock-note-title">
+          <span>每日笔记</span>
+          <button className="tool-button compact-text" onClick={onSaveDaily} disabled={saving || !dailyDirty}>
+            <Save size={13} />
+            保存
+          </button>
+        </div>
+        <StockNoteCalendar value={dailyDate} notedDates={notedDates} onChange={onDailyDateChange} />
+        <textarea
+          value={dailyDraft}
+          onChange={(event) => onDailyChange(event.target.value)}
+          placeholder={`${dailyDate} 的观察、盘中变化、复盘结论。`}
+        />
+      </section>
+    </div>
+  );
+}
+
+function StockNoteCalendar({ value, notedDates, onChange }: { value: string; notedDates: Set<string>; onChange: (value: string) => void }) {
+  const [viewMonth, setViewMonth] = useState(() => monthStart(value));
+
+  useEffect(() => {
+    setViewMonth(monthStart(value));
+  }, [value]);
+
+  const year = viewMonth.getFullYear();
+  const month = viewMonth.getMonth();
+  const firstDay = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const cells = Array.from({ length: firstDay + daysInMonth }, (_, index) => (index < firstDay ? 0 : index - firstDay + 1));
+  const changeMonth = (offset: number) => setViewMonth((current) => new Date(current.getFullYear(), current.getMonth() + offset, 1));
+
+  return (
+    <div className="stock-note-calendar">
+      <div className="stock-note-calendar-head">
+        <button className="icon-tool compact" onClick={() => changeMonth(-1)} aria-label="上个月" title="上个月">
+          <ChevronLeft size={14} />
+        </button>
+        <strong>{year}-{`${month + 1}`.padStart(2, "0")}</strong>
+        <button className="icon-tool compact" onClick={() => changeMonth(1)} aria-label="下个月" title="下个月">
+          <ChevronRight size={14} />
+        </button>
+      </div>
+      <div className="stock-note-weekdays">
+        <span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span>
+      </div>
+      <div className="stock-note-days">
+        {cells.map((day, index) => {
+          if (!day) return <span className="stock-note-day empty" key={`empty-${index}`} />;
+          const date = formatLocalDate(new Date(year, month, day));
+          return (
+            <button
+              className={`stock-note-day ${date === value ? "active" : ""} ${notedDates.has(date) ? "has-note" : ""}`}
+              key={date}
+              onClick={() => onChange(date)}
+            >
+              <span>{day}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
@@ -1831,58 +2219,143 @@ function StockDetail({ state, stock, theme, onOpenChart }: { state: AppState; st
   );
 }
 
-function ThemeQuickPick({
-  currentThemeName,
-  themes,
-  error,
-  onClose,
-  onSelect
+function SettingsPage({
+  state,
+  mottoDraft,
+  savedMotto,
+  mottoDirty,
+  mottoSaving,
+  mottoError,
+  themeError,
+  onWindowCloseBehaviorChange,
+  onThemeSelect,
+  onOpenConfigFile,
+  onOpenConfigDir,
+  onToggleMottoWindow,
+  onMottoDraftChange,
+  onCancelMotto,
+  onSaveMotto
 }: {
-  currentThemeName: string;
-  themes: Record<string, Theme>;
-  error: string;
-  onClose: () => void;
-  onSelect: (themeName: string) => void;
+  state: AppState;
+  mottoDraft: MottoConfig;
+  savedMotto: MottoConfig;
+  mottoDirty: boolean;
+  mottoSaving: boolean;
+  mottoError: string;
+  themeError: string;
+  onWindowCloseBehaviorChange: (behavior: AppConfig["window_close_behavior"]) => void;
+  onThemeSelect: (themeName: string) => void;
+  onOpenConfigFile: () => void;
+  onOpenConfigDir: () => void;
+  onToggleMottoWindow: () => void;
+  onMottoDraftChange: (patch: Partial<MottoConfig>) => void;
+  onCancelMotto: () => void;
+  onSaveMotto: () => void;
 }) {
-  const entries = Object.entries(themes).sort(([left], [right]) => left.localeCompare(right));
+  const { t } = useI18n();
+  const entries = Object.keys(state.config.themes).sort((left, right) => left.localeCompare(right));
 
   return (
-    <div className="quick-pick-backdrop" onMouseDown={onClose}>
-      <section className="theme-quick-pick" aria-label="Color theme picker" onMouseDown={(event) => event.stopPropagation()}>
-        <div className="quick-pick-input" role="presentation">
-          <span>Color Theme</span>
-          <button className="icon-tool compact" onClick={onClose} aria-label="Close theme picker" title="Close">
-            <X size={14} />
+    <div className="settings-page">
+      <header className="settings-header">
+        <div>
+          <h2>设置</h2>
+          <p>配置 FinBox 的窗口、外观和常用行为。</p>
+        </div>
+        <div className="settings-header-actions">
+          <button className="tool-button" onClick={onOpenConfigFile}>
+            <FileText size={14} />
+            {t("side.config")}
+          </button>
+          <button className="tool-button" onClick={onOpenConfigDir}>
+            <FolderOpen size={14} />
+            {t("side.openConfigFolder")}
           </button>
         </div>
-        <div className="quick-pick-list">
-          {entries.map(([themeName, themeValue]) => (
-            <button
-              className={`quick-pick-row ${themeName === currentThemeName ? "active" : ""}`}
-              key={themeName}
-              onClick={() => onSelect(themeName)}
-            >
-              <span className="quick-pick-check">{themeName === currentThemeName && <Check size={15} />}</span>
-              <ThemeSwatch theme={themeValue} />
-              <span className="quick-pick-name">{formatThemeName(themeName)}</span>
-              <small>{themeName}</small>
-            </button>
-          ))}
+      </header>
+
+      <section className="settings-section">
+        <div className="settings-section-title">
+          <h3>{t("side.window")}</h3>
+          <p>控制主窗口关闭按钮的默认行为。</p>
         </div>
-        {error && <div className="save-error quick-pick-error">{error}</div>}
+        <label className="settings-field">
+          <span>{t("side.closeButton")}</span>
+          <select value={state.config.window_close_behavior ?? "close"} onChange={(event) => onWindowCloseBehaviorChange(event.target.value as AppConfig["window_close_behavior"])}>
+            <option value="close">{t("side.close")}</option>
+            <option value="tray">{t("side.minimizeToTray")}</option>
+          </select>
+        </label>
+      </section>
+
+      <section className="settings-section">
+        <div className="settings-section-title">
+          <h3>外观</h3>
+          <p>选择程序使用的颜色主题。</p>
+        </div>
+        <label className="settings-field">
+          <span>{t("side.theme")}</span>
+          <select value={state.config.current_theme} onChange={(event) => onThemeSelect(event.target.value)}>
+            {entries.map((themeName) => (
+              <option value={themeName} key={themeName}>
+                {formatThemeName(themeName)}
+              </option>
+            ))}
+          </select>
+        </label>
+        {themeError && <div className="save-error quick-pick-error">{themeError}</div>}
+      </section>
+
+      <section className="settings-section">
+        <div className="settings-section-title">
+          <h3>{t("side.motto")}</h3>
+          <p>编辑格言窗口的文字和显示样式。</p>
+        </div>
+        <div className="settings-motto-actions">
+          <button className="tool-button" onClick={onToggleMottoWindow}>
+            <Maximize2 size={14} />
+            {t("side.toggleMottoWindow")}
+          </button>
+        </div>
+        <textarea
+          className="settings-textarea"
+          value={mottoDraft.text}
+          onChange={(event) => onMottoDraftChange({ text: event.target.value })}
+          placeholder={t("side.mottoPlaceholder")}
+        />
+        <div className="motto-style-grid">
+          <label>
+            <span>{t("side.font")}</span>
+            <input value={mottoDraft.font_family} onChange={(event) => onMottoDraftChange({ font_family: event.target.value })} />
+          </label>
+          <label>
+            <span>{t("side.size")}</span>
+            <input
+              type="number"
+              min="10"
+              max="36"
+              step="1"
+              value={mottoDraft.font_size || ""}
+              onChange={(event) => onMottoDraftChange({ font_size: event.target.value === "" ? 0 : clamp(Number(event.target.value), 10, 36) })}
+            />
+          </label>
+          <label>
+            <span>{t("side.color")}</span>
+            <input type="color" value={mottoDraft.color} onChange={(event) => onMottoDraftChange({ color: event.target.value })} />
+          </label>
+        </div>
+        <div className="motto-actions">
+          {mottoDirty && <span className="edit-state">{t("side.unsavedMotto")}</span>}
+          {mottoError && <span className="save-error">{mottoError}</span>}
+          <button className="tool-button" onClick={onCancelMotto} disabled={!mottoDirty || mottoSaving || sameMotto(mottoDraft, savedMotto)}>
+            {t("common.cancel")}
+          </button>
+          <button className="tool-button accent" onClick={onSaveMotto} disabled={!mottoDirty || mottoSaving}>
+            {mottoSaving ? t("common.saving") : t("side.saveMotto")}
+          </button>
+        </div>
       </section>
     </div>
-  );
-}
-
-function ThemeSwatch({ theme }: { theme: Theme }) {
-  return (
-    <span className="theme-swatch" aria-hidden="true">
-      <span style={{ background: theme.background === "transparent" ? theme.menu_bg : theme.background }} />
-      <span style={{ background: theme.accent }} />
-      <span style={{ background: theme.color_up }} />
-      <span style={{ background: theme.color_down }} />
-    </span>
   );
 }
 

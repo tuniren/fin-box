@@ -1,6 +1,6 @@
 {
   "name": "fin-box-electron-react",
-  "version": "1.0.2",
+  "version": "1.1.0",
   "private": true,
   "description": "FinBox rewritten with Electron, React and TypeScript.",
   "main": "dist-electron/main/main.js",
@@ -24,11 +24,21 @@
     "productName": "FinBox",
     "asar": true,
     "compression": "maximum",
-    "electronLanguages": ["en-US", "zh-CN"],
+    "electronLanguages": [
+      "en-US",
+      "zh-CN"
+    ],
     "directories": {
       "output": "release"
     },
-    "publish": [{ "provider": "github", "owner": "tuniren", "repo": "fin-box", "releaseType": "release" }],
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "tuniren",
+        "repo": "fin-box",
+        "releaseType": "release"
+      }
+    ],
     "files": [
       "dist/**/*",
       "dist-electron/**/*",
