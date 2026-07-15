@@ -1,4 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+﻿import { useEffect, useMemo, useRef, useState } from "react";
+import { Input, Tag as AntTag, Tree } from "antd";
+import type { TreeDataNode } from "antd";
 import {
   Blocks,
   BookOpen,
@@ -11,6 +13,7 @@ import {
   Folder,
   FolderOpen,
   GitBranch,
+  GripVertical,
   Maximize2,
   MessageSquare,
   Minus,
@@ -28,7 +31,7 @@ import {
   UserCircle,
   X
 } from "lucide-react";
-import type { CSSProperties, FormEvent, KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent, ReactNode } from "react";
+import type { CSSProperties, DragEvent as ReactDragEvent, FormEvent, Key, KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import {
   dayProfit,
   displayName,
@@ -39,25 +42,39 @@ import {
   totalShares
 } from "../../shared/finance";
 import { currentTheme, profitColor } from "../../shared/theme";
-import type { AppConfig, AppState, MottoConfig, NoteTreeItem, Position, StockCommentItem, StockCommentPage, StockJournal, StockNewsPage, StockSearchResult, StockStatus, Theme, UpdateStatus } from "../../shared/types";
+import type { AppConfig, AppState, MottoConfig, NoteTreeItem, Position, StockCommentItem, StockCommentPage, StockJournal, StockNewsPage, StockSearchResult, StockStatus, Theme, UpdateStatus, WatchFloatColumn, WatchFloatConfig } from "../../shared/types";
 import { KLineView } from "../components/KLineView";
 import { MarketStatusBar } from "../components/MarketStatusBar";
 import { MinutePanel } from "../components/MinutePanel";
 import { SearchPane } from "../components/SearchPane";
-import { TickerSummary } from "../components/TickerSummary";
 import { TradingIntensityPanel } from "../components/TradingIntensityPanel";
 import { GroupedWatchlist, mergeWatchGroups, normalizeWatchGroupName } from "../components/WatchTree";
 import type { WatchTreeSelection } from "../components/WatchTree";
-import { formatMaybe, formatSigned, stockPercent, themeStyle } from "../utils";
+import { formatMaybe, formatSigned, stockPercent } from "../utils";
 import { useI18n } from "../i18n";
 
 const api = window.finBox;
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
 const STOCK_NOTES_SPLIT_STORAGE_KEY = "fin-box.stockNotesSplit";
-type ActivityView = "watchlist" | "news" | "notes" | "help";
+const watchFloatColumnOptions: Array<{ value: WatchFloatColumn; label: string }> = [
+  { value: "name", label: "名称" },
+  { value: "price", label: "股价" },
+  { value: "change", label: "涨幅" },
+  { value: "day_profit", label: "今日收益" }
+];
+const watchFloatFlatColorOptions: Array<{ value: "name" | "price"; label: string }> = [
+  { value: "name", label: "名称" },
+  { value: "price", label: "股价" }
+];
+const watchFloatMetricColorOptions: Array<{ value: "change" | "day_profit"; label: string }> = [
+  { value: "change", label: "涨幅" },
+  { value: "day_profit", label: "今日收益" }
+];
+type ActivityView = "watchlist" | "news" | "notes" | "help" | "settings";
 type ActiveView = "details" | "chart" | "note" | "help" | "settings";
 type StockView = "details" | "chart";
 type TitleMenu = "file" | "view" | "window" | "language" | "help";
+type SettingsView = "general" | "motto" | "watch-float" | "camouflage-float";
 type WatchPromptKind = "create-group" | "rename-group" | "edit-alias";
 type WatchPromptState = {
   kind: WatchPromptKind;
@@ -73,6 +90,12 @@ const defaultMotto: MottoConfig = {
   font_size: 14,
   color: "#f8fafc"
 };
+const settingsNavItems: Array<{ value: SettingsView; labelKey: `settings.${"general" | "mottoFloat" | "watchlistFloat" | "camouflageFloat"}` }> = [
+  { value: "general", labelKey: "settings.general" },
+  { value: "motto", labelKey: "settings.mottoFloat" },
+  { value: "watch-float", labelKey: "settings.watchlistFloat" },
+  { value: "camouflage-float", labelKey: "settings.camouflageFloat" }
+];
 function MenuCheckItem({ checked, radio = false, onClick, children }: { checked: boolean; radio?: boolean; onClick: () => void; children: ReactNode }) {
   return (
     <button className="menu-check-option" role={radio ? "menuitemradio" : "menuitemcheckbox"} aria-checked={checked} onClick={onClick}>
@@ -178,6 +201,7 @@ export function MainWorkspace() {
   const [explorerWidth, setExplorerWidth] = useState(332);
   const [sideWidth, setSideWidth] = useState(420);
   const [activityView, setActivityView] = useState<ActivityView>("watchlist");
+  const [settingsView, setSettingsView] = useState<SettingsView>("general");
   const [marketNewsPage, setMarketNewsPage] = useState(1);
   const [marketNews, setMarketNews] = useState<StockNewsPage>();
   const [marketNewsLoading, setMarketNewsLoading] = useState(false);
@@ -248,6 +272,14 @@ export function MainWorkspace() {
     });
     return offCycle;
   }, [holdStocks]);
+
+  useEffect(() => api.onOpenWatchlistFloatSettings(() => {
+    setActivityView("settings");
+    setSettingsView("watch-float");
+    setExplorerVisible(true);
+    setEditorVisible(true);
+    setActiveView("settings");
+  }), []);
 
   useEffect(() => {
     let cancelled = false;
@@ -467,6 +499,17 @@ export function MainWorkspace() {
 
   const updateWindowCloseBehavior = (behavior: AppConfig["window_close_behavior"]) => {
     void api.updateWindowCloseBehavior(behavior);
+  };
+
+  const updateWatchFloatConfig = (patch: Partial<WatchFloatConfig>) => {
+    if (!state) return;
+    void api.updateWatchFloatConfig({
+      stock_codes: patch.stock_codes ?? state.config.watch_float.stock_codes,
+      columns: patch.columns ?? state.config.watch_float.columns,
+      style: patch.style ?? state.config.watch_float.style,
+      active_profile: patch.active_profile ?? state.config.watch_float.active_profile,
+      profiles: patch.profiles ?? state.config.watch_float.profiles
+    });
   };
 
   const toggleMaximizeFromTitleBar = (event: ReactMouseEvent<HTMLElement>) => {
@@ -797,6 +840,11 @@ export function MainWorkspace() {
       setActiveView("help");
       return;
     }
+    if (view === "settings") {
+      setEditorVisible(true);
+      setActiveView("settings");
+      return;
+    }
     if (view === "watchlist" && (activeView === "note" || activeView === "help" || activeView === "settings")) {
       setActiveView(detailsOpen ? "details" : chartOpen ? "chart" : undefined);
     }
@@ -859,9 +907,9 @@ export function MainWorkspace() {
           <div className={`title-menu-group ${activeTitleMenu === "window" ? "open" : ""}`}>
             <button className="title-menu-root" aria-haspopup="menu" aria-expanded={activeTitleMenu === "window"} onClick={() => setActiveTitleMenu((menu) => (menu === "window" ? undefined : "window"))}>{t("menu.window")}</button>
             <div className="title-menu-dropdown" role="menu">
-              <button role="menuitem" onClick={() => runTitleMenuAction(() => void api.toggleFloatWindow())}><span>{t("menu.toggleStockFloat")}</span><kbd>Ctrl+Alt+9</kbd></button>
-              <button role="menuitem" onClick={() => runTitleMenuAction(() => void api.toggleWatchFloatWindow())}><span>{t("menu.toggleWatchFloat")}</span><kbd>Ctrl+Alt+0</kbd></button>
-              <button role="menuitem" onClick={() => runTitleMenuAction(() => void api.toggleMottoWindow())}>{t("menu.toggleMottoWindow")}</button>
+              <button role="menuitem" onClick={() => runTitleMenuAction(() => void api.toggleCamouflageFloatWindow())}><span>{t("menu.toggleCamouflageFloat")}</span><kbd>Ctrl+Alt+9</kbd></button>
+              <button role="menuitem" onClick={() => runTitleMenuAction(() => void api.toggleWatchlistFloatWindow())}><span>{t("menu.toggleWatchlistFloat")}</span><kbd>Ctrl+Alt+0</kbd></button>
+              <button role="menuitem" onClick={() => runTitleMenuAction(() => void api.toggleMottoFloatWindow())}>{t("menu.toggleMottoFloat")}</button>
             </div>
           </div>
           <div className={`title-menu-group ${activeTitleMenu === "language" ? "open" : ""}`}>
@@ -911,14 +959,14 @@ export function MainWorkspace() {
           </div>
           <div className="activity-bottom">
             <button className="activity-item" aria-label="Accounts"><UserCircle size={24} /></button>
-            <button className={`activity-item ${activeView === "settings" ? "active" : ""}`} onClick={() => { setEditorVisible(true); setActiveView("settings"); }} aria-label="Settings"><Settings size={23} /></button>
+            <button className={`activity-item ${activityView === "settings" ? "active" : ""}`} onClick={() => toggleActivityPane("settings")} aria-label="Settings"><Settings size={23} /></button>
           </div>
         </aside>
 
         {explorerVisible && (
         <aside className="explorer-panel">
           <div className="explorer-header">
-            {activityView !== "watchlist" && <span>{activityView === "news" ? "7X24" : "使用说明"}</span>}
+            {activityView !== "watchlist" && <span>{activityView === "news" ? "7X24" : activityView === "settings" ? "设置" : "使用说明"}</span>}
             {activityView === "watchlist" ? (
               <div className="explorer-actions">
                 <button onClick={() => openSearch()} title="Add symbol" aria-label="Add symbol"><Plus size={15} /></button>
@@ -932,6 +980,8 @@ export function MainWorkspace() {
               <div className="explorer-actions">
                 <button onClick={() => { setMarketNewsPage(1); setMarketNewsReload((value) => value + 1); }} disabled={marketNewsLoading} title="Refresh 7x24" aria-label="Refresh 7x24"><RefreshCw size={14} /></button>
               </div>
+            ) : activityView === "settings" ? (
+              <span />
             ) : (
               <span />
             )}
@@ -947,6 +997,8 @@ export function MainWorkspace() {
             />
           ) : activityView === "help" ? (
             <HelpOutline />
+          ) : activityView === "settings" ? (
+            <SettingsOutline active={settingsView} onSelect={(view) => { setSettingsView(view); setEditorVisible(true); setActiveView("settings"); }} />
           ) : (
             <GroupedWatchlist
               stocks={visibleStocks}
@@ -993,7 +1045,7 @@ export function MainWorkspace() {
             {activeView === "settings" && (
               <button className="editor-tab active">
                 <Settings size={14} />
-                设置
+                {settingsViewLabel(settingsView, t)}
               </button>
             )}
             {chartOpen && (
@@ -1011,13 +1063,14 @@ export function MainWorkspace() {
             <ChevronRight size={14} />
             <span>renderer</span>
             <ChevronRight size={14} />
-            <span>{activeView === "help" ? "使用说明" : activeView === "settings" ? "settings" : selectedStock ? selectedStock.config.code : "portfolio"}</span>
+            <span>{activeView === "help" ? "使用说明" : activeView === "settings" ? settingsViewLabel(settingsView, t) : selectedStock ? selectedStock.config.code : "portfolio"}</span>
           </div>
           <div className="editor-panel">
             {activeView === "help" ? (
               <HelpDocument />
             ) : activeView === "settings" ? (
               <SettingsPage
+                view={settingsView}
                 state={state}
                 mottoDraft={mottoDraft}
                 savedMotto={savedMotto}
@@ -1026,10 +1079,13 @@ export function MainWorkspace() {
                 mottoError={mottoError}
                 themeError={themeError}
                 onWindowCloseBehaviorChange={updateWindowCloseBehavior}
+                onWatchFloatConfigChange={updateWatchFloatConfig}
                 onThemeSelect={(themeName) => void selectTheme(themeName)}
                 onOpenConfigFile={() => void api.openConfigFile()}
                 onOpenConfigDir={() => void api.openConfigDir()}
-                onToggleMottoWindow={() => void api.toggleMottoWindow()}
+                onToggleFloatWindow={() => void api.toggleCamouflageFloatWindow()}
+                onToggleWatchlistWindow={() => void api.toggleWatchlistFloatWindow()}
+                onToggleMottoWindow={() => void api.toggleMottoFloatWindow()}
                 onMottoDraftChange={updateMottoDraft}
                 onCancelMotto={() => setMottoDraft(savedMotto)}
                 onSaveMotto={() => void saveMotto()}
@@ -1141,238 +1197,6 @@ export function MainWorkspace() {
           </section>
         </div>
       )}
-    </main>
-  );
-}
-
-export function FloatTickerView() {
-  const state = useAppState();
-  const visibleStocks = useVisibleStocks(state);
-  const holdStocks = useHoldStocks(visibleStocks);
-  const [selectedIndex, setSelectedIndex] = useState(0);
-  const [, setNow] = useState(Date.now());
-  const shellRef = useRef<HTMLElement>(null);
-
-  useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(timer);
-  }, []);
-
-  useEffect(() => {
-    const offCycle = api.onCycleStock(() => {
-      setSelectedIndex((index) => {
-        if (!holdStocks.length) return index;
-        const currentCode = visibleStocks[index]?.config.code;
-        const holdIndex = holdStocks.findIndex((stock) => stock.config.code === currentCode);
-        const nextHold = holdStocks[holdIndex === -1 ? 0 : (holdIndex + 1) % holdStocks.length];
-        return Math.max(0, visibleStocks.findIndex((stock) => stock.config.code === nextHold.config.code));
-      });
-    });
-    return () => {
-      offCycle();
-    };
-  }, [holdStocks, visibleStocks]);
-
-  useEffect(() => {
-    if (selectedIndex >= visibleStocks.length) setSelectedIndex(0);
-  }, [selectedIndex, visibleStocks.length]);
-
-  useEffect(() => {
-    const shell = shellRef.current;
-    if (!shell || !state) return;
-    const rect = shell.getBoundingClientRect();
-    void api.resizeWindow(Math.ceil(rect.width), Math.ceil(rect.height));
-  }, [state, selectedIndex, visibleStocks.length]);
-
-  const theme = state ? currentTheme(state.config) : undefined;
-  const selectedStock = visibleStocks[selectedIndex];
-
-  return (
-    <main
-      ref={shellRef}
-      className="ticker-shell drag-region"
-      style={themeStyle(theme)}
-    >
-      {state && selectedStock ? <TickerSummary state={state} stock={selectedStock} compactRefreshBars /> : <span className="muted">No symbols</span>}
-    </main>
-  );
-}
-export function WatchFloatView() {
-  const state = useAppState();
-  const visibleStocks = useVisibleStocks(state);
-  const [selectedCode, setSelectedCode] = useState<string>();
-  const [selectedGroup, setSelectedGroup] = useState("");
-  const [groupPickerOpen, setGroupPickerOpen] = useState(false);
-  const theme = state ? currentTheme(state.config) : undefined;
-  const watchGroups = useMemo(() => buildWatchFloatGroups(visibleStocks, state?.config.stock_groups ?? []), [visibleStocks, state?.config.stock_groups]);
-  const selectedGroupData = selectedGroup ? watchGroups.find((group) => group.tag === selectedGroup) : undefined;
-  const selectedGroupStocks = selectedGroupData?.stocks ?? [];
-
-  useEffect(() => {
-    if (!visibleStocks.length) {
-      setSelectedCode(undefined);
-      return;
-    }
-    if (!selectedCode || !visibleStocks.some((stock) => stock.config.code === selectedCode)) {
-      setSelectedCode(visibleStocks[0].config.code);
-    }
-  }, [selectedCode, visibleStocks]);
-
-  useEffect(() => {
-    if (!watchGroups.length) {
-      setSelectedGroup("");
-      return;
-    }
-    if (!selectedGroup || !watchGroups.some((group) => group.tag === selectedGroup)) {
-      setSelectedGroup(watchGroups[0].tag);
-    }
-  }, [selectedGroup, watchGroups]);
-
-  return (
-    <main className="watch-float-shell drag-region" style={themeStyle(theme)}>
-      <div className={`watch-float-title ${groupPickerOpen ? "open" : "collapsed"}`}>
-        {groupPickerOpen && (
-          <select
-            className="watch-float-select no-drag"
-            value={selectedGroup}
-            onChange={(event) => setSelectedGroup(event.target.value)}
-            aria-label="Watch float group"
-          >
-            {watchGroups.map((group) => (
-              <option value={group.tag} key={group.tag}>{group.tag}</option>
-            ))}
-          </select>
-        )}
-        <span className="watch-float-title-right">
-          <button
-            type="button"
-            className="watch-float-collapse no-drag"
-            onClick={() => setGroupPickerOpen((open) => !open)}
-            aria-label="Toggle group picker"
-            title="Toggle group picker"
-          >
-            <ChevronRight size={11} />
-          </button>
-          <span className="watch-float-drag-hint" aria-hidden="true" />
-        </span>
-      </div>
-      <div className="watch-float-body no-drag">
-        {state ? (
-          <WatchFloatStockList
-            stocks={selectedGroupStocks}
-            selectedCode={selectedCode}
-            theme={currentTheme(state.config)}
-            onSelect={(stock) => setSelectedCode(stock.config.code)}
-          />
-        ) : (
-          <span className="muted">Loading...</span>
-        )}
-      </div>
-    </main>
-  );
-}
-
-function WatchFloatStockList({
-  stocks,
-  selectedCode,
-  theme,
-  onSelect
-}: {
-  stocks: StockStatus[];
-  selectedCode?: string;
-  theme: Theme;
-  onSelect: (stock: StockStatus) => void;
-}) {
-  if (!stocks.length) return <div className="watch-float-empty">No symbols</div>;
-
-  return (
-    <div className="watch-float-list">
-      {stocks.map((stock) => (
-        <button
-          className={`watch-float-row ${stock.config.code === selectedCode ? "active" : ""}`}
-          key={stock.config.code}
-          onClick={() => onSelect(stock)}
-        >
-          <span className="stock-name">{stock.config.alias || stock.market?.name || "--"}</span>
-          <SignedMetric value={stockPercent(stock)} digits={2} suffix="" theme={theme} />
-        </button>
-      ))}
-    </div>
-  );
-}
-
-function buildWatchFloatGroups(stocks: StockStatus[], groupNames: string[]) {
-  const groups = new Map<string, StockStatus[]>();
-  for (const tag of mergeWatchGroups(groupNames)) {
-    groups.set(tag, []);
-  }
-
-  for (const stock of stocks) {
-    const tags = stock.config.tags.length ? stock.config.tags : ["watchlist"];
-    for (const tag of tags) {
-      const key = normalizeWatchGroupName(tag) || "watchlist";
-      groups.set(key, [...(groups.get(key) ?? []), stock]);
-    }
-  }
-
-  return [...groups.entries()]
-    .sort(([left], [right]) => left.localeCompare(right))
-    .map(([tag, groupStocks]) => ({ tag, stocks: groupStocks }));
-}
-export function MottoWindowView() {
-  const state = useAppState();
-  const shellRef = useRef<HTMLElement>(null);
-  const textRef = useRef<HTMLDivElement>(null);
-
-  const startMottoResize = (event: ReactMouseEvent<HTMLButtonElement>) => {
-    event.preventDefault();
-    event.stopPropagation();
-    const startX = event.clientX;
-    const startY = event.clientY;
-    const startWidth = window.innerWidth;
-    const startHeight = window.innerHeight;
-
-    const onMouseMove = (moveEvent: MouseEvent) => {
-      const width = clamp(startWidth + moveEvent.clientX - startX, 120, 720);
-      const height = clamp(startHeight + moveEvent.clientY - startY, 42, 420);
-      void api.resizeWindow(width, height);
-    };
-
-    const onMouseUp = () => {
-      window.removeEventListener("mousemove", onMouseMove);
-      window.removeEventListener("mouseup", onMouseUp);
-    };
-
-    window.addEventListener("mousemove", onMouseMove);
-    window.addEventListener("mouseup", onMouseUp);
-  };
-
-  const motto = state?.config.motto ?? defaultMotto;
-
-  useEffect(() => {
-    const shell = shellRef.current;
-    const text = textRef.current;
-    if (!shell || !text) return;
-
-    const width = clamp(Math.ceil(text.scrollWidth + 36), 120, 520);
-    const height = clamp(Math.ceil(text.scrollHeight + 22), 42, 260);
-    void api.resizeWindow(width, height);
-  }, [motto.text, motto.font_family, motto.font_size, motto.color]);
-
-  return (
-    <main className="motto-window drag-region" ref={shellRef}>
-      <button className="motto-close no-drag" onClick={() => void api.closeWindow()} aria-label="Close motto window" title="Close">
-        <X size={13} />
-      </button>
-      <div
-        className="motto-text"
-        ref={textRef}
-        style={{ color: motto.color, fontFamily: motto.font_family, fontSize: `${motto.font_size}px` }}
-      >
-        {motto.text}
-      </div>
-      <button className="motto-resize-handle no-drag" onMouseDown={startMottoResize} aria-label="Resize motto window" title="Resize" />
-
     </main>
   );
 }
@@ -1705,7 +1529,7 @@ function HelpDocument() {
       <h2>三、股票详情与持仓</h2><p>详情页展示最新价、涨跌幅、市值、今日盈亏和累计盈亏。可编辑股票别名、标签及不同账户的持仓数量和成本，修改后请点击保存。</p>
       <h2>四、K线、分时与交易强度</h2><p>在“视图”菜单或详情页打开图表。详情页的“分时”按钮用于查看盘中走势；“交易强度”可展开查看当前成交量、估算成交量和历史排名。</p>
       <h2>五、7X24 资讯</h2><p>点击左侧报纸图标查看实时市场资讯，可翻页或刷新。数据加载失败时会在资讯面板内显示错误，不影响其他功能。</p>
-      <h2>六、浮窗功能</h2><p>通过“窗口”菜单打开股票浮窗、自选浮窗或格言窗口。股票浮窗快捷键为 Ctrl+Alt+9，自选浮窗快捷键为 Ctrl+Alt+0。</p>
+      <h2>六、浮窗功能</h2><p>通过“窗口”菜单打开伪装浮窗、自选浮窗或座右铭浮窗。伪装浮窗快捷键为 Ctrl+Alt+9，自选浮窗快捷键为 Ctrl+Alt+0。</p>
       <h2>七、界面显示</h2><p>“视图”菜单中的勾选项控制资源管理器、编辑区、侧边栏和状态栏是否显示。勾选表示展示，取消勾选表示隐藏。</p>
       <h2>八、语言与主题</h2><p>顶部“语言”菜单可切换中文和 English。左下角设置按钮可切换颜色主题。</p>
       <h2>九、右侧设置</h2><p>右侧面板可刷新行情、打开配置文件、设置关闭按钮行为，并编辑格言内容、字体、大小和颜色。</p>
@@ -2219,49 +2043,144 @@ function StockDetail({ state, stock, theme, onOpenChart }: { state: AppState; st
   );
 }
 
-function SettingsPage({
-  state,
-  mottoDraft,
-  savedMotto,
-  mottoDirty,
-  mottoSaving,
-  mottoError,
-  themeError,
-  onWindowCloseBehaviorChange,
-  onThemeSelect,
+function SettingsOutline({ active, onSelect }: { active: SettingsView; onSelect: (view: SettingsView) => void }) {
+  const { t } = useI18n();
+  return (
+    <nav className="settings-outline" aria-label="Settings sections">
+      {settingsNavItems.map((item) => (
+        <button
+          type="button"
+          className={`settings-outline-item ${active === item.value ? "active" : ""}`}
+          onClick={() => onSelect(item.value)}
+          key={item.value}
+        >
+          <Settings size={14} />
+          <span>{t(item.labelKey)}</span>
+        </button>
+      ))}
+    </nav>
+  );
+}
+
+function settingsViewLabel(view: SettingsView, t: (key: `settings.${"title" | "general" | "mottoFloat" | "watchlistFloat" | "camouflageFloat"}`) => string): string {
+  const key = settingsNavItems.find((item) => item.value === view)?.labelKey;
+  return key ? t(key) : t("settings.title");
+}
+
+function settingsViewDescription(view: SettingsView, t: (key: `settings.${"generalDescription" | "mottoDescription" | "watchlistDescription" | "camouflageDescription"}`) => string): string {
+  if (view === "general") return t("settings.generalDescription");
+  if (view === "motto") return t("settings.mottoDescription");
+  if (view === "watch-float") return t("settings.watchlistDescription");
+  return t("settings.camouflageDescription");
+}
+
+const WATCH_FLOAT_STOCK_KEY_PREFIX = "watch-float-stock:";
+const WATCH_FLOAT_GROUP_KEY_PREFIX = "watch-float-group:";
+const builtInWatchFloatProfileNames = new Set(["simple", "sublime", "赛博朋克"]);
+
+function watchFloatStockKey(code: string) {
+  return `${WATCH_FLOAT_STOCK_KEY_PREFIX}${code}`;
+}
+
+function parseWatchFloatStockKey(key: Key) {
+  const value = String(key);
+  return value.startsWith(WATCH_FLOAT_STOCK_KEY_PREFIX) ? value.slice(WATCH_FLOAT_STOCK_KEY_PREFIX.length) : undefined;
+}
+
+function buildWatchFloatTree(stocks: StockStatus[], groupNames: string[], search: string): { treeData: TreeDataNode[]; expandedKeys: Key[] } {
+  const query = search.trim().toLowerCase();
+  const groups = new Map<string, StockStatus[]>();
+  const ensureGroup = (tag: string) => {
+    const key = normalizeWatchGroupName(tag) || "watchlist";
+    if (!groups.has(key)) groups.set(key, []);
+    return key;
+  };
+
+  for (const tag of mergeWatchGroups(groupNames)) ensureGroup(tag);
+  for (const stock of stocks) {
+    const tag = stock.config.tags.find((item) => item.trim()) ?? "watchlist";
+    const groupKey = ensureGroup(tag);
+    groups.set(groupKey, [...(groups.get(groupKey) ?? []), stock]);
+  }
+
+  const expandedKeys: Key[] = [];
+  const treeData = [...groups.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map<TreeDataNode | undefined>(([tag, groupStocks]) => {
+      const groupMatches = !query || tag.toLowerCase().includes(query);
+      const children = groupStocks
+        .filter((stock) => {
+          if (groupMatches) return true;
+          return displayName(stock).toLowerCase().includes(query) || stock.config.code.toLowerCase().includes(query);
+        })
+        .map<TreeDataNode>((stock) => ({
+          key: watchFloatStockKey(stock.config.code),
+          title: (
+            <span className="watch-float-tree-stock">
+              <span>{displayName(stock)}</span>
+              <small>{stock.config.code}</small>
+            </span>
+          ),
+          isLeaf: true
+        }));
+
+      if (query && children.length) expandedKeys.push(`${WATCH_FLOAT_GROUP_KEY_PREFIX}${tag}`);
+      if (!groupMatches && !children.length) return undefined;
+
+      return {
+        key: `${WATCH_FLOAT_GROUP_KEY_PREFIX}${tag}`,
+        title: tag,
+        children
+      };
+    })
+    .filter((node): node is TreeDataNode => Boolean(node));
+
+  return { treeData, expandedKeys };
+}
+
+function orderedWatchFloatColumns(columns: WatchFloatColumn[]) {
+  const configured = columns
+    .map((column) => watchFloatColumnOptions.find((option) => option.value === column))
+    .filter((option): option is { value: WatchFloatColumn; label: string } => Boolean(option));
+  const configuredValues = new Set(configured.map((option) => option.value));
+  return [
+    ...configured,
+    ...watchFloatColumnOptions.filter((option) => !configuredValues.has(option.value))
+  ];
+}
+
+function moveWatchFloatColumn(options: Array<{ value: WatchFloatColumn; label: string }>, source: WatchFloatColumn, target: WatchFloatColumn) {
+  const next = options.map((option) => option.value);
+  const sourceIndex = next.indexOf(source);
+  const targetIndex = next.indexOf(target);
+  if (sourceIndex === -1 || targetIndex === -1 || sourceIndex === targetIndex) return next;
+  const [item] = next.splice(sourceIndex, 1);
+  next.splice(targetIndex, 0, item);
+  return next;
+}
+
+function watchFloatProfileLabel(name: string) {
+  return builtInWatchFloatProfileNames.has(name) ? name : name;
+}
+
+function SettingsPageHeader({
+  view,
   onOpenConfigFile,
-  onOpenConfigDir,
-  onToggleMottoWindow,
-  onMottoDraftChange,
-  onCancelMotto,
-  onSaveMotto
+  onOpenConfigDir
 }: {
-  state: AppState;
-  mottoDraft: MottoConfig;
-  savedMotto: MottoConfig;
-  mottoDirty: boolean;
-  mottoSaving: boolean;
-  mottoError: string;
-  themeError: string;
-  onWindowCloseBehaviorChange: (behavior: AppConfig["window_close_behavior"]) => void;
-  onThemeSelect: (themeName: string) => void;
-  onOpenConfigFile: () => void;
-  onOpenConfigDir: () => void;
-  onToggleMottoWindow: () => void;
-  onMottoDraftChange: (patch: Partial<MottoConfig>) => void;
-  onCancelMotto: () => void;
-  onSaveMotto: () => void;
+  view: SettingsView;
+  onOpenConfigFile?: () => void;
+  onOpenConfigDir?: () => void;
 }) {
   const { t } = useI18n();
-  const entries = Object.keys(state.config.themes).sort((left, right) => left.localeCompare(right));
 
   return (
-    <div className="settings-page">
-      <header className="settings-header">
-        <div>
-          <h2>设置</h2>
-          <p>配置 FinBox 的窗口、外观和常用行为。</p>
-        </div>
+    <header className="settings-header">
+      <div>
+        <h2>{settingsViewLabel(view, t)}</h2>
+        <p>{settingsViewDescription(view, t)}</p>
+      </div>
+      {view === "general" && onOpenConfigFile && onOpenConfigDir && (
         <div className="settings-header-actions">
           <button className="tool-button" onClick={onOpenConfigFile}>
             <FileText size={14} />
@@ -2272,49 +2191,441 @@ function SettingsPage({
             {t("side.openConfigFolder")}
           </button>
         </div>
-      </header>
+      )}
+    </header>
+  );
+}
 
-      <section className="settings-section">
-        <div className="settings-section-title">
-          <h3>{t("side.window")}</h3>
-          <p>控制主窗口关闭按钮的默认行为。</p>
-        </div>
-        <label className="settings-field">
-          <span>{t("side.closeButton")}</span>
-          <select value={state.config.window_close_behavior ?? "close"} onChange={(event) => onWindowCloseBehaviorChange(event.target.value as AppConfig["window_close_behavior"])}>
-            <option value="close">{t("side.close")}</option>
-            <option value="tray">{t("side.minimizeToTray")}</option>
-          </select>
-        </label>
-      </section>
+function SettingsPage({
+  view,
+  state,
+  mottoDraft,
+  savedMotto,
+  mottoDirty,
+  mottoSaving,
+  mottoError,
+  themeError,
+  onWindowCloseBehaviorChange,
+  onWatchFloatConfigChange,
+  onThemeSelect,
+  onOpenConfigFile,
+  onOpenConfigDir,
+  onToggleFloatWindow,
+  onToggleWatchlistWindow,
+  onToggleMottoWindow,
+  onMottoDraftChange,
+  onCancelMotto,
+  onSaveMotto
+}: {
+  view: SettingsView;
+  state: AppState;
+  mottoDraft: MottoConfig;
+  savedMotto: MottoConfig;
+  mottoDirty: boolean;
+  mottoSaving: boolean;
+  mottoError: string;
+  themeError: string;
+  onWindowCloseBehaviorChange: (behavior: AppConfig["window_close_behavior"]) => void;
+  onWatchFloatConfigChange: (patch: Partial<WatchFloatConfig>) => void;
+  onThemeSelect: (themeName: string) => void;
+  onOpenConfigFile: () => void;
+  onOpenConfigDir: () => void;
+  onToggleFloatWindow: () => void;
+  onToggleWatchlistWindow: () => void;
+  onToggleMottoWindow: () => void;
+  onMottoDraftChange: (patch: Partial<MottoConfig>) => void;
+  onCancelMotto: () => void;
+  onSaveMotto: () => void;
+}) {
+  const { t } = useI18n();
+  const [watchFloatSearch, setWatchFloatSearch] = useState("");
+  const [watchFloatExpandedKeys, setWatchFloatExpandedKeys] = useState<Key[]>([]);
+  const [draggedWatchFloatColumn, setDraggedWatchFloatColumn] = useState<WatchFloatColumn>();
+  const [watchFloatProfileName, setWatchFloatProfileName] = useState("");
+  const entries = Object.keys(state.config.themes).sort((left, right) => left.localeCompare(right));
+  const watchFloatColumns = new Set(state.config.watch_float.columns);
+  const orderedColumnOptions = useMemo(() => orderedWatchFloatColumns(state.config.watch_float.columns), [state.config.watch_float.columns]);
+  const watchFloatTree = useMemo(
+    () => buildWatchFloatTree(state.stocks, state.config.stock_groups, watchFloatSearch),
+    [state.stocks, state.config.stock_groups, watchFloatSearch]
+  );
+  const selectedWatchFloatStocks = state.config.watch_float.stock_codes
+    .map((code) => state.stocks.find((stock) => stock.config.code.toLowerCase() === code.toLowerCase()))
+    .filter((stock): stock is StockStatus => Boolean(stock));
+  const checkedWatchFloatKeys = selectedWatchFloatStocks.map((stock) => watchFloatStockKey(stock.config.code));
+  const setWatchFloatStocks = (codes: string[]) => {
+    const knownOrder = new Map(state.stocks.map((stock, index) => [stock.config.code.toLowerCase(), index]));
+    onWatchFloatConfigChange({
+      stock_codes: [...new Set(codes)].sort((left, right) => (knownOrder.get(left.toLowerCase()) ?? 0) - (knownOrder.get(right.toLowerCase()) ?? 0))
+    });
+  };
+  const handleWatchFloatTreeCheck = (checked: Key[] | { checked: Key[]; halfChecked: Key[] }) => {
+    const checkedKeys = Array.isArray(checked) ? checked : checked.checked;
+    setWatchFloatStocks(checkedKeys.map(parseWatchFloatStockKey).filter((code): code is string => Boolean(code)));
+  };
+  const removeWatchFloatStock = (code: string) => {
+    setWatchFloatStocks(state.config.watch_float.stock_codes.filter((item) => item.toLowerCase() !== code.toLowerCase()));
+  };
+  const setWatchFloatColumn = (column: WatchFloatColumn, checked: boolean) => {
+    const selected = new Set(state.config.watch_float.columns);
+    if (checked) {
+      selected.add(column);
+    } else {
+      selected.delete(column);
+    }
+    onWatchFloatConfigChange({ columns: orderedColumnOptions.map((option) => option.value).filter((value) => selected.has(value)) });
+  };
+  const reorderWatchFloatColumn = (target: WatchFloatColumn) => {
+    if (!draggedWatchFloatColumn || draggedWatchFloatColumn === target) return;
+    const nextOrder = moveWatchFloatColumn(orderedColumnOptions, draggedWatchFloatColumn, target);
+    onWatchFloatConfigChange({ columns: nextOrder.filter((column) => watchFloatColumns.has(column)) });
+    setDraggedWatchFloatColumn(undefined);
+  };
+  const updateWatchFloatStyle = (patch: Partial<WatchFloatConfig["style"]>) => {
+    onWatchFloatConfigChange({ style: { ...state.config.watch_float.style, ...patch } });
+  };
+  const updateWatchFloatColumnColor = (column: WatchFloatColumn, color: string) => {
+    updateWatchFloatStyle({
+      column_colors: {
+        ...state.config.watch_float.style.column_colors,
+        [column]: color
+      }
+    });
+  };
+  const updateWatchFloatMetricColor = (column: "change" | "day_profit", direction: "up" | "down", color: string) => {
+    updateWatchFloatStyle({
+      metric_colors: {
+        ...state.config.watch_float.style.metric_colors,
+        [column]: {
+          ...state.config.watch_float.style.metric_colors[column],
+          [direction]: color
+        }
+      }
+    });
+  };
+  const watchFloatProfiles = Object.keys(state.config.watch_float.profiles).sort((left, right) => {
+    const leftBuiltIn = builtInWatchFloatProfileNames.has(left);
+    const rightBuiltIn = builtInWatchFloatProfileNames.has(right);
+    if (leftBuiltIn !== rightBuiltIn) return leftBuiltIn ? -1 : 1;
+    return left.localeCompare(right);
+  });
+  const applyWatchFloatProfile = (name: string) => {
+    const style = state.config.watch_float.profiles[name];
+    if (!style) return;
+    onWatchFloatConfigChange({
+      style,
+      active_profile: name
+    });
+  };
+  const saveWatchFloatProfile = () => {
+    const normalizedName = watchFloatProfileName.trim();
+    if (!normalizedName || builtInWatchFloatProfileNames.has(normalizedName)) return;
+    onWatchFloatConfigChange({
+      active_profile: normalizedName,
+      profiles: {
+        ...state.config.watch_float.profiles,
+        [normalizedName]: state.config.watch_float.style
+      }
+    });
+    setWatchFloatProfileName("");
+  };
+  const resetWatchFloatProfile = () => applyWatchFloatProfile("simple");
 
-      <section className="settings-section">
-        <div className="settings-section-title">
-          <h3>外观</h3>
-          <p>选择程序使用的颜色主题。</p>
-        </div>
-        <label className="settings-field">
-          <span>{t("side.theme")}</span>
-          <select value={state.config.current_theme} onChange={(event) => onThemeSelect(event.target.value)}>
-            {entries.map((themeName) => (
-              <option value={themeName} key={themeName}>
-                {formatThemeName(themeName)}
-              </option>
-            ))}
-          </select>
-        </label>
-        {themeError && <div className="save-error quick-pick-error">{themeError}</div>}
-      </section>
+  useEffect(() => {
+    if (watchFloatSearch.trim()) setWatchFloatExpandedKeys(watchFloatTree.expandedKeys);
+  }, [watchFloatSearch, watchFloatTree.expandedKeys]);
 
+  if (view === "general") {
+    return (
+      <div className="settings-page">
+        <SettingsPageHeader view={view} onOpenConfigFile={onOpenConfigFile} onOpenConfigDir={onOpenConfigDir} />
+        <section className="settings-section">
+          <div className="settings-section-title">
+            <h3>{t("side.window")}</h3>
+            <p>{t("settings.windowCloseDescription")}</p>
+          </div>
+          <label className="settings-field">
+            <span>{t("side.closeButton")}</span>
+            <select value={state.config.window_close_behavior ?? "close"} onChange={(event) => onWindowCloseBehaviorChange(event.target.value as AppConfig["window_close_behavior"])}>
+              <option value="close">{t("side.close")}</option>
+              <option value="tray">{t("side.minimizeToTray")}</option>
+            </select>
+          </label>
+        </section>
+        <section className="settings-section">
+          <div className="settings-section-title">
+            <h3>{t("settings.appearance")}</h3>
+            <p>{t("settings.appearanceDescription")}</p>
+          </div>
+          <label className="settings-field">
+            <span>{t("side.theme")}</span>
+            <select value={state.config.current_theme} onChange={(event) => onThemeSelect(event.target.value)}>
+              {entries.map((themeName) => (
+                <option value={themeName} key={themeName}>
+                  {formatThemeName(themeName)}
+                </option>
+              ))}
+            </select>
+          </label>
+          {themeError && <div className="save-error quick-pick-error">{themeError}</div>}
+        </section>
+      </div>
+    );
+  }
+
+  if (view === "watch-float") {
+    return (
+      <div className="settings-page">
+        <SettingsPageHeader view={view} />
+        <section className="settings-section">
+          <div className="settings-section-title">
+            <h3>{t("settings.watchlistFloat")}</h3>
+            <p>{t("settings.watchlistDescription")}</p>
+          </div>
+          <div className="settings-motto-actions">
+            <button className="tool-button" onClick={onToggleWatchlistWindow}>
+              <Maximize2 size={14} />
+              {t("side.toggleWatchlistFloat")}
+            </button>
+          </div>
+          <div className="watch-float-settings">
+            <div className="watch-float-settings-block">
+              <span className="watch-float-settings-label">{t("settings.watchlistSymbols")}</span>
+              <div className="watch-float-tree-panel">
+                <Input.Search
+                  allowClear
+                  size="small"
+                  value={watchFloatSearch}
+                  placeholder={t("settings.searchWatchlistSymbols")}
+                  onChange={(event) => setWatchFloatSearch(event.target.value)}
+                />
+                <Tree
+                  checkable
+                  blockNode
+                  className="watch-float-select-tree"
+                  checkedKeys={checkedWatchFloatKeys}
+                  expandedKeys={watchFloatExpandedKeys}
+                  treeData={watchFloatTree.treeData}
+                  onCheck={handleWatchFloatTreeCheck}
+                  onExpand={(keys) => setWatchFloatExpandedKeys(keys)}
+                />
+                <div className="watch-float-selected-tags" aria-label={t("settings.selectedWatchlistSymbols")}>
+                  {selectedWatchFloatStocks.length ? selectedWatchFloatStocks.map((stock) => (
+                    <AntTag closable onClose={() => removeWatchFloatStock(stock.config.code)} key={stock.config.code}>
+                      {displayName(stock)} {stock.config.code}
+                    </AntTag>
+                  )) : <span className="muted">{t("settings.noWatchlistSymbols")}</span>}
+                </div>
+              </div>
+            </div>
+            <div className="watch-float-settings-block">
+              <span className="watch-float-settings-label">{t("settings.watchlistColumns")}</span>
+              <div className="watch-float-column-options">
+                {orderedColumnOptions.map((column) => (
+                  <label
+                    className={`settings-check-row compact draggable ${draggedWatchFloatColumn === column.value ? "dragging" : ""}`}
+                    draggable
+                    key={column.value}
+                    onDragStart={() => setDraggedWatchFloatColumn(column.value)}
+                    onDragEnd={() => setDraggedWatchFloatColumn(undefined)}
+                    onDragOver={(event: ReactDragEvent<HTMLLabelElement>) => event.preventDefault()}
+                    onDrop={() => reorderWatchFloatColumn(column.value)}
+                  >
+                    <GripVertical size={14} aria-hidden="true" />
+                    <input
+                      type="checkbox"
+                      checked={watchFloatColumns.has(column.value)}
+                      onChange={(event) => setWatchFloatColumn(column.value, event.target.checked)}
+                    />
+                    <span>{column.label}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div className="watch-float-settings-block">
+              <span className="watch-float-settings-label">{t("settings.watchlistStyle")}</span>
+              <div className="watch-float-style-grid">
+                <label className="settings-field compact">
+                  <span>{t("settings.layout")}</span>
+                  <select
+                    value={state.config.watch_float.style.layout}
+                    onChange={(event) => updateWatchFloatStyle({ layout: event.target.value === "horizontal" ? "horizontal" : "vertical" })}
+                  >
+                    <option value="vertical">{t("settings.verticalLayout")}</option>
+                    <option value="horizontal">{t("settings.horizontalLayout")}</option>
+                  </select>
+                </label>
+                <label className="settings-field compact">
+                  <span>{t("settings.fontFamily")}</span>
+                  <input
+                    value={state.config.watch_float.style.font_family}
+                    onChange={(event) => updateWatchFloatStyle({ font_family: event.target.value })}
+                  />
+                </label>
+                <label className="settings-field compact">
+                  <span>{t("settings.fontSize")}</span>
+                  <input
+                    type="number"
+                    min={9}
+                    max={32}
+                    value={state.config.watch_float.style.font_size}
+                    onChange={(event) => updateWatchFloatStyle({ font_size: Number(event.target.value) })}
+                  />
+                </label>
+                <label className="settings-field compact">
+                  <span>{t("settings.textColor")}</span>
+                  <div className="watch-float-color-grid">
+                    {watchFloatFlatColorOptions.map((column) => (
+                      <label className="watch-float-column-color" key={column.value}>
+                        <span>{column.label}</span>
+                        <input
+                          type="color"
+                          value={state.config.watch_float.style.column_colors[column.value]}
+                          onChange={(event) => updateWatchFloatColumnColor(column.value, event.target.value)}
+                        />
+                      </label>
+                    ))}
+                    {watchFloatMetricColorOptions.map((column) => (
+                      <div className="watch-float-metric-color" key={column.value}>
+                        <span>{column.label}</span>
+                        <label>
+                          <small>{t("settings.upColor")}</small>
+                          <input
+                            type="color"
+                            value={state.config.watch_float.style.metric_colors[column.value].up}
+                            onChange={(event) => updateWatchFloatMetricColor(column.value, "up", event.target.value)}
+                          />
+                        </label>
+                        <label>
+                          <small>{t("settings.downColor")}</small>
+                          <input
+                            type="color"
+                            value={state.config.watch_float.style.metric_colors[column.value].down}
+                            onChange={(event) => updateWatchFloatMetricColor(column.value, "down", event.target.value)}
+                          />
+                        </label>
+                      </div>
+                    ))}
+                  </div>
+                </label>
+                <label className="settings-field compact">
+                  <span>{t("settings.backgroundColor")}</span>
+                  <input
+                    type="color"
+                    value={state.config.watch_float.style.background_color}
+                    onChange={(event) => updateWatchFloatStyle({ background_color: event.target.value })}
+                  />
+                </label>
+                <label className="settings-field compact">
+                  <span>{t("settings.backgroundOpacity")}</span>
+                  <input
+                    type="range"
+                    min={0}
+                    max={1}
+                    step={0.05}
+                    value={state.config.watch_float.style.background_opacity}
+                    onChange={(event) => updateWatchFloatStyle({ background_opacity: Number(event.target.value) })}
+                  />
+                </label>
+                <label className="settings-field compact">
+                  <span>{t("settings.borderColor")}</span>
+                  <input
+                    type="color"
+                    value={state.config.watch_float.style.border_color}
+                    onChange={(event) => updateWatchFloatStyle({ border_color: event.target.value })}
+                  />
+                </label>
+                <label className="watch-float-style-toggle">
+                  <span>{t("settings.showBorder")}</span>
+                  <input
+                    type="checkbox"
+                    checked={state.config.watch_float.style.show_border}
+                    onChange={(event) => updateWatchFloatStyle({ show_border: event.target.checked })}
+                  />
+                </label>
+              </div>
+            </div>
+            <div className="watch-float-settings-block">
+              <span className="watch-float-settings-label">{t("settings.watchlistProfile")}</span>
+              <div className="watch-float-profile-row">
+                <label className="settings-field compact">
+                  <span>{t("settings.watchlistProfile")}</span>
+                  <select
+                    value={state.config.watch_float.active_profile}
+                    onChange={(event) => applyWatchFloatProfile(event.target.value)}
+                  >
+                    {watchFloatProfiles.map((name) => (
+                      <option value={name} key={name}>{watchFloatProfileLabel(name)}</option>
+                    ))}
+                    {!state.config.watch_float.profiles[state.config.watch_float.active_profile] && (
+                      <option value={state.config.watch_float.active_profile}>{state.config.watch_float.active_profile}</option>
+                    )}
+                  </select>
+                </label>
+                <label className="settings-field compact">
+                  <span>{t("settings.profileName")}</span>
+                  <input
+                    value={watchFloatProfileName}
+                    placeholder={t("settings.profileName")}
+                    onChange={(event) => setWatchFloatProfileName(event.target.value)}
+                  />
+                </label>
+                <div className="watch-float-profile-actions">
+                  <button
+                    className="tool-button"
+                    type="button"
+                    disabled={!watchFloatProfileName.trim() || builtInWatchFloatProfileNames.has(watchFloatProfileName.trim())}
+                    onClick={saveWatchFloatProfile}
+                  >
+                    {t("settings.saveProfile")}
+                  </button>
+                  <button className="tool-button" type="button" onClick={resetWatchFloatProfile}>{t("settings.resetDefault")}</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+    );
+  }
+
+  if (view === "camouflage-float") {
+    return (
+      <div className="settings-page">
+        <SettingsPageHeader view={view} />
+        <section className="settings-section">
+          <div className="settings-section-title">
+            <h3>{t("settings.camouflageFloat")}</h3>
+            <p>{t("settings.camouflageDescription")}</p>
+          </div>
+          <div className="settings-motto-actions">
+            <button className="tool-button" onClick={onToggleFloatWindow}>
+              <Maximize2 size={14} />
+              {t("side.toggleCamouflageFloat")}
+            </button>
+          </div>
+          <div className="camouflage-preview">
+            <span>{t("settings.displayMode")}</span>
+            <strong>CPU / NET / I/O</strong>
+            <small>{t("settings.camouflagePreview")}</small>
+          </div>
+        </section>
+      </div>
+    );
+  }
+
+  return (
+    <div className="settings-page">
+      <SettingsPageHeader view={view} />
       <section className="settings-section">
         <div className="settings-section-title">
           <h3>{t("side.motto")}</h3>
-          <p>编辑格言窗口的文字和显示样式。</p>
+          <p>{t("settings.mottoDescription")}</p>
         </div>
         <div className="settings-motto-actions">
           <button className="tool-button" onClick={onToggleMottoWindow}>
             <Maximize2 size={14} />
-            {t("side.toggleMottoWindow")}
+            {t("side.toggleMottoFloat")}
           </button>
         </div>
         <textarea

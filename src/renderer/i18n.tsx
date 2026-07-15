@@ -6,13 +6,15 @@ import zhCnYaml from "./locales/zh-CN.yaml?raw";
 
 export type Locale = "zh-CN" | "en-US";
 export type TranslationKey =
-  | `menu.${"application" | "file" | "view" | "window" | "language" | "help" | "usageGuide" | "about" | "addSymbol" | "refresh" | "openConfig" | "openConfigFolder" | "openNotesFolder" | "quit" | "explorer" | "editor" | "sidePanel" | "statusBar" | "details" | "chart" | "toggleStockFloat" | "toggleWatchFloat" | "toggleMottoWindow"}`
+  | `menu.${"application" | "file" | "view" | "window" | "language" | "help" | "usageGuide" | "about" | "addSymbol" | "refresh" | "openConfig" | "openConfigFolder" | "openNotesFolder" | "quit" | "explorer" | "editor" | "sidePanel" | "statusBar" | "details" | "chart" | "toggleCamouflageFloat" | "toggleWatchlistFloat" | "toggleMottoFloat"}`
   | `language.${"chinese" | "english"}`
   | `common.${"add" | "cancel" | "save" | "saving" | "load" | "loading" | "previousPage" | "nextPage"}`
   | `detail.${"selectSymbol" | "saveAlias" | "cancelAliasEdit" | "editAlias" | "toggleMinuteChart" | "closeMinute" | "minute" | "openChart" | "quoteTable" | "lastPrice" | "change" | "changePercent" | "open" | "high" | "low" | "prevClose" | "shares" | "marketValue" | "dayProfitLoss" | "totalProfitLoss" | "returnRate" | "quoteTime" | "updated" | "tags" | "noTags" | "removeTag" | "unsavedTagChanges" | "saveTags" | "positions" | "row" | "account" | "cost" | "noPositions" | "removePosition" | "unsavedPositionChanges" | "savePositions" | "discussions" | "loadDiscussionsHint" | "noComments"}`
   | `update.${"title" | "check" | "download" | "checking" | "available" | "downloading" | "downloaded" | "latest" | "failed" | "packagedOnly" | "autoCheck" | "restartInstall"}`
   | `about.${"title" | "version" | "description"}`
-  | `side.${"openConfigFolder" | "toggleStockFloat" | "toggleWatchFloat" | "more" | "selectedSymbol" | "none" | "code" | "refresh" | "config" | "window" | "closeButton" | "minimizeToTray" | "close" | "theme" | "motto" | "toggleMottoWindow" | "mottoPlaceholder" | "font" | "size" | "color" | "unsavedMotto" | "saveMotto"}`
+  | `side.${"openConfigFolder" | "toggleCamouflageFloat" | "toggleWatchlistFloat" | "more" | "selectedSymbol" | "none" | "code" | "refresh" | "config" | "window" | "closeButton" | "minimizeToTray" | "close" | "theme" | "motto" | "toggleMottoFloat" | "mottoPlaceholder" | "font" | "size" | "color" | "unsavedMotto" | "saveMotto"}`
+  | `settings.${"title" | "general" | "mottoFloat" | "watchlistFloat" | "camouflageFloat" | "generalDescription" | "mottoDescription" | "watchlistDescription" | "camouflageDescription" | "windowCloseDescription" | "appearance" | "appearanceDescription" | "watchlistProfile" | "profileName" | "saveProfile" | "resetDefault" | "profileNamePrompt" | "watchlistSymbols" | "watchlistColumns" | "watchlistStyle" | "searchWatchlistSymbols" | "selectedWatchlistSymbols" | "noWatchlistSymbols" | "layout" | "verticalLayout" | "horizontalLayout" | "fontFamily" | "fontSize" | "textColor" | "upColor" | "downColor" | "backgroundColor" | "backgroundOpacity" | "borderColor" | "showBorder" | "displayMode" | "camouflagePreview"}`
+  | `float.${"addWatchlistSymbols" | "openWatchlistSettings"}`
   | `stockNotes.${"title" | "empty" | "strategy" | "strategyPlaceholder" | "daily" | "dailyPlaceholder" | "previousDay" | "nextDay" | "resizePanels" | "unsaved" | "saveShortcut"}`
   | `news.${"noNews"}`
   | `status.${"shIndex" | "accountProfitLoss" | "refreshInterval" | "accountConfig" | "totalInvestment" | "cash"}`
@@ -47,7 +49,7 @@ const I18nContext = createContext<I18nValue | undefined>(undefined);
 function initialLocale(): Locale {
   const saved = window.localStorage.getItem(STORAGE_KEY);
   if (saved === "zh-CN" || saved === "en-US") return saved;
-  return window.navigator.language.toLowerCase().startsWith("zh") ? "zh-CN" : "en-US";
+  return "zh-CN";
 }
 
 export function I18nProvider({ children }: { children: ReactNode }) {

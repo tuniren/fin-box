@@ -1,5 +1,6 @@
-import { KLineView } from "./components/KLineView";
-import { FloatTickerView, MainWorkspace, MottoWindowView, WatchFloatView } from "./views/MainWorkspace";
+﻿import { KLineView } from "./components/KLineView";
+import { CamouflageFloatView, MottoFloatView, WatchlistFloatView } from "./components/FloatingWindows";
+import { MainWorkspace } from "./views/MainWorkspace";
 
 export function App() {
   const hash = decodeURIComponent(window.location.hash);
@@ -7,8 +8,8 @@ export function App() {
     const [, , code, name] = hash.split("/");
     return <KLineView code={code} name={name ?? code} />;
   }
-  if (hash === "#/float") return <FloatTickerView />;
-  if (hash === "#/watch-float") return <WatchFloatView />;
-  if (hash === "#/motto") return <MottoWindowView />;
+  if (hash === "#/float") return <CamouflageFloatView />;
+  if (hash === "#/watch-float") return <WatchlistFloatView />;
+  if (hash === "#/motto") return <MottoFloatView />;
   return <MainWorkspace />;
 }

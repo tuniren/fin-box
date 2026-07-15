@@ -19,9 +19,9 @@ menu:
   statusBar: 状态栏
   details: 详情
   chart: 图表
-  toggleStockFloat: 切换股票浮窗
-  toggleWatchFloat: 切换自选浮窗
-  toggleMottoWindow: 切换格言窗口
+  toggleCamouflageFloat: 切换伪装浮窗
+  toggleWatchlistFloat: 切换自选浮窗
+  toggleMottoFloat: 切换座右铭浮窗
 language:
   chinese: 中文
   english: English
@@ -93,8 +93,8 @@ update:
   restartInstall: 重启并安装更新
 side:
   openConfigFolder: 打开配置目录
-  toggleStockFloat: 切换股票浮窗
-  toggleWatchFloat: 切换自选浮窗
+  toggleCamouflageFloat: 切换伪装浮窗
+  toggleWatchlistFloat: 切换自选浮窗
   more: 更多
   selectedSymbol: 当前股票
   none: 无
@@ -107,13 +107,54 @@ side:
   close: 关闭
   theme: 主题
   motto: 格言
-  toggleMottoWindow: 切换格言窗口
+  toggleMottoFloat: 切换座右铭浮窗
   mottoPlaceholder: 写下一句随时提醒自己的话
   font: 字体
   size: 大小
   color: 颜色
   unsavedMotto: 格言修改未保存
   saveMotto: 保存格言
+settings:
+  title: 设置
+  general: 通用设置
+  mottoFloat: 座右铭浮窗
+  watchlistFloat: 自选浮窗
+  camouflageFloat: 伪装浮窗
+  generalDescription: 配置 FinBox 的窗口、外观和常用行为。
+  mottoDescription: 编辑座右铭浮窗的文本和显示样式。
+  watchlistDescription: 配置自选浮窗展示哪些个股和列。
+  camouflageDescription: 管理伪装成系统监控指标的伪装浮窗。
+  windowCloseDescription: 控制主窗口关闭按钮的默认行为。
+  appearance: 外观
+  appearanceDescription: 选择程序使用的颜色主题。
+  watchlistProfile: 配置方案
+  profileName: 方案名称
+  saveProfile: 保存当前方案
+  resetDefault: 还原默认
+  profileNamePrompt: 请输入自选浮窗配置方案名称
+  watchlistSymbols: 展示个股
+  watchlistColumns: 展示列
+  watchlistStyle: 浮窗样式
+  searchWatchlistSymbols: 搜索自选
+  selectedWatchlistSymbols: 已选个股
+  noWatchlistSymbols: 暂未选择个股
+  layout: 布局
+  verticalLayout: 纵向布局
+  horizontalLayout: 横向布局
+  fontFamily: 字体
+  fontSize: 字号
+  textColor: 文字颜色
+  upColor: 涨色
+  downColor: 跌色
+  backgroundColor: 背景色
+  backgroundOpacity: 背景透明度
+  borderColor: 边框颜色
+  showBorder: 显示边框
+  displayMode: 显示方式
+  camouflagePreview: 使用股票行情数据伪装成系统监控指标。
+float:
+  addWatchlistSymbols: 请添加自选
+  openWatchlistSettings: 打开配置
 stockNotes:
   title: 笔记
   empty: 打开某只股票的详情页后，在这里记录策略和每日复盘。

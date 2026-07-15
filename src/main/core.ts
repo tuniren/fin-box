@@ -4,7 +4,7 @@ import path from "node:path";
 import * as yaml from "js-yaml";
 import { ConfigManager } from "./config";
 import { fetchKLineData, fetchMultipleStocks, fetchStockComments as fetchThsStockComments, fetchStockNews as fetchSinaStockNews, fetchStockNewsArticle as fetchSinaStockNewsArticle, fetchTencentFiveDayMinuteData, fetchTencentMinuteData, searchStocks } from "./sina";
-import type { AppConfig, AppState, KLinePoint, KLineScale, MottoConfig, Position, StockConfig, StockJournal, StockJournalNote } from "../shared/types";
+import type { AppConfig, AppState, KLinePoint, KLineScale, MottoConfig, Position, StockConfig, StockJournal, StockJournalNote, WatchFloatColumn, WatchFloatConfig, WatchFloatStyle } from "../shared/types";
 
 const INDEX_CODE = "sh000001";
 const TRADING_REFRESH_MIN_MS = 3000;
@@ -127,6 +127,24 @@ export class AppCore {
       font_family: motto.font_family.trim() || "Microsoft YaHei",
       font_size: Math.min(Math.max(Number(motto.font_size) || 14, 10), 36),
       color: /^#[0-9a-fA-F]{6}$/.test(motto.color) ? motto.color : "#f8fafc"
+    };
+
+    this.configManager.save(config);
+    this.applyConfig(config);
+  }
+
+  updateWatchFloatConfig(watchFloat: WatchFloatConfig): void {
+    const config = this.configManager.loadOrDefault();
+    const knownCodes = new Map(config.stocks.map((stock) => [stock.code.toLowerCase(), stock.code]));
+    const columns: WatchFloatColumn[] = ["name", "price", "change", "day_profit"];
+    const nextColumns = [...new Set(watchFloat.columns.filter((column) => columns.includes(column)))];
+
+    config.watch_float = {
+      stock_codes: [...new Set(watchFloat.stock_codes.map((code) => knownCodes.get(code.toLowerCase())).filter((code): code is string => Boolean(code)))],
+      columns: nextColumns.length ? nextColumns : ["name", "change"],
+      style: normalizeWatchFloatStyle(watchFloat.style, config.watch_float.style),
+      active_profile: watchFloat.active_profile.trim() || "custom",
+      profiles: normalizeWatchFloatProfiles(watchFloat.profiles, config.watch_float.profiles)
     };
 
     this.configManager.save(config);
@@ -618,6 +636,97 @@ function normalizeOptionalNumber(value: unknown): number | undefined {
   if (value === undefined || value === null || value === "") return undefined;
   const next = Number(value);
   return Number.isFinite(next) ? next : undefined;
+}
+
+function normalizeWatchFloatStyle(style: WatchFloatStyle | undefined, fallback: WatchFloatStyle): WatchFloatStyle {
+  const fontSize = Number(style?.font_size);
+  const opacity = Number(style?.background_opacity);
+  return {
+    layout: style?.layout === "horizontal" ? "horizontal" : "vertical",
+    font_family: style?.font_family.trim() || fallback.font_family,
+    font_size: Number.isFinite(fontSize) ? Math.min(Math.max(fontSize, 9), 32) : fallback.font_size,
+    text_color: normalizeHexColor(style?.text_color, fallback.text_color),
+    column_colors: normalizeWatchFloatColumnColors(style?.column_colors, style?.text_color ?? fallback.text_color, fallback.column_colors),
+    metric_colors: normalizeWatchFloatMetricColors(style?.metric_colors, style?.column_colors, style?.text_color ?? fallback.text_color, fallback.metric_colors),
+    background_color: normalizeHexColor(style?.background_color, fallback.background_color),
+    background_opacity: Number.isFinite(opacity) ? Math.min(Math.max(opacity, 0), 1) : fallback.background_opacity,
+    border_color: normalizeHexColor(style?.border_color, fallback.border_color),
+    show_border: Boolean(style?.show_border)
+  };
+}
+
+function normalizeWatchFloatProfiles(
+  profiles: Record<string, WatchFloatStyle> | undefined,
+  fallback: Record<string, WatchFloatStyle>
+): Record<string, WatchFloatStyle> {
+  if (!profiles) return fallback;
+  const next: Record<string, WatchFloatStyle> = {};
+  for (const [name, style] of Object.entries(profiles)) {
+    const normalizedName = name.trim();
+    if (!normalizedName) continue;
+    const fallbackStyle = fallback[normalizedName] ?? fallback.simple ?? defaultWatchFloatStyle();
+    next[normalizedName] = normalizeWatchFloatStyle(style, fallbackStyle);
+  }
+  return {
+    ...next,
+    simple: fallback.simple,
+    sublime: fallback.sublime,
+    "赛博朋克": fallback["赛博朋克"]
+  };
+}
+
+function defaultWatchFloatStyle(): WatchFloatStyle {
+  return {
+    layout: "vertical",
+    font_family: "Microsoft YaHei",
+    font_size: 12,
+    text_color: "#334155",
+    column_colors: { name: "#334155", price: "#334155", change: "#334155", day_profit: "#334155" },
+    metric_colors: { change: { up: "#334155", down: "#334155" }, day_profit: { up: "#334155", down: "#334155" } },
+    background_color: "#ffffff",
+    background_opacity: 0,
+    border_color: "#334155",
+    show_border: false
+  };
+}
+
+function normalizeWatchFloatColumnColors(
+  colors: Record<WatchFloatColumn, string> | undefined,
+  fallbackColor: unknown,
+  fallbackColors?: Record<WatchFloatColumn, string>
+): Record<WatchFloatColumn, string> {
+  const fallback = normalizeHexColor(fallbackColor, "#334155");
+  return {
+    name: normalizeHexColor(colors?.name, fallbackColors?.name ?? fallback),
+    price: normalizeHexColor(colors?.price, fallbackColors?.price ?? fallback),
+    change: normalizeHexColor(colors?.change, fallbackColors?.change ?? fallback),
+    day_profit: normalizeHexColor(colors?.day_profit, fallbackColors?.day_profit ?? fallback)
+  };
+}
+
+function normalizeWatchFloatMetricColors(
+  metrics: WatchFloatStyle["metric_colors"] | undefined,
+  columnColors: Partial<Record<WatchFloatColumn, string>> | undefined,
+  fallbackColor: unknown,
+  fallbackMetrics?: WatchFloatStyle["metric_colors"]
+): WatchFloatStyle["metric_colors"] {
+  const fallback = normalizeHexColor(fallbackColor, "#334155");
+  const changeFallback = normalizeHexColor(columnColors?.change, fallback);
+  const profitFallback = normalizeHexColor(columnColors?.day_profit, fallback);
+  return {
+    change: {
+      up: normalizeHexColor(metrics?.change?.up, fallbackMetrics?.change.up ?? changeFallback),
+      down: normalizeHexColor(metrics?.change?.down, fallbackMetrics?.change.down ?? changeFallback)
+    },
+    day_profit: {
+      up: normalizeHexColor(metrics?.day_profit?.up, fallbackMetrics?.day_profit.up ?? profitFallback),
+      down: normalizeHexColor(metrics?.day_profit?.down, fallbackMetrics?.day_profit.down ?? profitFallback)
+    }
+  };
+}
+
+function normalizeHexColor(value: unknown, fallback: string): string {
+  return typeof value === "string" && /^#[0-9a-fA-F]{6}$/.test(value) ? value : fallback;
 }
 
 function createState(config: AppConfig): AppState {

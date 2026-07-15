@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from "electron";
-import type { AppState, FinBoxApi, KLineScale, MottoConfig, UpdateStatus } from "./shared/types";
+import type { AppState, FinBoxApi, KLineScale, MottoConfig, UpdateStatus, WatchFloatConfig } from "./shared/types";
 
 // Expose only the FinBox IPC surface to the renderer.
 // React can still manage windows and market state while contextIsolation stays on.
@@ -18,6 +18,7 @@ const api: FinBoxApi = {
   removeStock: (code: string) => ipcRenderer.invoke("remove-stock", code),
   updateAccountConfig: (patch) => ipcRenderer.invoke("update-account-config", patch),
   updateMotto: (motto: MottoConfig) => ipcRenderer.invoke("update-motto", motto),
+  updateWatchFloatConfig: (config: WatchFloatConfig) => ipcRenderer.invoke("update-watch-float-config", config),
   updateWindowCloseBehavior: (behavior) => ipcRenderer.invoke("update-window-close-behavior", behavior),
   updateTheme: (themeName: string) => ipcRenderer.invoke("update-theme", themeName),
   updateStockAlias: (code: string, alias?: string) => ipcRenderer.invoke("update-stock-alias", code, alias),
@@ -45,9 +46,10 @@ const api: FinBoxApi = {
   resizeWindow: (width: number, height: number) => ipcRenderer.invoke("resize-window", width, height),
   startDrag: () => ipcRenderer.invoke("start-drag"),
   openKLineWindow: (code: string, name: string) => ipcRenderer.invoke("open-kline-window", code, name),
-  toggleFloatWindow: () => ipcRenderer.invoke("toggle-float-window"),
-  toggleWatchFloatWindow: () => ipcRenderer.invoke("toggle-watch-float-window"),
-  toggleMottoWindow: () => ipcRenderer.invoke("toggle-motto-window"),
+  toggleCamouflageFloatWindow: () => ipcRenderer.invoke("toggle-camouflage-float-window"),
+  toggleWatchlistFloatWindow: () => ipcRenderer.invoke("toggle-watchlist-float-window"),
+  toggleMottoFloatWindow: () => ipcRenderer.invoke("toggle-motto-float-window"),
+  openWatchlistFloatSettings: () => ipcRenderer.invoke("open-watchlist-float-settings"),
   minimizeWindow: () => ipcRenderer.invoke("window-minimize"),
   toggleMaximizeWindow: () => ipcRenderer.invoke("window-toggle-maximize"),
   closeWindow: () => ipcRenderer.invoke("window-close"),
@@ -71,6 +73,11 @@ const api: FinBoxApi = {
     const listener = () => callback();
     ipcRenderer.on("toggle-expand", listener);
     return () => ipcRenderer.off("toggle-expand", listener);
+  },
+  onOpenWatchlistFloatSettings: (callback: () => void) => {
+    const listener = () => callback();
+    ipcRenderer.on("open-watchlist-float-settings", listener);
+    return () => ipcRenderer.off("open-watchlist-float-settings", listener);
   }
 };
 

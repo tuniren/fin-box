@@ -19,9 +19,9 @@ menu:
   statusBar: Status Bar
   details: Details
   chart: Chart
-  toggleStockFloat: Toggle Stock Float
-  toggleWatchFloat: Toggle Watch Float
-  toggleMottoWindow: Toggle Motto Window
+  toggleCamouflageFloat: Toggle Camouflage Float
+  toggleWatchlistFloat: Toggle Watchlist Float
+  toggleMottoFloat: Toggle Motto Float
 language:
   chinese: 中文
   english: English
@@ -93,8 +93,8 @@ update:
   restartInstall: Restart and Install
 side:
   openConfigFolder: Open config folder
-  toggleStockFloat: Toggle stock float
-  toggleWatchFloat: Toggle watch float
+  toggleCamouflageFloat: Toggle camouflage float
+  toggleWatchlistFloat: Toggle watchlist float
   more: More
   selectedSymbol: Selected Symbol
   none: None
@@ -107,13 +107,54 @@ side:
   close: Close
   theme: Theme
   motto: Motto
-  toggleMottoWindow: Toggle motto window
+  toggleMottoFloat: Toggle motto float
   mottoPlaceholder: Write a reminder to keep in sight
   font: Font
   size: Size
   color: Color
   unsavedMotto: Unsaved motto
   saveMotto: Save Motto
+settings:
+  title: Settings
+  general: General Settings
+  mottoFloat: Motto Float
+  watchlistFloat: Watchlist Float
+  camouflageFloat: Camouflage Float
+  generalDescription: Configure FinBox windows, appearance, and common behavior.
+  mottoDescription: Edit the motto float text and display style.
+  watchlistDescription: Choose which symbols and columns appear in the watchlist float.
+  camouflageDescription: Manage the camouflage float that looks like system monitor metrics.
+  windowCloseDescription: Control the default behavior of the main window close button.
+  appearance: Appearance
+  appearanceDescription: Choose the color theme used by the app.
+  watchlistProfile: Profile
+  profileName: Profile name
+  saveProfile: Save Profile
+  resetDefault: Reset Default
+  profileNamePrompt: Enter a watchlist float profile name
+  watchlistSymbols: Symbols
+  watchlistColumns: Columns
+  watchlistStyle: Float Style
+  searchWatchlistSymbols: Search watchlist
+  selectedWatchlistSymbols: Selected symbols
+  noWatchlistSymbols: No symbols selected
+  layout: Layout
+  verticalLayout: Vertical
+  horizontalLayout: Horizontal
+  fontFamily: Font
+  fontSize: Size
+  textColor: Text color
+  upColor: Up
+  downColor: Down
+  backgroundColor: Background
+  backgroundOpacity: Background opacity
+  borderColor: Border color
+  showBorder: Show border
+  displayMode: Display mode
+  camouflagePreview: Stock quote data is disguised as system monitor metrics.
+float:
+  addWatchlistSymbols: Add watchlist symbols
+  openWatchlistSettings: Open Settings
 stockNotes:
   title: Notes
   empty: Open a stock detail page to write strategy and daily notes here.

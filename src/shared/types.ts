@@ -32,10 +32,43 @@ export type MottoConfig = {
   color: string;
 };
 
+export type WatchFloatColumn = "name" | "price" | "change" | "day_profit";
+
+export type WatchFloatMetricColumn = "change" | "day_profit";
+
+export type WatchFloatLayout = "vertical" | "horizontal";
+
+export type WatchFloatMetricColors = Record<WatchFloatMetricColumn, {
+  up: string;
+  down: string;
+}>;
+
+export type WatchFloatStyle = {
+  layout: WatchFloatLayout;
+  font_family: string;
+  font_size: number;
+  text_color: string;
+  column_colors: Record<WatchFloatColumn, string>;
+  metric_colors: WatchFloatMetricColors;
+  background_color: string;
+  background_opacity: number;
+  border_color: string;
+  show_border: boolean;
+};
+
+export type WatchFloatConfig = {
+  stock_codes: string[];
+  columns: WatchFloatColumn[];
+  style: WatchFloatStyle;
+  active_profile: string;
+  profiles: Record<string, WatchFloatStyle>;
+};
+
 export type AppConfig = {
   total_investment?: number;
   cash?: number;
   motto: MottoConfig;
+  watch_float: WatchFloatConfig;
   window_close_behavior: "tray" | "close";
   hide_zero_shares: boolean;
   stocks: StockConfig[];
@@ -186,6 +219,7 @@ export type FinBoxApi = {
   removeStock: (code: string) => Promise<void>;
   updateAccountConfig: (patch: Pick<AppConfig, "total_investment" | "cash">) => Promise<void>;
   updateMotto: (motto: MottoConfig) => Promise<void>;
+  updateWatchFloatConfig: (config: WatchFloatConfig) => Promise<void>;
   updateWindowCloseBehavior: (behavior: AppConfig["window_close_behavior"]) => Promise<void>;
   updateTheme: (themeName: string) => Promise<void>;
   updateStockAlias: (code: string, alias?: string) => Promise<void>;
@@ -213,9 +247,10 @@ export type FinBoxApi = {
   resizeWindow: (width: number, height: number) => Promise<void>;
   startDrag: () => Promise<void>;
   openKLineWindow: (code: string, name: string) => Promise<void>;
-  toggleFloatWindow: () => Promise<void>;
-  toggleWatchFloatWindow: () => Promise<void>;
-  toggleMottoWindow: () => Promise<void>;
+  toggleCamouflageFloatWindow: () => Promise<void>;
+  toggleWatchlistFloatWindow: () => Promise<void>;
+  toggleMottoFloatWindow: () => Promise<void>;
+  openWatchlistFloatSettings: () => Promise<void>;
   minimizeWindow: () => Promise<void>;
   toggleMaximizeWindow: () => Promise<void>;
   closeWindow: () => Promise<void>;
@@ -223,4 +258,5 @@ export type FinBoxApi = {
   onUpdateStatus: (callback: (status: UpdateStatus) => void) => () => void;
   onCycleStock: (callback: () => void) => () => void;
   onToggleExpand: (callback: () => void) => () => void;
+  onOpenWatchlistFloatSettings: (callback: () => void) => () => void;
 };
