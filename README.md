@@ -2,6 +2,12 @@
 
 FinBox 盯盘软件
 
+## 下载
+https://github.com/tuniren/fin-box/releases
+
+1. FinBox-Setup-x.x.x-win-x64.exe（标准安装版）（推荐安装） 
+2. FinBox-Portable-x.x.x-win-x64.exe（便携免安装版）
+
 ## 功能截图
 
 > 以下图片为 README 展示用样例路径，可将实际截图放到 `docs/screenshots` 目录后替换文件名或图片内容。
@@ -33,13 +39,6 @@ FinBox 盯盘软件
 聚合市场资讯列表，方便在盯盘过程中快速关注市场动态。
 
 ![资讯](docs/screenshots/7x24.png)
-
-
-## 下载
-https://github.com/tuniren/fin-box/releases
-
-1. FinBox-Setup-x.x.x-win-x64.exe（标准安装版）（推荐安装） 
-2. FinBox-Portable-x.x.x-win-x64.exe（便携免安装版）
 
 ## 版本号说明
 
