@@ -55,6 +55,9 @@ import { useI18n } from "../i18n";
 
 const api = window.finBox;
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
+const DEFAULT_TRADING_REFRESH_INTERVAL_MS = 1000;
+const MIN_TRADING_REFRESH_INTERVAL_MS = 500;
+const MAX_TRADING_REFRESH_INTERVAL_MS = 10000;
 const STOCK_NOTES_SPLIT_STORAGE_KEY = "fin-box.stockNotesSplit";
 const watchFloatColumnOptions: Array<{ value: WatchFloatColumn; label: string }> = [
   { value: "name", label: "名称" },
@@ -74,7 +77,7 @@ type ActivityView = "watchlist" | "news" | "notes" | "help" | "settings";
 type ActiveView = "details" | "chart" | "note" | "help" | "settings";
 type StockView = "details" | "chart";
 type TitleMenu = "file" | "view" | "window" | "language" | "help";
-type SettingsView = "general" | "motto" | "watch-float" | "camouflage-float";
+type SettingsView = "general" | "market-refresh" | "motto" | "watch-float" | "camouflage-float";
 type WatchPromptKind = "create-group" | "rename-group" | "edit-alias";
 type WatchPromptState = {
   kind: WatchPromptKind;
@@ -90,8 +93,9 @@ const defaultMotto: MottoConfig = {
   font_size: 14,
   color: "#f8fafc"
 };
-const settingsNavItems: Array<{ value: SettingsView; labelKey: `settings.${"general" | "mottoFloat" | "watchlistFloat" | "camouflageFloat"}` }> = [
+const settingsNavItems: Array<{ value: SettingsView; labelKey: `settings.${"general" | "marketRefresh" | "mottoFloat" | "watchlistFloat" | "camouflageFloat"}` }> = [
   { value: "general", labelKey: "settings.general" },
+  { value: "market-refresh", labelKey: "settings.marketRefresh" },
   { value: "motto", labelKey: "settings.mottoFloat" },
   { value: "watch-float", labelKey: "settings.watchlistFloat" },
   { value: "camouflage-float", labelKey: "settings.camouflageFloat" }
@@ -506,10 +510,15 @@ export function MainWorkspace() {
     void api.updateWatchFloatConfig({
       stock_codes: patch.stock_codes ?? state.config.watch_float.stock_codes,
       columns: patch.columns ?? state.config.watch_float.columns,
+      layout: patch.layout ?? state.config.watch_float.layout,
       style: patch.style ?? state.config.watch_float.style,
       active_profile: patch.active_profile ?? state.config.watch_float.active_profile,
       profiles: patch.profiles ?? state.config.watch_float.profiles
     });
+  };
+
+  const updateTradingRefreshInterval = (intervalMs: number) => {
+    void api.updateTradingRefreshInterval(intervalMs);
   };
 
   const toggleMaximizeFromTitleBar = (event: ReactMouseEvent<HTMLElement>) => {
@@ -1080,6 +1089,7 @@ export function MainWorkspace() {
                 themeError={themeError}
                 onWindowCloseBehaviorChange={updateWindowCloseBehavior}
                 onWatchFloatConfigChange={updateWatchFloatConfig}
+                onTradingRefreshIntervalChange={updateTradingRefreshInterval}
                 onThemeSelect={(themeName) => void selectTheme(themeName)}
                 onOpenConfigFile={() => void api.openConfigFile()}
                 onOpenConfigDir={() => void api.openConfigDir()}
@@ -2062,13 +2072,14 @@ function SettingsOutline({ active, onSelect }: { active: SettingsView; onSelect:
   );
 }
 
-function settingsViewLabel(view: SettingsView, t: (key: `settings.${"title" | "general" | "mottoFloat" | "watchlistFloat" | "camouflageFloat"}`) => string): string {
+function settingsViewLabel(view: SettingsView, t: (key: `settings.${"title" | "general" | "marketRefresh" | "mottoFloat" | "watchlistFloat" | "camouflageFloat"}`) => string): string {
   const key = settingsNavItems.find((item) => item.value === view)?.labelKey;
   return key ? t(key) : t("settings.title");
 }
 
-function settingsViewDescription(view: SettingsView, t: (key: `settings.${"generalDescription" | "mottoDescription" | "watchlistDescription" | "camouflageDescription"}`) => string): string {
+function settingsViewDescription(view: SettingsView, t: (key: `settings.${"generalDescription" | "marketRefreshDescription" | "mottoDescription" | "watchlistDescription" | "camouflageDescription"}`) => string): string {
   if (view === "general") return t("settings.generalDescription");
+  if (view === "market-refresh") return t("settings.marketRefreshDescription");
   if (view === "motto") return t("settings.mottoDescription");
   if (view === "watch-float") return t("settings.watchlistDescription");
   return t("settings.camouflageDescription");
@@ -2207,6 +2218,7 @@ function SettingsPage({
   themeError,
   onWindowCloseBehaviorChange,
   onWatchFloatConfigChange,
+  onTradingRefreshIntervalChange,
   onThemeSelect,
   onOpenConfigFile,
   onOpenConfigDir,
@@ -2227,6 +2239,7 @@ function SettingsPage({
   themeError: string;
   onWindowCloseBehaviorChange: (behavior: AppConfig["window_close_behavior"]) => void;
   onWatchFloatConfigChange: (patch: Partial<WatchFloatConfig>) => void;
+  onTradingRefreshIntervalChange: (intervalMs: number) => void;
   onThemeSelect: (themeName: string) => void;
   onOpenConfigFile: () => void;
   onOpenConfigDir: () => void;
@@ -2242,6 +2255,7 @@ function SettingsPage({
   const [watchFloatExpandedKeys, setWatchFloatExpandedKeys] = useState<Key[]>([]);
   const [draggedWatchFloatColumn, setDraggedWatchFloatColumn] = useState<WatchFloatColumn>();
   const [watchFloatProfileName, setWatchFloatProfileName] = useState("");
+  const [refreshIntervalDraft, setRefreshIntervalDraft] = useState(() => String(state.config.trading_refresh_interval_ms ?? DEFAULT_TRADING_REFRESH_INTERVAL_MS));
   const entries = Object.keys(state.config.themes).sort((left, right) => left.localeCompare(right));
   const watchFloatColumns = new Set(state.config.watch_float.columns);
   const orderedColumnOptions = useMemo(() => orderedWatchFloatColumns(state.config.watch_float.columns), [state.config.watch_float.columns]);
@@ -2330,6 +2344,18 @@ function SettingsPage({
     setWatchFloatProfileName("");
   };
   const resetWatchFloatProfile = () => applyWatchFloatProfile("simple");
+  const commitRefreshInterval = () => {
+    const parsed = Number(refreshIntervalDraft);
+    const next = Number.isFinite(parsed)
+      ? clamp(Math.round(parsed), MIN_TRADING_REFRESH_INTERVAL_MS, MAX_TRADING_REFRESH_INTERVAL_MS)
+      : DEFAULT_TRADING_REFRESH_INTERVAL_MS;
+    setRefreshIntervalDraft(String(next));
+    if (next !== state.config.trading_refresh_interval_ms) onTradingRefreshIntervalChange(next);
+  };
+
+  useEffect(() => {
+    setRefreshIntervalDraft(String(state.config.trading_refresh_interval_ms ?? DEFAULT_TRADING_REFRESH_INTERVAL_MS));
+  }, [state.config.trading_refresh_interval_ms]);
 
   useEffect(() => {
     if (watchFloatSearch.trim()) setWatchFloatExpandedKeys(watchFloatTree.expandedKeys);
@@ -2368,6 +2394,36 @@ function SettingsPage({
             </select>
           </label>
           {themeError && <div className="save-error quick-pick-error">{themeError}</div>}
+        </section>
+      </div>
+    );
+  }
+
+  if (view === "market-refresh") {
+    return (
+      <div className="settings-page">
+        <SettingsPageHeader view={view} />
+        <section className="settings-section">
+          <div className="settings-section-title">
+            <h3>{t("settings.marketRefresh")}</h3>
+            <p>{t("settings.marketRefreshDescription")}</p>
+          </div>
+          <label className="settings-field refresh-interval-field">
+            <span>{t("settings.tradingRefreshInterval")}</span>
+            <input
+              type="number"
+              min={MIN_TRADING_REFRESH_INTERVAL_MS}
+              max={MAX_TRADING_REFRESH_INTERVAL_MS}
+              step={100}
+              value={refreshIntervalDraft}
+              onChange={(event) => setRefreshIntervalDraft(event.target.value)}
+              onBlur={commitRefreshInterval}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") event.currentTarget.blur();
+              }}
+            />
+            <small>{t("settings.tradingRefreshIntervalHint")}</small>
+          </label>
         </section>
       </div>
     );
@@ -2443,18 +2499,21 @@ function SettingsPage({
               </div>
             </div>
             <div className="watch-float-settings-block">
+              <span className="watch-float-settings-label">{t("settings.layout")}</span>
+              <label className="settings-field compact">
+                <span>{t("settings.layout")}</span>
+                <select
+                  value={state.config.watch_float.layout}
+                  onChange={(event) => onWatchFloatConfigChange({ layout: event.target.value === "horizontal" ? "horizontal" : "vertical" })}
+                >
+                  <option value="vertical">{t("settings.verticalLayout")}</option>
+                  <option value="horizontal">{t("settings.horizontalLayout")}</option>
+                </select>
+              </label>
+            </div>
+            <div className="watch-float-settings-block">
               <span className="watch-float-settings-label">{t("settings.watchlistStyle")}</span>
               <div className="watch-float-style-grid">
-                <label className="settings-field compact">
-                  <span>{t("settings.layout")}</span>
-                  <select
-                    value={state.config.watch_float.style.layout}
-                    onChange={(event) => updateWatchFloatStyle({ layout: event.target.value === "horizontal" ? "horizontal" : "vertical" })}
-                  >
-                    <option value="vertical">{t("settings.verticalLayout")}</option>
-                    <option value="horizontal">{t("settings.horizontalLayout")}</option>
-                  </select>
-                </label>
                 <label className="settings-field compact">
                   <span>{t("settings.fontFamily")}</span>
                   <input

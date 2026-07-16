@@ -15,7 +15,7 @@ export function MarketStatusBar({ state, theme }: { state: AppState; theme: Them
       <MarketTile label={t("detail.dayProfitLoss")} value={formatSigned(sumDayProfit(state.stocks), 0)} delta={sumDayProfit(state.stocks)} theme={theme} />
       <MarketTile label={t("status.accountProfitLoss")} value={formatOptionalSigned(accountTotalProfit(state.config, state.stocks), 0)} delta={accountTotalProfit(state.config, state.stocks)} theme={theme} />
       <MarketTile label={t("detail.marketValue")} value={formatMaybe(sumMarketValue(state.stocks), 0)} theme={theme} />
-      <MarketTile label={t("status.refreshInterval")} value="3-5s" theme={theme} />
+      <MarketTile label={t("status.refreshInterval")} value={`${state.config.trading_refresh_interval_ms}ms`} theme={theme} />
       <AccountConfigPanel state={state} />
     </footer>
   );

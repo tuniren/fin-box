@@ -117,16 +117,20 @@ side:
 settings:
   title: 设置
   general: 通用设置
+  marketRefresh: 行情刷新
   mottoFloat: 座右铭浮窗
   watchlistFloat: 自选浮窗
   camouflageFloat: 伪装浮窗
   generalDescription: 配置 FinBox 的窗口、外观和常用行为。
+  marketRefreshDescription: 设置开盘期间左侧自选树和自选浮窗使用的行情刷新间隔。
   mottoDescription: 编辑座右铭浮窗的文本和显示样式。
   watchlistDescription: 配置自选浮窗展示哪些个股和列。
   camouflageDescription: 管理伪装成系统监控指标的伪装浮窗。
   windowCloseDescription: 控制主窗口关闭按钮的默认行为。
   appearance: 外观
   appearanceDescription: 选择程序使用的颜色主题。
+  tradingRefreshInterval: 开盘刷新间隔
+  tradingRefreshIntervalHint: 单位 ms，范围 500-10000，默认 1000。
   watchlistProfile: 配置方案
   profileName: 方案名称
   saveProfile: 保存当前方案

@@ -117,16 +117,20 @@ side:
 settings:
   title: Settings
   general: General Settings
+  marketRefresh: Market Refresh
   mottoFloat: Motto Float
   watchlistFloat: Watchlist Float
   camouflageFloat: Camouflage Float
   generalDescription: Configure FinBox windows, appearance, and common behavior.
+  marketRefreshDescription: Set the quote refresh interval used by the watch tree and watchlist float while markets are open.
   mottoDescription: Edit the motto float text and display style.
   watchlistDescription: Choose which symbols and columns appear in the watchlist float.
   camouflageDescription: Manage the camouflage float that looks like system monitor metrics.
   windowCloseDescription: Control the default behavior of the main window close button.
   appearance: Appearance
   appearanceDescription: Choose the color theme used by the app.
+  tradingRefreshInterval: Open-market refresh interval
+  tradingRefreshIntervalHint: Applies during trading hours. Range 500-10000 ms.
   watchlistProfile: Profile
   profileName: Profile name
   saveProfile: Save Profile

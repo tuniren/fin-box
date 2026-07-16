@@ -2,13 +2,11 @@ import { app, BrowserWindow, shell } from "electron";
 import fs from "node:fs";
 import path from "node:path";
 import * as yaml from "js-yaml";
-import { ConfigManager } from "./config";
+import { ConfigManager, normalizeTradingRefreshInterval } from "./config";
 import { fetchKLineData, fetchMultipleStocks, fetchStockComments as fetchThsStockComments, fetchStockNews as fetchSinaStockNews, fetchStockNewsArticle as fetchSinaStockNewsArticle, fetchTencentFiveDayMinuteData, fetchTencentMinuteData, searchStocks } from "./sina";
 import type { AppConfig, AppState, KLinePoint, KLineScale, MottoConfig, Position, StockConfig, StockJournal, StockJournalNote, WatchFloatColumn, WatchFloatConfig, WatchFloatStyle } from "../shared/types";
 
 const INDEX_CODE = "sh000001";
-const TRADING_REFRESH_MIN_MS = 3000;
-const TRADING_REFRESH_JITTER_MS = 2000;
 const OFF_HOURS_REFRESH_MS = 300000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const INTRADAY_KLINE_CACHE_MS = 60 * 1000;
@@ -142,6 +140,7 @@ export class AppCore {
     config.watch_float = {
       stock_codes: [...new Set(watchFloat.stock_codes.map((code) => knownCodes.get(code.toLowerCase())).filter((code): code is string => Boolean(code)))],
       columns: nextColumns.length ? nextColumns : ["name", "change"],
+      layout: watchFloat.layout === "horizontal" ? "horizontal" : "vertical",
       style: normalizeWatchFloatStyle(watchFloat.style, config.watch_float.style),
       active_profile: watchFloat.active_profile.trim() || "custom",
       profiles: normalizeWatchFloatProfiles(watchFloat.profiles, config.watch_float.profiles)
@@ -149,6 +148,15 @@ export class AppCore {
 
     this.configManager.save(config);
     this.applyConfig(config);
+  }
+
+  updateTradingRefreshInterval(intervalMs: number): void {
+    const config = this.configManager.loadOrDefault();
+    config.trading_refresh_interval_ms = normalizeTradingRefreshInterval(intervalMs);
+
+    this.configManager.save(config);
+    this.applyConfig(config);
+    this.scheduleNextRefresh();
   }
 
   updateWindowCloseBehavior(behavior: AppConfig["window_close_behavior"]): void {
@@ -340,7 +348,10 @@ export class AppCore {
 
   private scheduleNextRefresh(): void {
     if (this.timer) clearTimeout(this.timer);
-    const interval = dataRefreshIntervalMs(this.state.config.stocks.some((stock) => /^hk\d{5}$/i.test(stock.code)));
+    const interval = dataRefreshIntervalMs(
+      this.state.config.stocks.some((stock) => /^hk\d{5}$/i.test(stock.code)),
+      this.state.config.trading_refresh_interval_ms
+    );
     this.state.next_market_refresh = Date.now() + interval;
     this.broadcast();
     this.timer = setTimeout(() => {
@@ -642,7 +653,6 @@ function normalizeWatchFloatStyle(style: WatchFloatStyle | undefined, fallback: 
   const fontSize = Number(style?.font_size);
   const opacity = Number(style?.background_opacity);
   return {
-    layout: style?.layout === "horizontal" ? "horizontal" : "vertical",
     font_family: style?.font_family.trim() || fallback.font_family,
     font_size: Number.isFinite(fontSize) ? Math.min(Math.max(fontSize, 9), 32) : fallback.font_size,
     text_color: normalizeHexColor(style?.text_color, fallback.text_color),
@@ -677,7 +687,6 @@ function normalizeWatchFloatProfiles(
 
 function defaultWatchFloatStyle(): WatchFloatStyle {
   return {
-    layout: "vertical",
     font_family: "Microsoft YaHei",
     font_size: 12,
     text_color: "#334155",
@@ -739,9 +748,9 @@ function createState(config: AppConfig): AppState {
   };
 }
 
-function dataRefreshIntervalMs(hasHongKongStocks: boolean): number {
+function dataRefreshIntervalMs(hasHongKongStocks: boolean, tradingRefreshIntervalMs: number): number {
   if (!isTradingTime(hasHongKongStocks)) return OFF_HOURS_REFRESH_MS;
-  return TRADING_REFRESH_MIN_MS + Math.floor(Math.random() * TRADING_REFRESH_JITTER_MS);
+  return normalizeTradingRefreshInterval(tradingRefreshIntervalMs);
 }
 
 function nextLocalDayStart(now: number): number {

@@ -1953,6 +1953,7 @@ b {
   align-content: start;
   gap: 2px;
   padding: 8px;
+  background: #f7f9fc;
 }
 
 .settings-outline-item {
@@ -1963,17 +1964,23 @@ b {
   width: 100%;
   min-height: 32px;
   padding: 0 8px;
-  border: 0;
+  border: 1px solid transparent;
   border-radius: 5px;
   background: transparent;
-  color: #cccccc;
+  color: #4a5560;
   text-align: left;
 }
 
-.settings-outline-item:hover,
+.settings-outline-item:hover {
+  border-color: #dbe3ee;
+  background: #eef5fd;
+  color: #1f2933;
+}
+
 .settings-outline-item.active {
-  background: #2a2d2e;
-  color: #ffffff;
+  border-color: #9bc5ee;
+  background: #e2f0ff;
+  color: #0f4f7f;
 }
 
 .settings-outline-item span {
@@ -3441,6 +3448,7 @@ b {
   font-weight: 600;
 }
 
+.settings-field input:not([type="color"]):not([type="range"]):not([type="checkbox"]),
 .settings-field select,
 .settings-textarea,
 .settings-page .motto-style-grid input {
@@ -3452,12 +3460,14 @@ b {
   color: #333333;
 }
 
+.settings-field input:not([type="color"]):not([type="range"]):not([type="checkbox"]),
 .settings-field select,
 .settings-page .motto-style-grid input {
   height: 28px;
   padding: 0 8px;
 }
 
+.settings-field input:not([type="color"]):not([type="range"]):not([type="checkbox"]):focus,
 .settings-field select:focus,
 .settings-textarea:focus,
 .settings-page .motto-style-grid input:focus {
@@ -3471,6 +3481,10 @@ b {
   padding: 9px;
   resize: vertical;
   line-height: 1.5;
+}
+
+.refresh-interval-field small {
+  color: #7a8794;
 }
 
 .settings-section .motto-style-grid,

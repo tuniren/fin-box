@@ -10,6 +10,7 @@ import { TickerSummary } from "./TickerSummary";
 
 const api = window.finBox;
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
+let textMeasureCanvas: HTMLCanvasElement | undefined;
 
 const defaultMotto: MottoConfig = {
   text: "\u51b7\u9759\uff0c\u8010\u5fc3\uff0c\u53ea\u505a\u770b\u5f97\u61c2\u7684\u51b3\u5b9a\u3002",
@@ -104,6 +105,7 @@ export function WatchlistFloatView() {
   const { t } = useI18n();
   const state = useFloatAppState();
   const shellRef = useRef<HTMLElement>(null);
+  const lastSizeRef = useRef<{ width: number; height: number } | undefined>(undefined);
   const visibleStocks = useVisibleStocks(state);
   const watchFloatConfig = state?.config.watch_float;
   const floatStocks = useMemo(() => {
@@ -128,20 +130,21 @@ export function WatchlistFloatView() {
   }, [floatStocks, selectedCode]);
 
   useEffect(() => {
-    if (watchFloatConfig?.style.layout !== "horizontal") return;
     const shell = shellRef.current;
-    const row = shell?.querySelector<HTMLElement>(".watch-float-row.horizontal");
-    if (!shell || !row) return;
+    if (!shell || !watchFloatConfig) return;
 
     const resizeToContent = () => {
-      const width = Math.min(Math.ceil(row.scrollWidth + 2), Math.floor(window.screen.availWidth));
-      const height = Math.max(32, Math.ceil(row.getBoundingClientRect().height + 10));
+      const size = measureWatchFloatContent(shell, watchFloatConfig.layout);
+      const width = Math.min(size.width, Math.floor(window.screen.availWidth));
+      const height = Math.min(size.height, Math.floor(window.screen.availHeight));
+      if (lastSizeRef.current?.width === width && lastSizeRef.current.height === height) return;
+      lastSizeRef.current = { width, height };
       void api.resizeWindow(width, height);
     };
 
     const frame = window.requestAnimationFrame(resizeToContent);
     return () => window.cancelAnimationFrame(frame);
-  }, [floatStocks, state?.config.watch_float.columns, watchFloatConfig?.style]);
+  }, [floatStocks, state?.config.watch_float.columns, watchFloatConfig?.layout, watchFloatConfig?.style]);
 
   return (
     <main className="watch-float-shell drag-region" style={shellStyle} ref={shellRef}>
@@ -159,6 +162,7 @@ export function WatchlistFloatView() {
             selectedCode={selectedCode}
             theme={currentTheme(state.config)}
             columns={state.config.watch_float.columns}
+            layout={state.config.watch_float.layout}
             style={state.config.watch_float.style}
           />
         ) : (
@@ -174,16 +178,18 @@ function WatchFloatStockList({
   selectedCode,
   theme,
   columns,
+  layout,
   style
 }: {
   stocks: StockStatus[];
   selectedCode?: string;
   theme: Theme;
   columns: WatchFloatColumn[];
+  layout: AppState["config"]["watch_float"]["layout"];
   style: WatchFloatStyle;
 }) {
   const safeColumns: WatchFloatColumn[] = columns.length ? columns : ["name", "change"];
-  const listStyle = style.layout === "horizontal"
+  const listStyle = layout === "horizontal"
     ? ({ "--watch-float-columns": watchFloatHorizontalGridColumns(stocks.length, safeColumns) } as CSSProperties)
     : ({
         "--watch-float-columns": watchFloatGridColumns(safeColumns)
@@ -191,7 +197,7 @@ function WatchFloatStockList({
 
   if (!stocks.length) return <div className="watch-float-empty">No symbols</div>;
 
-  if (style.layout === "horizontal") {
+  if (layout === "horizontal") {
     return (
       <div className="watch-float-list horizontal" style={listStyle}>
         <div className="watch-float-row horizontal">
@@ -237,6 +243,62 @@ function watchFloatGridColumns(columns: WatchFloatColumn[]): string {
 function watchFloatHorizontalGridColumns(stockCount: number, columns: WatchFloatColumn[]): string {
   const stockColumns = columns.map(() => "max-content").join(" ");
   return Array.from({ length: stockCount }, () => stockColumns).join(" ");
+}
+
+function measureWatchFloatContent(shell: HTMLElement, layout: AppState["config"]["watch_float"]["layout"]): { width: number; height: number } {
+  const body = shell.querySelector<HTMLElement>(".watch-float-body");
+  if (layout === "horizontal") {
+    const row = shell.querySelector<HTMLElement>(".watch-float-row.horizontal");
+    if (!row) return { width: 160, height: 42 };
+    return {
+      width: Math.max(64, Math.ceil(row.scrollWidth + horizontalPadding(shell) + 2)),
+      height: Math.max(32, Math.ceil(row.getBoundingClientRect().height + verticalPadding(body) + 2))
+    };
+  }
+
+  const rows = [...shell.querySelectorAll<HTMLElement>(".watch-float-row:not(.horizontal)")];
+  if (!rows.length) {
+    const empty = shell.querySelector<HTMLElement>(".watch-float-empty");
+    const rect = empty?.getBoundingClientRect();
+    return {
+      width: Math.max(128, Math.ceil(rect?.width ?? 128) + horizontalPadding(shell) + 2),
+      height: Math.max(48, Math.ceil(rect?.height ?? 48) + verticalPadding(body) + 2)
+    };
+  }
+
+  const width = rows.reduce((maxWidth, row) => {
+    const cells = [...row.querySelectorAll<HTMLElement>(".watch-float-cell")];
+    const gap = Number.parseFloat(window.getComputedStyle(row).columnGap) || 0;
+    const contentWidth = cells.reduce((sum, cell) => sum + Math.ceil(measureElementTextWidth(cell)), 0) + Math.max(0, cells.length - 1) * gap;
+    return Math.max(maxWidth, contentWidth + horizontalPadding(row));
+  }, 0);
+  const height = rows.reduce((sum, row) => sum + Math.ceil(row.getBoundingClientRect().height), 0);
+  return {
+    width: Math.max(96, Math.ceil(width + horizontalPadding(shell) + 2)),
+    height: Math.max(32, Math.ceil(height + verticalPadding(body) + 2))
+  };
+}
+
+function horizontalPadding(element: HTMLElement | null): number {
+  if (!element) return 0;
+  const style = window.getComputedStyle(element);
+  return (Number.parseFloat(style.paddingLeft) || 0) + (Number.parseFloat(style.paddingRight) || 0);
+}
+
+function verticalPadding(element: HTMLElement | null): number {
+  if (!element) return 0;
+  const style = window.getComputedStyle(element);
+  return (Number.parseFloat(style.paddingTop) || 0) + (Number.parseFloat(style.paddingBottom) || 0);
+}
+
+function measureElementTextWidth(element: HTMLElement): number {
+  const style = window.getComputedStyle(element);
+  const canvas = textMeasureCanvas ?? document.createElement("canvas");
+  textMeasureCanvas = canvas;
+  const context = canvas.getContext("2d");
+  if (!context) return element.scrollWidth;
+  context.font = `${style.fontStyle} ${style.fontVariant} ${style.fontWeight} ${style.fontSize} / ${style.lineHeight} ${style.fontFamily}`;
+  return context.measureText(element.textContent ?? "").width;
 }
 
 function watchFloatShellStyle(theme: Theme | undefined, style: WatchFloatStyle | undefined): CSSProperties | undefined {

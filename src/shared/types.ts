@@ -44,7 +44,6 @@ export type WatchFloatMetricColors = Record<WatchFloatMetricColumn, {
 }>;
 
 export type WatchFloatStyle = {
-  layout: WatchFloatLayout;
   font_family: string;
   font_size: number;
   text_color: string;
@@ -59,6 +58,7 @@ export type WatchFloatStyle = {
 export type WatchFloatConfig = {
   stock_codes: string[];
   columns: WatchFloatColumn[];
+  layout: WatchFloatLayout;
   style: WatchFloatStyle;
   active_profile: string;
   profiles: Record<string, WatchFloatStyle>;
@@ -69,6 +69,7 @@ export type AppConfig = {
   cash?: number;
   motto: MottoConfig;
   watch_float: WatchFloatConfig;
+  trading_refresh_interval_ms: number;
   window_close_behavior: "tray" | "close";
   hide_zero_shares: boolean;
   stocks: StockConfig[];
@@ -220,6 +221,7 @@ export type FinBoxApi = {
   updateAccountConfig: (patch: Pick<AppConfig, "total_investment" | "cash">) => Promise<void>;
   updateMotto: (motto: MottoConfig) => Promise<void>;
   updateWatchFloatConfig: (config: WatchFloatConfig) => Promise<void>;
+  updateTradingRefreshInterval: (intervalMs: number) => Promise<void>;
   updateWindowCloseBehavior: (behavior: AppConfig["window_close_behavior"]) => Promise<void>;
   updateTheme: (themeName: string) => Promise<void>;
   updateStockAlias: (code: string, alias?: string) => Promise<void>;

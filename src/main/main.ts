@@ -649,6 +649,7 @@ ipcMain.handle("remove-stock", (_event, code: string) => core.removeStock(code))
 ipcMain.handle("update-account-config", (_event, patch: Pick<AppConfig, "total_investment" | "cash">) => core.updateAccountConfig(patch));
 ipcMain.handle("update-motto", (_event, motto: MottoConfig) => core.updateMotto(motto));
 ipcMain.handle("update-watch-float-config", (_event, config: WatchFloatConfig) => core.updateWatchFloatConfig(config));
+ipcMain.handle("update-trading-refresh-interval", (_event, intervalMs: number) => core.updateTradingRefreshInterval(intervalMs));
 ipcMain.handle("update-window-close-behavior", (_event, behavior: AppConfig["window_close_behavior"]) => core.updateWindowCloseBehavior(behavior));
 ipcMain.handle("update-theme", (_event, themeName: string) => core.updateTheme(themeName));
 ipcMain.handle("update-stock-alias", (_event, code: string, alias?: string) => core.updateStockAlias(code, alias));

@@ -5,6 +5,10 @@ import * as yaml from "js-yaml";
 import { defaultThemes } from "../shared/theme";
 import type { AppConfig, MottoConfig, StockConfig, WatchFloatColumn, WatchFloatConfig, WatchFloatStyle } from "../shared/types";
 
+export const DEFAULT_TRADING_REFRESH_INTERVAL_MS = 1000;
+export const MIN_TRADING_REFRESH_INTERVAL_MS = 500;
+export const MAX_TRADING_REFRESH_INTERVAL_MS = 10000;
+
 const defaultMotto: MottoConfig = {
   text: "\u51b7\u9759\uff0c\u8010\u5fc3\uff0c\u53ea\u505a\u770b\u5f97\u61c2\u7684\u51b3\u5b9a\u3002",
   font_family: "Microsoft YaHei",
@@ -13,7 +17,6 @@ const defaultMotto: MottoConfig = {
 };
 
 const defaultWatchFloatStyle: WatchFloatStyle = {
-  layout: "vertical",
   font_family: "Microsoft YaHei",
   font_size: 12,
   text_color: "#334155",
@@ -104,10 +107,12 @@ export class ConfigManager {
       watch_float: {
         stock_codes: ["sz002594"],
         columns: ["name", "change"],
+        layout: "vertical",
         style: defaultWatchFloatStyle,
         active_profile: "simple",
         profiles: builtInWatchFloatProfiles
       },
+      trading_refresh_interval_ms: DEFAULT_TRADING_REFRESH_INTERVAL_MS,
       window_close_behavior: "close",
       hide_zero_shares: false,
       stock_groups: ["watchlist"],
@@ -168,6 +173,7 @@ export class ConfigManager {
         cash: config.cash,
         motto: normalizeMotto(config.motto),
         watch_float: normalizeWatchFloat(config.watch_float, stocks),
+        trading_refresh_interval_ms: normalizeTradingRefreshInterval(config.trading_refresh_interval_ms),
         window_close_behavior: config.window_close_behavior === "close" ? "close" : "tray",
         hide_zero_shares: config.hide_zero_shares ?? false,
         stocks,
@@ -200,6 +206,7 @@ function normalizeWatchFloat(value: unknown, stocks: StockConfig[]): WatchFloatC
     return {
       stock_codes: stocks.map((stock) => stock.code),
       columns: ["name", "change"],
+      layout: "vertical",
       style: defaultWatchFloatStyle,
       active_profile: "simple",
       profiles: withBuiltInWatchFloatProfiles({})
@@ -214,10 +221,12 @@ function normalizeWatchFloat(value: unknown, stocks: StockConfig[]): WatchFloatC
   const columns = Array.isArray(config.columns)
     ? [...new Set(config.columns.filter((column): column is WatchFloatColumn => watchFloatColumns.includes(column as WatchFloatColumn)))]
     : [];
+  const legacyStyle = config.style as ({ layout?: unknown } & Partial<WatchFloatStyle>) | undefined;
 
   return {
     stock_codes: stockCodes,
     columns: columns.length ? columns : ["name", "change"],
+    layout: normalizeWatchFloatLayout(config.layout ?? legacyStyle?.layout),
     style: normalizeWatchFloatStyle(config.style),
     active_profile: typeof config.active_profile === "string" && config.active_profile.trim() ? config.active_profile.trim() : "custom",
     profiles
@@ -254,7 +263,6 @@ function normalizeWatchFloatStyle(value: unknown): WatchFloatStyle {
   const opacity = Number(style.background_opacity);
   return {
     font_family: typeof style.font_family === "string" && style.font_family.trim() ? style.font_family.trim() : defaultWatchFloatStyle.font_family,
-    layout: style.layout === "horizontal" ? "horizontal" : "vertical",
     font_size: Number.isFinite(fontSize) ? Math.min(Math.max(fontSize, 9), 32) : defaultWatchFloatStyle.font_size,
     text_color: normalizeHexColor(style.text_color, defaultWatchFloatStyle.text_color),
     column_colors: normalizeWatchFloatColumnColors(style.column_colors, style.text_color),
@@ -264,6 +272,10 @@ function normalizeWatchFloatStyle(value: unknown): WatchFloatStyle {
     border_color: normalizeHexColor(style.border_color, defaultWatchFloatStyle.border_color),
     show_border: Boolean(style.show_border)
   };
+}
+
+function normalizeWatchFloatLayout(value: unknown): WatchFloatConfig["layout"] {
+  return value === "horizontal" ? "horizontal" : "vertical";
 }
 
 function normalizeWatchFloatMetricColors(value: unknown, columnColors: unknown, fallbackColor: unknown): WatchFloatStyle["metric_colors"] {
@@ -301,6 +313,12 @@ function normalizeWatchFloatColumnColors(value: unknown, fallbackColor: unknown)
 
 function normalizeHexColor(value: unknown, fallback: string): string {
   return typeof value === "string" && /^#[0-9a-fA-F]{6}$/.test(value) ? value : fallback;
+}
+
+export function normalizeTradingRefreshInterval(value: unknown): number {
+  const interval = Number(value);
+  if (!Number.isFinite(interval)) return DEFAULT_TRADING_REFRESH_INTERVAL_MS;
+  return Math.min(Math.max(Math.round(interval), MIN_TRADING_REFRESH_INTERVAL_MS), MAX_TRADING_REFRESH_INTERVAL_MS);
 }
 
 function normalizeMotto(value: unknown): MottoConfig {

@@ -19,6 +19,7 @@ const api: FinBoxApi = {
   updateAccountConfig: (patch) => ipcRenderer.invoke("update-account-config", patch),
   updateMotto: (motto: MottoConfig) => ipcRenderer.invoke("update-motto", motto),
   updateWatchFloatConfig: (config: WatchFloatConfig) => ipcRenderer.invoke("update-watch-float-config", config),
+  updateTradingRefreshInterval: (intervalMs: number) => ipcRenderer.invoke("update-trading-refresh-interval", intervalMs),
   updateWindowCloseBehavior: (behavior) => ipcRenderer.invoke("update-window-close-behavior", behavior),
   updateTheme: (themeName: string) => ipcRenderer.invoke("update-theme", themeName),
   updateStockAlias: (code: string, alias?: string) => ipcRenderer.invoke("update-stock-alias", code, alias),

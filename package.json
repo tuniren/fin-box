@@ -1,6 +1,6 @@
 {
   "name": "fin-box-electron-react",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "private": true,
   "description": "FinBox rewritten with Electron, React and TypeScript.",
   "main": "dist-electron/main/main.js",
