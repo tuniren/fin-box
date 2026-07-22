@@ -141,6 +141,9 @@ export class AppCore {
       stock_codes: [...new Set(watchFloat.stock_codes.map((code) => knownCodes.get(code.toLowerCase())).filter((code): code is string => Boolean(code)))],
       columns: nextColumns.length ? nextColumns : ["name", "change"],
       layout: watchFloat.layout === "horizontal" ? "horizontal" : "vertical",
+      show_news: Boolean(watchFloat.show_news),
+      horizontal_stock_ratio: normalizeWatchFloatRatio(watchFloat.horizontal_stock_ratio, config.watch_float.horizontal_stock_ratio ?? 3),
+      horizontal_news_ratio: normalizeWatchFloatRatio(watchFloat.horizontal_news_ratio, config.watch_float.horizontal_news_ratio ?? 2),
       style: normalizeWatchFloatStyle(watchFloat.style, config.watch_float.style),
       active_profile: watchFloat.active_profile.trim() || "custom",
       profiles: normalizeWatchFloatProfiles(watchFloat.profiles, config.watch_float.profiles)
@@ -647,6 +650,12 @@ function normalizeOptionalNumber(value: unknown): number | undefined {
   if (value === undefined || value === null || value === "") return undefined;
   const next = Number(value);
   return Number.isFinite(next) ? next : undefined;
+}
+
+function normalizeWatchFloatRatio(value: unknown, fallback: number): number {
+  const ratio = Number(value);
+  if (!Number.isFinite(ratio)) return fallback;
+  return Math.min(Math.max(Math.round(ratio), 1), 10);
 }
 
 function normalizeWatchFloatStyle(style: WatchFloatStyle | undefined, fallback: WatchFloatStyle): WatchFloatStyle {

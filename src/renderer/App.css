@@ -657,8 +657,9 @@ textarea {
   height: 100vh;
   overflow: hidden;
   box-sizing: border-box;
-  border: 1px solid transparent;
-  border-radius: 7px;
+  padding: 2px;
+  border: 0;
+  border-radius: 0;
   background: transparent;
   box-shadow: none;
   color: #334155;
@@ -757,15 +758,21 @@ textarea {
 }
 
 .watch-float-body {
+  width: 100%;
+  max-width: 100%;
   min-height: 0;
   overflow: hidden;
-  padding: 3px 0 5px;
+  padding: 5px 3px 8px;
+  border-radius: 0;
+  background: var(--watch-float-background, transparent);
+  box-shadow: inset 0 0 0 1px var(--watch-float-border-color, transparent);
 }
 
 .watch-float-list {
   display: grid;
   align-content: start;
   height: 100%;
+  min-width: 0;
   overflow: hidden;
   scrollbar-width: none;
 }
@@ -775,7 +782,46 @@ textarea {
 }
 
 .watch-float-list.horizontal {
-  align-content: center;
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  align-items: center;
+  width: auto;
+  max-width: 100%;
+  height: auto;
+  overflow: hidden;
+}
+
+.watch-float-content {
+  display: grid;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  min-height: 0;
+  gap: 4px;
+}
+
+.watch-float-content.horizontal.with-news {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  align-content: flex-start;
+  gap: 0;
+  max-width: calc(100vw - 4px);
+}
+
+.watch-float-content.horizontal {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  align-content: flex-start;
+  gap: 0;
+  overflow: hidden;
+}
+
+.watch-float-content.vertical.with-news {
+  align-items: stretch;
+  width: 100%;
   overflow: hidden;
 }
 
@@ -785,21 +831,24 @@ textarea {
   gap: 8px;
   align-items: center;
   width: 100%;
-  height: 28px;
+  min-height: max(28px, calc(1em * 1.75));
   min-width: 0;
-  padding: 0 6px;
+  padding: 3px 6px;
   border: 0;
   background: transparent;
   color: inherit;
   cursor: move;
   font-weight: 400;
+  line-height: 1.35;
   text-align: right;
 }
 
 .watch-float-row.horizontal {
   width: max-content;
-  flex: 0 0 auto;
+  max-width: 100%;
+  flex: 0 1 auto;
   column-gap: 1ch;
+  overflow: hidden;
 }
 
 .watch-float-row:hover {
@@ -814,6 +863,7 @@ textarea {
 .watch-float-cell {
   min-width: 0;
   justify-self: end;
+  overflow: visible;
   white-space: nowrap;
 }
 
@@ -860,6 +910,95 @@ textarea {
 
 .watch-float-empty-action button:hover {
   background: rgba(255, 255, 255, 0.86);
+}
+
+.watch-float-news {
+  display: grid;
+  flex: 0 1 220px;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  color: inherit;
+}
+
+.watch-float-news.horizontal {
+  flex-basis: min(220px, 100%);
+}
+
+.watch-float-news.vertical {
+  width: 220px;
+  max-width: 100%;
+}
+
+.watch-float-news-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto 22px;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+  min-height: max(28px, calc(1em * 1.75));
+  padding: 3px 6px;
+}
+
+.watch-float-news.horizontal .watch-float-news-row {
+  min-height: 28px;
+  padding-left: 5px;
+  border-left: 1px solid currentColor;
+}
+
+.watch-float-news-main {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+}
+
+.watch-float-news-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.watch-float-news-main small {
+  min-width: 0;
+  overflow: hidden;
+  color: inherit;
+  font-size: 0.82em;
+  opacity: 0.68;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.watch-float-news-count {
+  display: inline-grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border: 1px solid currentColor;
+  border-radius: 0;
+  font-size: 0.82em;
+  line-height: 1;
+  opacity: 0.72;
+}
+
+.watch-float-news-action {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  opacity: 0.72;
+}
+
+.watch-float-news-action:hover {
+  opacity: 1;
 }
 @media (max-width: 72px) {
   .watch-float-shell {
@@ -2826,21 +2965,9 @@ b {
 
 .market-news-pane {
   display: grid;
-  grid-template-rows: 34px minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   height: calc(100vh - 35px - 22px - 35px);
   min-height: 0;
-}
-
-.market-news-actions {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 6px;
-  padding: 0 8px;
-  border-top: 1px solid #eeeeee;
-  border-bottom: 1px solid #e5e5e5;
-  background: #f8f8f8;
-  color: #6a6a6a;
 }
 
 .market-news-list,
@@ -2897,6 +3024,55 @@ b {
 .market-news-error,
 .comments-error {
   padding: 10px 8px;
+}
+
+.market-news-stream-state {
+  min-height: 30px;
+  padding: 8px;
+  border-bottom: 1px solid #eeeeee;
+  background: #f8fafc;
+  color: #748093;
+  font-size: 12px;
+  line-height: 1.2;
+  text-align: center;
+}
+
+.market-news-stream-state.loading {
+  background: #eef4fb;
+  color: #2563a6;
+}
+
+.market-news-stream-state.updated {
+  background: #f0f8f3;
+  color: #287a45;
+}
+
+.market-news-stream-state.current,
+.market-news-stream-state.end {
+  color: #8a94a3;
+}
+
+.market-news-stream-state.end {
+  border-top: 1px solid #eeeeee;
+  border-bottom: 0;
+  background: transparent;
+}
+
+.market-news-load-more {
+  display: block;
+  width: calc(100% - 16px);
+  height: 30px;
+  margin: 8px;
+  border: 1px solid #d8dde4;
+  border-radius: 4px;
+  background: #f8fafc;
+  color: #596575;
+  cursor: pointer;
+}
+
+.market-news-load-more:hover {
+  border-color: #b8c3d1;
+  background: #eef4fb;
 }
 
 .codex-panel {

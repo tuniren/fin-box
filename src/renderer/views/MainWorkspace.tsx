@@ -31,7 +31,7 @@ import {
   UserCircle,
   X
 } from "lucide-react";
-import type { CSSProperties, DragEvent as ReactDragEvent, FormEvent, Key, KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent, ReactNode } from "react";
+import type { CSSProperties, DragEvent as ReactDragEvent, FormEvent, Key, KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent, ReactNode, UIEvent as ReactUIEvent, WheelEvent as ReactWheelEvent } from "react";
 import {
   dayProfit,
   displayName,
@@ -42,7 +42,7 @@ import {
   totalShares
 } from "../../shared/finance";
 import { currentTheme, profitColor } from "../../shared/theme";
-import type { AppConfig, AppState, MottoConfig, NoteTreeItem, Position, StockCommentItem, StockCommentPage, StockJournal, StockNewsPage, StockSearchResult, StockStatus, Theme, UpdateStatus, WatchFloatColumn, WatchFloatConfig } from "../../shared/types";
+import type { AppConfig, AppState, MottoConfig, NoteTreeItem, Position, StockCommentItem, StockCommentPage, StockJournal, StockNewsItem, StockNewsPage, StockSearchResult, StockStatus, Theme, UpdateStatus, WatchFloatColumn, WatchFloatConfig } from "../../shared/types";
 import { KLineView } from "../components/KLineView";
 import { MarketStatusBar } from "../components/MarketStatusBar";
 import { MinutePanel } from "../components/MinutePanel";
@@ -73,11 +73,27 @@ const watchFloatMetricColorOptions: Array<{ value: "change" | "day_profit"; labe
   { value: "change", label: "涨幅" },
   { value: "day_profit", label: "今日收益" }
 ];
+const validNewsItems = (items: StockNewsItem[] | undefined) => (
+  Array.isArray(items) ? items.filter((item) => item && typeof item === "object") : []
+);
+const MARKET_NEWS_CACHE_LIMIT = 300;
+const MARKET_NEWS_LATEST_COOLDOWN_MS = 1800;
+const trimNewsItems = (items: StockNewsItem[], direction: "append" | "prepend") => {
+  if (items.length <= MARKET_NEWS_CACHE_LIMIT) return items;
+  return direction === "prepend" ? items.slice(0, MARKET_NEWS_CACHE_LIMIT) : items.slice(-MARKET_NEWS_CACHE_LIMIT);
+};
+const mergeNewsItems = (current: StockNewsItem[], incoming: StockNewsItem[], direction: "append" | "prepend") => {
+  const knownIds = new Set(current.map((item) => item.id));
+  const freshItems = incoming.filter((item) => !knownIds.has(item.id));
+  const merged = direction === "prepend" ? [...freshItems, ...current] : [...current, ...freshItems];
+  return trimNewsItems(merged, direction);
+};
 type ActivityView = "watchlist" | "news" | "notes" | "help" | "settings";
 type ActiveView = "details" | "chart" | "note" | "help" | "settings";
 type StockView = "details" | "chart";
 type TitleMenu = "file" | "view" | "window" | "language" | "help";
 type SettingsView = "general" | "market-refresh" | "motto" | "watch-float" | "camouflage-float";
+type MarketNewsLatestState = "idle" | "updated" | "current";
 type WatchPromptKind = "create-group" | "rename-group" | "edit-alias";
 type WatchPromptState = {
   kind: WatchPromptKind;
@@ -206,10 +222,14 @@ export function MainWorkspace() {
   const [sideWidth, setSideWidth] = useState(420);
   const [activityView, setActivityView] = useState<ActivityView>("watchlist");
   const [settingsView, setSettingsView] = useState<SettingsView>("general");
-  const [marketNewsPage, setMarketNewsPage] = useState(1);
-  const [marketNews, setMarketNews] = useState<StockNewsPage>();
+  const [marketNewsItems, setMarketNewsItems] = useState<StockNewsItem[]>([]);
+  const [marketNewsLoadedPages, setMarketNewsLoadedPages] = useState<Set<number>>(() => new Set());
+  const [marketNewsFetchPage, setMarketNewsFetchPage] = useState(1);
   const [marketNewsLoading, setMarketNewsLoading] = useState(false);
+  const [marketNewsRefreshingLatest, setMarketNewsRefreshingLatest] = useState(false);
+  const [marketNewsLatestState, setMarketNewsLatestState] = useState<MarketNewsLatestState>("idle");
   const [marketNewsError, setMarketNewsError] = useState("");
+  const [marketNewsHasMore, setMarketNewsHasMore] = useState(true);
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus>({ state: "idle", currentVersion: "" });
   const [marketNewsReload, setMarketNewsReload] = useState(0);
   const [noteTree, setNoteTree] = useState<NoteTreeItem[]>([]);
@@ -236,6 +256,7 @@ export function MainWorkspace() {
   const [savedDailyNote, setSavedDailyNote] = useState("");
   const selectedStock = visibleStocks.find((stock) => stock.config.code === selectedCode) ?? visibleStocks[0];
   const detailStockCode = activeView === "details" && selectedStock ? selectedStock.config.code : "";
+  const marketNewsNextPage = Math.max(0, ...Array.from(marketNewsLoadedPages)) + 1;
 
   useEffect(() => {
     if (!visibleStocks.length) {
@@ -305,12 +326,18 @@ export function MainWorkspace() {
   useEffect(() => {
     let cancelled = false;
     if (activityView !== "news") return;
+    if (marketNewsLoadedPages.has(marketNewsFetchPage)) return;
 
     setMarketNewsLoading(true);
     setMarketNewsError("");
-    void Promise.resolve().then(() => api.fetchStockNews("", marketNewsPage))
+    void Promise.resolve().then(() => api.fetchStockNews("", marketNewsFetchPage))
       .then((page) => {
-        if (!cancelled) setMarketNews(page);
+        if (!cancelled) {
+          const resolvedPage = page.page || marketNewsFetchPage;
+          setMarketNewsItems((items) => mergeNewsItems(items, validNewsItems(page.items), "append"));
+          setMarketNewsLoadedPages((pages) => new Set(pages).add(resolvedPage));
+          setMarketNewsHasMore(page.hasMore);
+        }
       })
       .catch((error) => {
         if (!cancelled) setMarketNewsError(error instanceof Error ? error.message : t("error.loadNewsFailed"));
@@ -322,7 +349,7 @@ export function MainWorkspace() {
     return () => {
       cancelled = true;
     };
-  }, [activityView, marketNewsPage, marketNewsReload]);
+  }, [activityView, marketNewsFetchPage, marketNewsLoadedPages, marketNewsReload]);
 
   useEffect(() => {
     let cancelled = false;
@@ -511,6 +538,9 @@ export function MainWorkspace() {
       stock_codes: patch.stock_codes ?? state.config.watch_float.stock_codes,
       columns: patch.columns ?? state.config.watch_float.columns,
       layout: patch.layout ?? state.config.watch_float.layout,
+      show_news: patch.show_news ?? state.config.watch_float.show_news,
+      horizontal_stock_ratio: patch.horizontal_stock_ratio ?? state.config.watch_float.horizontal_stock_ratio,
+      horizontal_news_ratio: patch.horizontal_news_ratio ?? state.config.watch_float.horizontal_news_ratio,
       style: patch.style ?? state.config.watch_float.style,
       active_profile: patch.active_profile ?? state.config.watch_float.active_profile,
       profiles: patch.profiles ?? state.config.watch_float.profiles
@@ -549,6 +579,27 @@ export function MainWorkspace() {
   const closeWatchPrompt = () => {
     setWatchPrompt(undefined);
     setWatchPromptValue("");
+  };
+
+  const loadLatestMarketNews = async () => {
+    if (marketNewsLoading || marketNewsRefreshingLatest) return;
+    setMarketNewsRefreshingLatest(true);
+    setMarketNewsError("");
+    try {
+      const page = await api.fetchStockNews("", 1);
+      const resolvedPage = page.page || 1;
+      const incomingItems = validNewsItems(page.items);
+      const knownIds = new Set(marketNewsItems.map((item) => item.id));
+      const addedCount = incomingItems.filter((item) => !knownIds.has(item.id)).length;
+      setMarketNewsItems((items) => mergeNewsItems(items, incomingItems, "prepend"));
+      setMarketNewsLoadedPages((pages) => new Set(pages).add(resolvedPage));
+      setMarketNewsHasMore(page.hasMore);
+      setMarketNewsLatestState(addedCount > 0 ? "updated" : "current");
+    } catch (error) {
+      setMarketNewsError(error instanceof Error ? error.message : t("error.loadNewsFailed"));
+    } finally {
+      setMarketNewsRefreshingLatest(false);
+    }
   };
 
   const createWatchGroup = () => {
@@ -987,7 +1038,7 @@ export function MainWorkspace() {
               </div>
             ) : activityView === "news" ? (
               <div className="explorer-actions">
-                <button onClick={() => { setMarketNewsPage(1); setMarketNewsReload((value) => value + 1); }} disabled={marketNewsLoading} title="Refresh 7x24" aria-label="Refresh 7x24"><RefreshCw size={14} /></button>
+                <button onClick={() => { setMarketNewsItems([]); setMarketNewsLoadedPages(new Set()); setMarketNewsHasMore(true); setMarketNewsLatestState("idle"); setMarketNewsFetchPage(1); setMarketNewsReload((value) => value + 1); }} disabled={marketNewsLoading || marketNewsRefreshingLatest} title="Refresh 7x24" aria-label="Refresh 7x24"><RefreshCw size={14} /></button>
               </div>
             ) : activityView === "settings" ? (
               <span />
@@ -997,12 +1048,17 @@ export function MainWorkspace() {
           </div>
           {activityView === "news" ? (
             <MarketNewsPanel
-              news={marketNews}
+              items={marketNewsItems}
               loading={marketNewsLoading}
+              refreshingLatest={marketNewsRefreshingLatest}
+              latestState={marketNewsLatestState}
               error={marketNewsError}
-              page={marketNewsPage}
-              onPrev={() => setMarketNewsPage((page) => Math.max(1, page - 1))}
-              onNext={() => setMarketNewsPage((page) => page + 1)}
+              hasMore={marketNewsHasMore}
+              onLoadLatest={() => void loadLatestMarketNews()}
+              onLoadMore={() => {
+                if (marketNewsLoading || marketNewsRefreshingLatest || !marketNewsHasMore) return;
+                setMarketNewsFetchPage(marketNewsNextPage);
+              }}
             />
           ) : activityView === "help" ? (
             <HelpOutline />
@@ -1549,44 +1605,83 @@ function HelpDocument() {
 }
 
 function MarketNewsPanel({
-  news,
+  items,
   loading,
+  refreshingLatest,
+  latestState,
   error,
-  page,
-  onPrev,
-  onNext
+  hasMore,
+  onLoadLatest,
+  onLoadMore
 }: {
-  news?: StockNewsPage;
+  items: StockNewsItem[];
   loading: boolean;
+  refreshingLatest: boolean;
+  latestState: MarketNewsLatestState;
   error: string;
-  page: number;
-  onPrev: () => void;
-  onNext: () => void;
+  hasMore: boolean;
+  onLoadLatest: () => void;
+  onLoadMore: () => void;
 }) {
   const { t } = useI18n();
-  const items = Array.isArray(news?.items) ? news.items.filter((item) => item && typeof item === "object") : [];
+  const latestRequestedAtRef = useRef(0);
+  const latestText = refreshingLatest
+    ? t("news.refreshingLatest")
+    : latestState === "updated"
+      ? t("news.latestLoaded")
+      : latestState === "current"
+        ? t("news.latestUpToDate")
+        : t("news.pullLatest");
+  const triggerLatestLoad = () => {
+    const now = Date.now();
+    if (loading || refreshingLatest || now - latestRequestedAtRef.current < MARKET_NEWS_LATEST_COOLDOWN_MS) return;
+    latestRequestedAtRef.current = now;
+    onLoadLatest();
+  };
+  const handleScroll = (event: ReactUIEvent<HTMLDivElement>) => {
+    const element = event.currentTarget;
+    if (element.scrollTop <= 24) {
+      triggerLatestLoad();
+      return;
+    }
+    if (loading || refreshingLatest || !hasMore) return;
+    if (element.scrollHeight - element.scrollTop - element.clientHeight <= 96) {
+      onLoadMore();
+    }
+  };
+  const handleWheel = (event: ReactWheelEvent<HTMLDivElement>) => {
+    if (event.deltaY < 0 && event.currentTarget.scrollTop <= 24) {
+      triggerLatestLoad();
+    }
+  };
 
   return (
     <div className="market-news-pane">
-      <div className="market-news-actions">
-        <button className="icon-tool compact" onClick={onPrev} disabled={page <= 1 || loading} title={t("common.previousPage")} aria-label={t("common.previousPage")}>
-          <ChevronRight className="reverse-icon" size={14} />
-        </button>
-        <span>{page}</span>
-        <button className="icon-tool compact" onClick={onNext} disabled={loading || news?.hasMore === false} title={t("common.nextPage")} aria-label={t("common.nextPage")}>
-          <ChevronRight size={14} />
-        </button>
-      </div>
-      <div className="market-news-list">
-        {loading && <div className="news-state">{t("common.loading")}</div>}
+      <div className="market-news-list" onScroll={handleScroll} onWheel={handleWheel}>
         {error && <div className="save-error market-news-error">{error}</div>}
         {!loading && !error && items.length === 0 && <div className="news-state">{t("news.noNews")}</div>}
+        {items.length > 0 && (
+          <div className={`market-news-stream-state ${refreshingLatest ? "loading" : latestState}`}>
+            {latestText}
+          </div>
+        )}
         {items.map((item) => (
           <a className="market-news-row" href={item.url} target="_blank" rel="noreferrer" key={item.id}>
             <span>{item.title}</span>
             <small>{[item.date, item.source].filter(Boolean).join(" ") || "--"}</small>
           </a>
         ))}
+        {loading && <div className="news-state">{t("common.loading")}</div>}
+        {!loading && hasMore && items.length > 0 && (
+          <button className="market-news-load-more" onClick={onLoadMore} type="button">
+            {t("common.load")}
+          </button>
+        )}
+        {!loading && !hasMore && items.length > 0 && (
+          <div className="market-news-stream-state end">
+            {t("news.noMore")}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -2510,6 +2605,41 @@ function SettingsPage({
                   <option value="horizontal">{t("settings.horizontalLayout")}</option>
                 </select>
               </label>
+            </div>
+            <div className="watch-float-settings-block">
+              <span className="watch-float-settings-label">{t("settings.watchlistNews")}</span>
+              <div className="watch-float-style-grid">
+                <label className="watch-float-style-toggle">
+                  <span>{t("settings.showWatchlistNews")}</span>
+                  <input
+                    type="checkbox"
+                    checked={state.config.watch_float.show_news}
+                    onChange={(event) => onWatchFloatConfigChange({ show_news: event.target.checked })}
+                  />
+                </label>
+                <label className="settings-field compact">
+                  <span>{t("settings.horizontalStockRatio")}</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={10}
+                    step={1}
+                    value={state.config.watch_float.horizontal_stock_ratio}
+                    onChange={(event) => onWatchFloatConfigChange({ horizontal_stock_ratio: Number(event.target.value) })}
+                  />
+                </label>
+                <label className="settings-field compact">
+                  <span>{t("settings.horizontalNewsRatio")}</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={10}
+                    step={1}
+                    value={state.config.watch_float.horizontal_news_ratio}
+                    onChange={(event) => onWatchFloatConfigChange({ horizontal_news_ratio: Number(event.target.value) })}
+                  />
+                </label>
+              </div>
             </div>
             <div className="watch-float-settings-block">
               <span className="watch-float-settings-label">{t("settings.watchlistStyle")}</span>

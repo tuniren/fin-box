@@ -59,6 +59,9 @@ export type WatchFloatConfig = {
   stock_codes: string[];
   columns: WatchFloatColumn[];
   layout: WatchFloatLayout;
+  show_news: boolean;
+  horizontal_stock_ratio: number;
+  horizontal_news_ratio: number;
   style: WatchFloatStyle;
   active_profile: string;
   profiles: Record<string, WatchFloatStyle>;
@@ -238,6 +241,7 @@ export type FinBoxApi = {
   fetchFiveDayMinuteData: (code: string) => Promise<FiveDayMinutePoint[]>;
   fetchStockNews: (code: string, page: number, keyword?: string) => Promise<StockNewsPage>;
   fetchStockNewsArticle: (url: string) => Promise<StockNewsArticle>;
+  openExternalUrl: (url: string) => Promise<void>;
   fetchStockComments: (code: string, page: number) => Promise<StockCommentPage>;
   listNotes: () => Promise<NoteTreeItem[]>;
   readNote: (notePath: string) => Promise<NoteFile>;
@@ -247,6 +251,7 @@ export type FinBoxApi = {
   deleteNote: (notePath: string) => Promise<NoteTreeItem[]>;
   openNotesDir: () => Promise<void>;
   resizeWindow: (width: number, height: number) => Promise<void>;
+  resizeWindowHeight: (height: number) => Promise<void>;
   startDrag: () => Promise<void>;
   openKLineWindow: (code: string, name: string) => Promise<void>;
   toggleCamouflageFloatWindow: () => Promise<void>;

@@ -32,6 +32,7 @@ about:
 common:
   add: 添加
   cancel: 取消
+  close: 关闭
   save: 保存
   saving: 保存中...
   load: 加载
@@ -138,6 +139,10 @@ settings:
   profileNamePrompt: 请输入自选浮窗配置方案名称
   watchlistSymbols: 展示个股
   watchlistColumns: 展示列
+  watchlistNews: 7X24 资讯
+  showWatchlistNews: 自选浮窗显示7X24资讯
+  horizontalStockRatio: 横向自选股占比
+  horizontalNewsRatio: 横向7X24占比
   watchlistStyle: 浮窗样式
   searchWatchlistSymbols: 搜索自选
   selectedWatchlistSymbols: 已选个股
@@ -159,6 +164,7 @@ settings:
 float:
   addWatchlistSymbols: 请添加自选
   openWatchlistSettings: 打开配置
+  openNewsDetail: 查看资讯详情
 stockNotes:
   title: 笔记
   empty: 打开某只股票的详情页后，在这里记录策略和每日复盘。
@@ -173,6 +179,11 @@ stockNotes:
   saveShortcut: 按 Ctrl+S 保存
 news:
   noNews: 暂无资讯
+  pullLatest: 向上滚动获取最新资讯
+  refreshingLatest: 正在获取最新资讯...
+  latestLoaded: 已更新最新资讯
+  latestUpToDate: 已是最新资讯
+  noMore: 没有更多资讯
 status:
   shIndex: 上证指数
   accountProfitLoss: 账户盈亏

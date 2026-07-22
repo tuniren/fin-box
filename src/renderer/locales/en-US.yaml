@@ -32,6 +32,7 @@ about:
 common:
   add: Add
   cancel: Cancel
+  close: Close
   save: Save
   saving: Saving...
   load: Load
@@ -138,6 +139,10 @@ settings:
   profileNamePrompt: Enter a watchlist float profile name
   watchlistSymbols: Symbols
   watchlistColumns: Columns
+  watchlistNews: 7x24 news
+  showWatchlistNews: Show 7x24 news in float
+  horizontalStockRatio: Horizontal stock ratio
+  horizontalNewsRatio: Horizontal 7x24 ratio
   watchlistStyle: Float Style
   searchWatchlistSymbols: Search watchlist
   selectedWatchlistSymbols: Selected symbols
@@ -159,6 +164,7 @@ settings:
 float:
   addWatchlistSymbols: Add watchlist symbols
   openWatchlistSettings: Open Settings
+  openNewsDetail: View news detail
 stockNotes:
   title: Notes
   empty: Open a stock detail page to write strategy and daily notes here.
@@ -173,6 +179,11 @@ stockNotes:
   saveShortcut: Press Ctrl+S to save
 news:
   noNews: No news
+  pullLatest: Scroll up for latest news
+  refreshingLatest: Loading latest news...
+  latestLoaded: Latest news updated
+  latestUpToDate: Already up to date
+  noMore: No more news
 status:
   shIndex: SH Index
   accountProfitLoss: Account P/L

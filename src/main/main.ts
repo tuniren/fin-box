@@ -666,6 +666,11 @@ ipcMain.handle("fetch-minute-data", (_event, code: string) => core.fetchMinuteDa
 ipcMain.handle("fetch-five-day-minute-data", (_event, code: string) => core.fetchFiveDayMinuteData(code));
 ipcMain.handle("fetch-stock-news", (_event, code: string, page: number, keyword?: string) => core.fetchStockNews(code, page, keyword));
 ipcMain.handle("fetch-stock-news-article", (_event, url: string) => core.fetchStockNewsArticle(url));
+ipcMain.handle("open-external-url", (_event, url: string) => {
+  const parsedUrl = new URL(url);
+  if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") throw new Error("Unsupported URL.");
+  return shell.openExternal(parsedUrl.toString());
+});
 ipcMain.handle("fetch-stock-comments", (_event, code: string, page: number) => core.fetchStockComments(code, page));
 ipcMain.handle("list-notes", () => readNotesTree());
 ipcMain.handle("read-note", (_event, notePath: string) => {
@@ -726,6 +731,19 @@ ipcMain.handle("resize-window", (event, width: number, height: number) => {
   const wasResizable = win.isResizable();
   if (!wasResizable) win.setResizable(true);
   win.setBounds({ width: nextWidth, height: nextHeight }, false);
+  if (!wasResizable) win.setResizable(false);
+});
+ipcMain.handle("resize-window-height", (event, height: number) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (!win || win.isDestroyed()) return;
+
+  const nextHeight = Math.round(height);
+  const [currentWidth, currentHeight] = win.getSize();
+  if (currentHeight === nextHeight) return;
+
+  const wasResizable = win.isResizable();
+  if (!wasResizable) win.setResizable(true);
+  win.setBounds({ width: currentWidth, height: nextHeight }, false);
   if (!wasResizable) win.setResizable(false);
 });
 ipcMain.handle("start-drag", (event) => {

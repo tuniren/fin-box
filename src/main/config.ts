@@ -108,6 +108,9 @@ export class ConfigManager {
         stock_codes: ["sz002594"],
         columns: ["name", "change"],
         layout: "vertical",
+        show_news: false,
+        horizontal_stock_ratio: 3,
+        horizontal_news_ratio: 2,
         style: defaultWatchFloatStyle,
         active_profile: "simple",
         profiles: builtInWatchFloatProfiles
@@ -207,6 +210,9 @@ function normalizeWatchFloat(value: unknown, stocks: StockConfig[]): WatchFloatC
       stock_codes: stocks.map((stock) => stock.code),
       columns: ["name", "change"],
       layout: "vertical",
+      show_news: false,
+      horizontal_stock_ratio: 3,
+      horizontal_news_ratio: 2,
       style: defaultWatchFloatStyle,
       active_profile: "simple",
       profiles: withBuiltInWatchFloatProfiles({})
@@ -227,10 +233,19 @@ function normalizeWatchFloat(value: unknown, stocks: StockConfig[]): WatchFloatC
     stock_codes: stockCodes,
     columns: columns.length ? columns : ["name", "change"],
     layout: normalizeWatchFloatLayout(config.layout ?? legacyStyle?.layout),
+    show_news: Boolean(config.show_news),
+    horizontal_stock_ratio: normalizeWatchFloatRatio(config.horizontal_stock_ratio, 3),
+    horizontal_news_ratio: normalizeWatchFloatRatio(config.horizontal_news_ratio, 2),
     style: normalizeWatchFloatStyle(config.style),
     active_profile: typeof config.active_profile === "string" && config.active_profile.trim() ? config.active_profile.trim() : "custom",
     profiles
   };
+}
+
+function normalizeWatchFloatRatio(value: unknown, fallback: number): number {
+  const ratio = Number(value);
+  if (!Number.isFinite(ratio)) return fallback;
+  return Math.min(Math.max(Math.round(ratio), 1), 10);
 }
 
 function normalizeWatchFloatProfiles(value: unknown, stocks: StockConfig[]): Record<string, WatchFloatStyle> {
