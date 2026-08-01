@@ -2,22 +2,23 @@
 import { Input, Tag as AntTag, Tree } from "antd";
 import type { TreeDataNode } from "antd";
 import {
-  Blocks,
   BookOpen,
   Check,
   ChevronLeft,
   ChevronRight,
+  CircleHelp,
   Edit3,
+  ExternalLink,
   Files,
   FileText,
   Folder,
   FolderOpen,
-  GitBranch,
   GripVertical,
   Maximize2,
   MessageSquare,
   Minus,
   MoreHorizontal,
+  Network,
   Newspaper,
   PanelLeft,
   PanelRight,
@@ -28,7 +29,6 @@ import {
   Settings,
   Tag,
   Trash2,
-  UserCircle,
   X
 } from "lucide-react";
 import type { CSSProperties, DragEvent as ReactDragEvent, FormEvent, Key, KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent, ReactNode, UIEvent as ReactUIEvent, WheelEvent as ReactWheelEvent } from "react";
@@ -42,7 +42,8 @@ import {
   totalShares
 } from "../../shared/finance";
 import { currentTheme, profitColor } from "../../shared/theme";
-import type { AppConfig, AppState, MottoConfig, NoteTreeItem, Position, StockCommentItem, StockCommentPage, StockJournal, StockNewsItem, StockNewsPage, StockSearchResult, StockStatus, Theme, UpdateStatus, WatchFloatColumn, WatchFloatConfig } from "../../shared/types";
+import type { AiAnalysisConfig, AppConfig, AppState, MottoConfig, NoteTreeItem, Position, RequestLogItem, StockCommentItem, StockCommentPage, StockJournal, StockNewsItem, StockNewsPage, StockSearchResult, StockStatus, Theme, UpdateStatus, WatchFloatColumn, WatchFloatConfig } from "../../shared/types";
+import { AiAnalysisPanel } from "../components/AiAnalysisPanel";
 import { KLineView } from "../components/KLineView";
 import { MarketStatusBar } from "../components/MarketStatusBar";
 import { MinutePanel } from "../components/MinutePanel";
@@ -59,6 +60,7 @@ const DEFAULT_TRADING_REFRESH_INTERVAL_MS = 1000;
 const MIN_TRADING_REFRESH_INTERVAL_MS = 500;
 const MAX_TRADING_REFRESH_INTERVAL_MS = 10000;
 const STOCK_NOTES_SPLIT_STORAGE_KEY = "fin-box.stockNotesSplit";
+const AI_ANALYSIS_GUIDE_URL = "https://github.com/tuniren/fin-box/blob/main/docs/ai-analysis.md";
 const watchFloatColumnOptions: Array<{ value: WatchFloatColumn; label: string }> = [
   { value: "name", label: "名称" },
   { value: "price", label: "股价" },
@@ -88,11 +90,13 @@ const mergeNewsItems = (current: StockNewsItem[], incoming: StockNewsItem[], dir
   const merged = direction === "prepend" ? [...freshItems, ...current] : [...current, ...freshItems];
   return trimNewsItems(merged, direction);
 };
-type ActivityView = "watchlist" | "news" | "notes" | "help" | "settings";
-type ActiveView = "details" | "chart" | "note" | "help" | "settings";
+type ActivityView = "watchlist" | "news" | "requests" | "notes" | "help" | "settings";
+type ActiveView = "details" | "chart" | "note" | "help" | "settings" | "request-log";
 type StockView = "details" | "chart";
+type DetailTab = { code: string };
+type DetailTabContextMenu = { code: string; x: number; y: number };
 type TitleMenu = "file" | "view" | "window" | "language" | "help";
-type SettingsView = "general" | "market-refresh" | "motto" | "watch-float" | "camouflage-float";
+type SettingsView = "general" | "market-refresh" | "ai-analysis" | "motto" | "watch-float" | "camouflage-float";
 type MarketNewsLatestState = "idle" | "updated" | "current";
 type WatchPromptKind = "create-group" | "rename-group" | "edit-alias";
 type WatchPromptState = {
@@ -109,13 +113,21 @@ const defaultMotto: MottoConfig = {
   font_size: 14,
   color: "#f8fafc"
 };
-const settingsNavItems: Array<{ value: SettingsView; labelKey: `settings.${"general" | "marketRefresh" | "mottoFloat" | "watchlistFloat" | "camouflageFloat"}` }> = [
+const settingsNavItems: Array<{ value: SettingsView; labelKey: `settings.${"general" | "marketRefresh" | "aiAnalysis" | "mottoFloat" | "watchlistFloat" | "camouflageFloat"}` }> = [
   { value: "general", labelKey: "settings.general" },
   { value: "market-refresh", labelKey: "settings.marketRefresh" },
+  { value: "ai-analysis", labelKey: "settings.aiAnalysis" },
   { value: "motto", labelKey: "settings.mottoFloat" },
   { value: "watch-float", labelKey: "settings.watchlistFloat" },
   { value: "camouflage-float", labelKey: "settings.camouflageFloat" }
 ];
+
+function activityViewTitle(view: ActivityView) {
+  if (view === "news") return "7X24";
+  if (view === "requests") return "请求日志";
+  if (view === "settings") return "设置";
+  return "使用说明";
+}
 function MenuCheckItem({ checked, radio = false, onClick, children }: { checked: boolean; radio?: boolean; onClick: () => void; children: ReactNode }) {
   return (
     <button className="menu-check-option" role={radio ? "menuitemradio" : "menuitemcheckbox"} aria-checked={checked} onClick={onClick}>
@@ -211,11 +223,15 @@ export function MainWorkspace() {
   const [searchTargetGroup, setSearchTargetGroup] = useState<string>();
   const [activeView, setActiveView] = useState<ActiveView>();
   const [openStockViews, setOpenStockViews] = useState<Set<StockView>>(() => new Set());
+  const [detailTabs, setDetailTabs] = useState<DetailTab[]>([]);
+  const [activeDetailCode, setActiveDetailCode] = useState<string>();
+  const [detailTabContextMenu, setDetailTabContextMenu] = useState<DetailTabContextMenu>();
   const [explorerVisible, setExplorerVisible] = useState(true);
   const [editorVisible, setEditorVisible] = useState(true);
   const [sideVisible, setSideVisible] = useState(true);
   const [statusBarVisible, setStatusBarVisible] = useState(true);
   const [activeTitleMenu, setActiveTitleMenu] = useState<TitleMenu>();
+  const [watchTreeColumnMenuOpen, setWatchTreeColumnMenuOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [themeError, setThemeError] = useState("");
   const [explorerWidth, setExplorerWidth] = useState(332);
@@ -231,6 +247,8 @@ export function MainWorkspace() {
   const [marketNewsError, setMarketNewsError] = useState("");
   const [marketNewsHasMore, setMarketNewsHasMore] = useState(true);
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus>({ state: "idle", currentVersion: "" });
+  const [requestLogs, setRequestLogs] = useState<RequestLogItem[]>([]);
+  const [selectedRequestLogId, setSelectedRequestLogId] = useState("");
   const [marketNewsReload, setMarketNewsReload] = useState(0);
   const [noteTree, setNoteTree] = useState<NoteTreeItem[]>([]);
   const [selectedNotePath, setSelectedNotePath] = useState("");
@@ -255,19 +273,28 @@ export function MainWorkspace() {
   const [dailyNoteDraft, setDailyNoteDraft] = useState("");
   const [savedDailyNote, setSavedDailyNote] = useState("");
   const selectedStock = visibleStocks.find((stock) => stock.config.code === selectedCode) ?? visibleStocks[0];
-  const detailStockCode = activeView === "details" && selectedStock ? selectedStock.config.code : "";
+  const activeDetailStock = activeDetailCode
+    ? visibleStocks.find((stock) => stock.config.code.toLowerCase() === activeDetailCode.toLowerCase())
+    : undefined;
+  const selectedRequestLog = requestLogs.find((item) => item.id === selectedRequestLogId);
+  const detailStockCode = activeView === "details" && activeDetailStock ? activeDetailStock.config.code : "";
   const marketNewsNextPage = Math.max(0, ...Array.from(marketNewsLoadedPages)) + 1;
 
   useEffect(() => {
     if (!visibleStocks.length) {
       setSelectedCode(undefined);
       setOpenStockViews(new Set());
+      setDetailTabs([]);
+      setActiveDetailCode(undefined);
       setActiveView((view) => (view === "details" || view === "chart" ? undefined : view));
       return;
     }
     if (!selectedCode || !visibleStocks.some((stock) => stock.config.code === selectedCode)) {
       setSelectedCode(visibleStocks[0].config.code);
     }
+    const knownCodes = new Set(visibleStocks.map((stock) => stock.config.code.toLowerCase()));
+    setDetailTabs((tabs) => tabs.filter((tab) => knownCodes.has(tab.code.toLowerCase())));
+    setActiveDetailCode((code) => code && knownCodes.has(code.toLowerCase()) ? code : undefined);
   }, [selectedCode, visibleStocks]);
 
   useEffect(() => {
@@ -314,7 +341,25 @@ export function MainWorkspace() {
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
+    void api.getRequestLogs().then((logs) => { if (!cancelled) setRequestLogs(logs); }).catch(() => undefined);
+    const unsubscribe = api.onRequestLogs(setRequestLogs);
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!selectedRequestLogId) return;
+    if (requestLogs.some((item) => item.id === selectedRequestLogId)) return;
+    setSelectedRequestLogId("");
+    setActiveView((view) => (view === "request-log" ? undefined : view));
+  }, [requestLogs, selectedRequestLogId]);
+
+  useEffect(() => {
     const onMouseDown = (event: MouseEvent) => {
+      if (!(event.target as HTMLElement | null)?.closest(".tab-context-menu")) setDetailTabContextMenu(undefined);
       if ((event.target as HTMLElement | null)?.closest(".title-menu")) return;
       setActiveTitleMenu(undefined);
     };
@@ -474,17 +519,35 @@ export function MainWorkspace() {
   const selectedNoteName = selectedNotePath ? selectedNotePath.split("/").pop() ?? selectedNotePath : "";
   const noteDirty = noteContent !== savedNoteContent;
   const mottoDirty = !sameMotto(mottoDraft, savedMotto);
-  const detailsOpen = openStockViews.has("details");
+  const detailsOpen = detailTabs.length > 0;
   const chartOpen = openStockViews.has("chart");
 
   const openStockView = (view: StockView) => {
     if (!selectedStock) return;
+    if (view === "details") {
+      openDetailTab(selectedStock.config.code);
+      return;
+    }
     setOpenStockViews((items) => new Set(items).add(view));
     setActiveView(view);
     setEditorVisible(true);
   };
 
+  const openDetailTab = (code: string) => {
+    const stock = visibleStocks.find((item) => item.config.code.toLowerCase() === code.toLowerCase());
+    if (!stock) return;
+    setDetailTabs((tabs) => tabs.some((tab) => tab.code.toLowerCase() === stock.config.code.toLowerCase()) ? tabs : [...tabs, { code: stock.config.code }]);
+    setActiveDetailCode(stock.config.code);
+    setSelectedCode(stock.config.code);
+    setActiveView("details");
+    setEditorVisible(true);
+  };
+
   const closeStockView = (view: StockView) => {
+    if (view === "details") {
+      if (activeDetailCode) closeDetailTab(activeDetailCode);
+      return;
+    }
     setOpenStockViews((items) => {
       const next = new Set(items);
       next.delete(view);
@@ -492,10 +555,74 @@ export function MainWorkspace() {
     });
     setActiveView((current) => {
       if (current !== view) return current;
-      if (view !== "details" && detailsOpen) return "details";
-      if (view !== "chart" && chartOpen) return "chart";
+      if (detailsOpen) return "details";
       return undefined;
     });
+  };
+
+  const closeDetailTab = (code: string) => {
+    const normalizedCode = code.toLowerCase();
+    setDetailTabs((tabs) => {
+      const index = tabs.findIndex((tab) => tab.code.toLowerCase() === normalizedCode);
+      const next = tabs.filter((tab) => tab.code.toLowerCase() !== normalizedCode);
+      if (activeDetailCode?.toLowerCase() === normalizedCode) {
+        const fallback = next[Math.max(0, Math.min(index, next.length - 1))];
+        setActiveDetailCode(fallback?.code);
+        setActiveView(fallback ? "details" : chartOpen ? "chart" : undefined);
+      }
+      return next;
+    });
+  };
+
+  const closeOtherDetailTabs = (code: string) => {
+    const stock = visibleStocks.find((item) => item.config.code.toLowerCase() === code.toLowerCase());
+    if (!stock) return;
+    setDetailTabs([{ code: stock.config.code }]);
+    setActiveDetailCode(stock.config.code);
+    setSelectedCode(stock.config.code);
+    setActiveView("details");
+  };
+
+  const closeRightDetailTabs = (code: string) => {
+    const normalizedCode = code.toLowerCase();
+    setDetailTabs((tabs) => {
+      const index = tabs.findIndex((tab) => tab.code.toLowerCase() === normalizedCode);
+      if (index === -1) return tabs;
+      const next = tabs.slice(0, index + 1);
+      if (activeDetailCode && !next.some((tab) => tab.code.toLowerCase() === activeDetailCode.toLowerCase())) {
+        setActiveDetailCode(code);
+        setSelectedCode(code);
+        setActiveView("details");
+      }
+      return next;
+    });
+  };
+
+  const closeAllDetailTabs = () => {
+    setDetailTabs([]);
+    setActiveDetailCode(undefined);
+    setActiveView(chartOpen ? "chart" : undefined);
+  };
+
+  const openDetailTabContextMenu = (code: string, event: ReactMouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    activateDetailTab(code);
+    setDetailTabContextMenu({ code, x: event.clientX, y: event.clientY });
+  };
+
+  const runDetailTabContextAction = (action: () => void) => {
+    action();
+    setDetailTabContextMenu(undefined);
+  };
+
+  const activateDetailTab = (code: string) => {
+    setActiveDetailCode(code);
+    setSelectedCode(code);
+    setActiveView("details");
+  };
+
+  const detailTabLabel = (stock: StockStatus) => {
+    return `${displayName(stock)}.tsx`;
   };
 
   const startResize = (target: "explorer" | "side", startEvent: ReactMouseEvent<HTMLDivElement>) => {
@@ -547,8 +674,42 @@ export function MainWorkspace() {
     });
   };
 
+  const updateWatchTreeColumn = (column: WatchFloatColumn, checked: boolean) => {
+    if (!state) return;
+    const selected = new Set(state.config.watch_tree_columns);
+    if (checked) {
+      selected.add(column);
+    } else {
+      selected.delete(column);
+    }
+    const columns = watchFloatColumnOptions
+      .filter((option) => selected.has(option.value))
+      .map((option) => option.value);
+    void api.updateWatchTreeColumns(columns);
+  };
+
+  const updateAiAnalysisConfig = (patch: Partial<AiAnalysisConfig>) => {
+    if (!state) return;
+    void api.updateAiAnalysisConfig({
+      enabled: patch.enabled ?? state.config.ai_analysis.enabled,
+      codex_command: patch.codex_command ?? state.config.ai_analysis.codex_command,
+      timeout_ms: patch.timeout_ms ?? state.config.ai_analysis.timeout_ms,
+      include_notes: patch.include_notes ?? state.config.ai_analysis.include_notes,
+      include_news: patch.include_news ?? state.config.ai_analysis.include_news,
+      include_comments: patch.include_comments ?? state.config.ai_analysis.include_comments
+    });
+  };
+
   const updateTradingRefreshInterval = (intervalMs: number) => {
     void api.updateTradingRefreshInterval(intervalMs);
+  };
+
+  const openAiAnalysisSettings = () => {
+    setActivityView("settings");
+    setSettingsView("ai-analysis");
+    setExplorerVisible(true);
+    setEditorVisible(true);
+    setActiveView("settings");
   };
 
   const toggleMaximizeFromTitleBar = (event: ReactMouseEvent<HTMLElement>) => {
@@ -850,6 +1011,18 @@ export function MainWorkspace() {
     }
   };
 
+  const clearRequestLogItems = async () => {
+    await api.clearRequestLogs();
+    setSelectedRequestLogId("");
+    setActiveView((view) => (view === "request-log" ? undefined : view));
+  };
+
+  const openRequestLog = (item: RequestLogItem) => {
+    setSelectedRequestLogId(item.id);
+    setEditorVisible(true);
+    setActiveView("request-log");
+  };
+
   const saveStrategyNote = async () => {
     if (!detailStockCode) return;
     setJournalSaving(true);
@@ -905,7 +1078,7 @@ export function MainWorkspace() {
       setActiveView("settings");
       return;
     }
-    if (view === "watchlist" && (activeView === "note" || activeView === "help" || activeView === "settings")) {
+    if (view === "watchlist" && (activeView === "note" || activeView === "help" || activeView === "settings" || activeView === "request-log")) {
       setActiveView(detailsOpen ? "details" : chartOpen ? "chart" : undefined);
     }
   };
@@ -1013,12 +1186,12 @@ export function MainWorkspace() {
           <div className="activity-top">
             <button className={`activity-item ${activityView === "watchlist" ? "active" : ""}`} onClick={() => toggleActivityPane("watchlist")} aria-label="Explorer"><Files size={24} /></button>
             <button className={`activity-item ${activityView === "news" ? "active" : ""}`} onClick={() => toggleActivityPane("news")} aria-label="7x24"><Newspaper size={23} /></button>
+            <button className={`activity-item ${activityView === "requests" ? "active" : ""}`} onClick={() => toggleActivityPane("requests")} aria-label="请求日志" title="请求日志">
+              <Network size={23} />
+            </button>
             <button className={`activity-item ${activityView === "help" ? "active" : ""}`} onClick={() => toggleActivityPane("help")} aria-label="使用说明" title="使用说明"><BookOpen size={23} /></button>
-            <button className="activity-item" aria-label="Source Control"><GitBranch size={23} /><span className="activity-badge">{visibleStocks.length}</span></button>
-            <button className="activity-item" aria-label="Extensions"><Blocks size={23} /></button>
           </div>
           <div className="activity-bottom">
-            <button className="activity-item" aria-label="Accounts"><UserCircle size={24} /></button>
             <button className={`activity-item ${activityView === "settings" ? "active" : ""}`} onClick={() => toggleActivityPane("settings")} aria-label="Settings"><Settings size={23} /></button>
           </div>
         </aside>
@@ -1026,7 +1199,7 @@ export function MainWorkspace() {
         {explorerVisible && (
         <aside className="explorer-panel">
           <div className="explorer-header">
-            {activityView !== "watchlist" && <span>{activityView === "news" ? "7X24" : activityView === "settings" ? "设置" : "使用说明"}</span>}
+            {activityView !== "watchlist" && <span>{activityViewTitle(activityView)}</span>}
             {activityView === "watchlist" ? (
               <div className="explorer-actions">
                 <button onClick={() => openSearch()} title="Add symbol" aria-label="Add symbol"><Plus size={15} /></button>
@@ -1034,11 +1207,51 @@ export function MainWorkspace() {
                 <button onClick={() => void editSelectedWatchNode()} title="Edit selected" aria-label="Edit selected"><Edit3 size={14} /></button>
                 <button onClick={() => void deleteSelectedWatchNode()} disabled={!selectedWatchNode} title="Delete selected" aria-label="Delete selected"><Trash2 size={14} /></button>
                 <button onClick={() => void api.forceRefresh()} title="Refresh quotes" aria-label="Refresh quotes"><RefreshCw size={14} /></button>
-                <button title={t("side.more")} aria-label={t("side.more")}><MoreHorizontal size={15} /></button>
+                <div className="explorer-action-menu">
+                  <button
+                    className={watchTreeColumnMenuOpen ? "active" : ""}
+                    title={t("side.more")}
+                    aria-label={t("side.more")}
+                    aria-haspopup="menu"
+                    aria-expanded={watchTreeColumnMenuOpen}
+                    onClick={() => setWatchTreeColumnMenuOpen((open) => !open)}
+                  >
+                    <MoreHorizontal size={15} />
+                  </button>
+                  {watchTreeColumnMenuOpen && (
+                    <div className="explorer-action-dropdown" role="menu">
+                      <span className="explorer-action-dropdown-title">{t("side.watchTreeColumns")}</span>
+                      {watchFloatColumnOptions.map((column) => {
+                        const checked = state.config.watch_tree_columns.includes(column.value);
+                        return (
+                          <label className="explorer-action-check" role="menuitemcheckbox" aria-checked={checked} key={column.value}>
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              disabled={checked && state.config.watch_tree_columns.length <= 1}
+                              onChange={(event) => updateWatchTreeColumn(column.value, event.target.checked)}
+                            />
+                            <span>{column.label}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
               </div>
             ) : activityView === "news" ? (
               <div className="explorer-actions">
                 <button onClick={() => { setMarketNewsItems([]); setMarketNewsLoadedPages(new Set()); setMarketNewsHasMore(true); setMarketNewsLatestState("idle"); setMarketNewsFetchPage(1); setMarketNewsReload((value) => value + 1); }} disabled={marketNewsLoading || marketNewsRefreshingLatest} title="Refresh 7x24" aria-label="Refresh 7x24"><RefreshCw size={14} /></button>
+              </div>
+            ) : activityView === "requests" ? (
+              <div className="explorer-actions">
+                <button
+                  title="请求日志用于查看应用发出的 HTTP 请求及报文详情。日志仅缓存在内存中，最多保留最近 500 条；应用退出或手动清空后不再保留。"
+                  aria-label="请求日志说明"
+                >
+                  <CircleHelp size={14} />
+                </button>
+                <button onClick={() => void clearRequestLogItems()} disabled={requestLogs.length === 0} title="清空请求日志" aria-label="清空请求日志"><Trash2 size={14} /></button>
               </div>
             ) : activityView === "settings" ? (
               <span />
@@ -1060,6 +1273,8 @@ export function MainWorkspace() {
                 setMarketNewsFetchPage(marketNewsNextPage);
               }}
             />
+          ) : activityView === "requests" ? (
+            <RequestLogPanel items={requestLogs} selectedId={selectedRequestLogId} onSelect={openRequestLog} />
           ) : activityView === "help" ? (
             <HelpOutline />
           ) : activityView === "settings" ? (
@@ -1072,6 +1287,7 @@ export function MainWorkspace() {
               selectedCode={selectedStock?.config.code}
               selectedSelection={selectedWatchNode}
               theme={theme}
+              columns={state.config.watch_tree_columns}
               onCreateGroup={() => void createWatchGroup()}
               onAddStockToGroup={(tag) => void addStockToWatchGroup(tag)}
               onMoveStockToGroup={(code, sourceTag, targetTag, copy, sourceOrder, targetOrder) =>
@@ -1080,7 +1296,7 @@ export function MainWorkspace() {
               onReorderGroups={(groups) => void api.updateStockGroups(groups)}
               onSelectNode={setSelectedWatchNode}
               onSelect={(stock) => setSelectedCode(stock.config.code)}
-              onOpenDetails={(stock) => { setSelectedCode(stock.config.code); openStockView("details"); }}
+              onOpenDetails={(stock) => openDetailTab(stock.config.code)}
             />
           )}
         </aside>
@@ -1091,15 +1307,38 @@ export function MainWorkspace() {
         {editorVisible && (
         <section className="editor-region">
           <div className="tab-strip">
-            {detailsOpen && (
-              <button className={`editor-tab ${activeView === "details" ? "active" : ""}`} onClick={() => setActiveView("details")}>
-                <FileText size={14} />
-                {selectedStock ? `${displayName(selectedStock)}.tsx` : "Portfolio.tsx"}
-                <span className="tab-status">U</span>
-                <span className="tab-close" onClick={(event) => { event.stopPropagation(); closeStockView("details"); }} role="button" aria-label="Close details tab" title="Close details tab">
-                  <X size={14} />
-                </span>
-              </button>
+            {detailTabs.map((tab) => {
+              const stock = visibleStocks.find((item) => item.config.code.toLowerCase() === tab.code.toLowerCase());
+              if (!stock) return null;
+              const active = activeView === "details" && activeDetailCode?.toLowerCase() === stock.config.code.toLowerCase();
+              return (
+                <button className={`editor-tab ${active ? "active" : ""}`} onClick={() => activateDetailTab(stock.config.code)} onContextMenu={(event) => openDetailTabContextMenu(stock.config.code, event)} key={stock.config.code}>
+                  <FileText size={14} />
+                  <span>{detailTabLabel(stock)}</span>
+                  <span className="tab-status">U</span>
+                  <span className="tab-close" onClick={(event) => { event.stopPropagation(); closeDetailTab(stock.config.code); }} role="button" aria-label="Close details tab" title="Close details tab">
+                    <X size={14} />
+                  </span>
+                </button>
+              );
+            })}
+            {detailTabContextMenu && (
+              <div className="tab-context-menu" style={{ left: detailTabContextMenu.x, top: detailTabContextMenu.y }} role="menu">
+                <button role="menuitem" onClick={() => runDetailTabContextAction(() => closeDetailTab(detailTabContextMenu.code))}>
+                  <span>Close</span>
+                  <kbd>Ctrl+F4</kbd>
+                </button>
+                <button role="menuitem" onClick={() => runDetailTabContextAction(() => closeOtherDetailTabs(detailTabContextMenu.code))} disabled={detailTabs.length <= 1}>
+                  <span>Close Others</span>
+                </button>
+                <button role="menuitem" onClick={() => runDetailTabContextAction(() => closeRightDetailTabs(detailTabContextMenu.code))} disabled={detailTabs.findIndex((tab) => tab.code.toLowerCase() === detailTabContextMenu.code.toLowerCase()) >= detailTabs.length - 1}>
+                  <span>Close to the Right</span>
+                </button>
+                <button role="menuitem" onClick={() => runDetailTabContextAction(closeAllDetailTabs)} disabled={detailTabs.length === 0}>
+                  <span>Close All</span>
+                  <kbd>Ctrl+K W</kbd>
+                </button>
+              </div>
             )}
             {activeView === "help" && (
               <button className="editor-tab active">
@@ -1111,6 +1350,15 @@ export function MainWorkspace() {
               <button className="editor-tab active">
                 <Settings size={14} />
                 {settingsViewLabel(settingsView, t)}
+              </button>
+            )}
+            {activeView === "request-log" && selectedRequestLog && (
+              <button className="editor-tab active">
+                <Network size={14} />
+                请求报文
+                <span className="tab-close" onClick={(event) => { event.stopPropagation(); setSelectedRequestLogId(""); setActiveView(detailsOpen ? "details" : chartOpen ? "chart" : undefined); }} role="button" aria-label="Close request log tab" title="Close request log tab">
+                  <X size={14} />
+                </span>
               </button>
             )}
             {chartOpen && (
@@ -1128,7 +1376,7 @@ export function MainWorkspace() {
             <ChevronRight size={14} />
             <span>renderer</span>
             <ChevronRight size={14} />
-            <span>{activeView === "help" ? "使用说明" : activeView === "settings" ? settingsViewLabel(settingsView, t) : selectedStock ? selectedStock.config.code : "portfolio"}</span>
+            <span>{activeView === "help" ? "使用说明" : activeView === "settings" ? settingsViewLabel(settingsView, t) : activeView === "request-log" ? "请求报文" : activeDetailStock ? activeDetailStock.config.code : selectedStock ? selectedStock.config.code : "portfolio"}</span>
           </div>
           <div className="editor-panel">
             {activeView === "help" ? (
@@ -1145,6 +1393,7 @@ export function MainWorkspace() {
                 themeError={themeError}
                 onWindowCloseBehaviorChange={updateWindowCloseBehavior}
                 onWatchFloatConfigChange={updateWatchFloatConfig}
+                onAiAnalysisConfigChange={updateAiAnalysisConfig}
                 onTradingRefreshIntervalChange={updateTradingRefreshInterval}
                 onThemeSelect={(themeName) => void selectTheme(themeName)}
                 onOpenConfigFile={() => void api.openConfigFile()}
@@ -1156,8 +1405,10 @@ export function MainWorkspace() {
                 onCancelMotto={() => setMottoDraft(savedMotto)}
                 onSaveMotto={() => void saveMotto()}
               />
-            ) : selectedStock && activeView === "details" ? (
-              <StockDetail state={state} stock={selectedStock} theme={theme} onOpenChart={() => openStockView("chart")} />
+            ) : activeView === "request-log" && selectedRequestLog ? (
+              <RequestLogDetail item={selectedRequestLog} />
+            ) : activeDetailStock && activeView === "details" ? (
+              <StockDetail state={state} stock={activeDetailStock} theme={theme} onOpenChart={() => openStockView("chart")} onOpenAiSettings={openAiAnalysisSettings} />
             ) : selectedStock && activeView === "chart" ? (
               <KLineView code={selectedStock.config.code} name={displayName(selectedStock)} />
             ) : (
@@ -1172,7 +1423,7 @@ export function MainWorkspace() {
         {sideVisible && (
         <aside className="codex-panel">
           <StockNotesPanelView
-            stock={activeView === "details" ? selectedStock : undefined}
+            stock={activeView === "details" ? activeDetailStock : undefined}
             journal={stockJournal}
             loading={journalLoading}
             saving={journalSaving}
@@ -1687,6 +1938,95 @@ function MarketNewsPanel({
   );
 }
 
+function RequestLogPanel({ items, selectedId, onSelect }: { items: RequestLogItem[]; selectedId: string; onSelect: (item: RequestLogItem) => void }) {
+  return (
+    <div className="request-log-pane">
+      {items.length === 0 ? (
+        <div className="empty-state">暂无请求记录</div>
+      ) : (
+        <div className="request-log-list">
+          {items.map((item) => (
+            <button className={`request-log-row ${item.ok === false ? "failed" : ""} ${selectedId === item.id ? "active" : ""}`} onClick={() => onSelect(item)} type="button" key={item.id}>
+              <div className="request-log-line">
+                <span className="request-log-method">{item.method}</span>
+                <span className={`request-log-status ${item.ok === false ? "failed" : "ok"}`}>
+                  {item.status ?? (item.error ? "ERR" : "--")}
+                </span>
+                <span className="request-log-duration">{item.durationMs}ms</span>
+              </div>
+              <div className="request-log-title" title={item.url}>{requestLogHost(item.url)}</div>
+              <div className="request-log-url" title={item.url}>{item.url}</div>
+              <div className="request-log-meta">
+                <span>{item.source || "HTTP"}</span>
+                <span>{formatRequestLogTime(item.startedAt)}</span>
+              </div>
+              {item.error && <div className="request-log-error" title={item.error}>{item.error}</div>}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function RequestLogDetail({ item }: { item: RequestLogItem }) {
+  return (
+    <article className="request-log-detail">
+      <section className="request-detail-summary">
+        <div>
+          <span>Method</span>
+          <strong>{item.method}</strong>
+        </div>
+        <div>
+          <span>Status</span>
+          <strong className={item.ok === false ? "failed" : "ok"}>{item.status ?? (item.error ? "ERR" : "--")}{item.statusText ? ` ${item.statusText}` : ""}</strong>
+        </div>
+        <div>
+          <span>Duration</span>
+          <strong>{item.durationMs}ms</strong>
+        </div>
+        <div>
+          <span>Time</span>
+          <strong>{new Date(item.startedAt).toLocaleString("zh-CN", { hour12: false })}</strong>
+        </div>
+      </section>
+      <RequestDetailBlock title="请求地址" content={item.url} />
+      <RequestDetailBlock title="请求头" content={formatHeaderBlock(item.requestHeaders)} />
+      <RequestDetailBlock title="请求正文" content={item.requestBody || "无请求正文"} />
+      <RequestDetailBlock title="响应头" content={formatHeaderBlock(item.responseHeaders)} />
+      <RequestDetailBlock title="响应正文预览" content={item.responseBodyPreview ? `${item.responseBodyPreview}${item.responseBodyTruncated ? "\n\n[内容已截断]" : ""}` : "暂无响应正文"} />
+      {item.error && <RequestDetailBlock title="错误信息" content={item.error} failed />}
+    </article>
+  );
+}
+
+function RequestDetailBlock({ title, content, failed = false }: { title: string; content: string; failed?: boolean }) {
+  return (
+    <section className={`request-detail-block ${failed ? "failed" : ""}`}>
+      <h2>{title}</h2>
+      <pre>{content}</pre>
+    </section>
+  );
+}
+
+function formatHeaderBlock(headers: Record<string, string> | undefined) {
+  const entries = Object.entries(headers ?? {});
+  if (entries.length === 0) return "无";
+  return entries.map(([key, value]) => `${key}: ${value}`).join("\n");
+}
+
+function requestLogHost(url: string) {
+  try {
+    return new URL(url).host;
+  } catch {
+    return url;
+  }
+}
+
+function formatRequestLogTime(value: number) {
+  return new Date(value).toLocaleTimeString("zh-CN", { hour12: false });
+}
+
 function NotesPanel({
   items,
   selectedPath,
@@ -1786,7 +2126,19 @@ function NoteTreeRow({
   );
 }
 
-function StockDetail({ state, stock, theme, onOpenChart }: { state: AppState; stock?: StockStatus; theme: Theme; onOpenChart: () => void }) {
+function StockDetail({
+  state,
+  stock,
+  theme,
+  onOpenChart,
+  onOpenAiSettings
+}: {
+  state: AppState;
+  stock?: StockStatus;
+  theme: Theme;
+  onOpenChart: () => void;
+  onOpenAiSettings: () => void;
+}) {
   const { locale, t } = useI18n();
   const [draft, setDraft] = useState<Position[]>([]);
   const [aliasDraft, setAliasDraft] = useState("");
@@ -1807,6 +2159,7 @@ function StockDetail({ state, stock, theme, onOpenChart }: { state: AppState; st
   const [commentsLoading, setCommentsLoading] = useState(false);
   const [commentsError, setCommentsError] = useState("");
   const [minuteOpen, setMinuteOpen] = useState(false);
+  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     setDraft(stock?.config.positions.map((position) => ({ ...position })) ?? []);
@@ -1954,6 +2307,9 @@ function StockDetail({ state, stock, theme, onOpenChart }: { state: AppState; st
     setCommentsOpen(true);
     setCommentsPage(1);
   };
+  const toggleSection = (section: string) => {
+    setCollapsedSections((items) => ({ ...items, [section]: !items[section] }));
+  };
 
   return (
     <div className="stock-detail-view">
@@ -1997,24 +2353,35 @@ function StockDetail({ state, stock, theme, onOpenChart }: { state: AppState; st
         </div>
       </div>
       {aliasError && <div className="save-error alias-error">{aliasError}</div>}
-      <div className="detail-table" aria-label={t("detail.quoteTable")}>
-        <DetailItem label={t("detail.lastPrice")} value={formatMaybe(price, 2)} color={profitColor(theme, percent ?? 0)} strong />
-        <DetailItem label={t("detail.change")} value={formatOptionalSigned(priceChange, 2)} color={priceChange === undefined ? undefined : profitColor(theme, priceChange)} />
-        <DetailItem label={t("detail.changePercent")} value={formatOptionalSigned(percent, 2, "%")} color={percent === undefined ? undefined : profitColor(theme, percent)} />
-        <DetailItem label={t("detail.open")} value={formatMaybe(stock.market?.open, 2)} />
-        <DetailItem label={t("detail.high")} value={formatMaybe(stock.market?.high, 2)} />
-        <DetailItem label={t("detail.low")} value={formatMaybe(stock.market?.low, 2)} />
-        <DetailItem label={t("detail.prevClose")} value={formatMaybe(stock.market?.prev_close, 2)} />
-        <DetailItem label={t("detail.shares")} value={`${totalShares(stock) || "--"}`} />
-        <DetailItem label={t("detail.marketValue")} value={formatMaybe(marketValue(stock), 0)} />
-        <DetailItem label={t("detail.dayProfitLoss")} value={formatOptionalSigned(dayProfit(stock), 0)} color={profitColor(theme, dayProfit(stock))} />
-        <DetailItem label={t("detail.totalProfitLoss")} value={formatOptionalSigned(totalProfit(stock), 0)} color={profitColor(theme, totalProfit(stock) ?? 0)} />
-        <DetailItem label={t("detail.returnRate")} value={formatOptionalSigned(totalProfitPoints(stock), 2, "%")} color={profitColor(theme, totalProfitPoints(stock) ?? 0)} />
-        <DetailItem label={t("detail.quoteTime")} value={stock.market?.time || "--"} />
-        <DetailItem label={t("detail.updated")} value={state.last_market_update ? new Date(state.last_market_update).toLocaleTimeString(locale) : "--"} />
-      </div>
-      <TradingIntensityPanel stock={stock} theme={theme} />
-      {minuteOpen && <MinutePanel stock={stock} theme={theme} onClose={() => setMinuteOpen(false)} />}
+      <DetailCurtainSection title={t("detail.quoteTable")} collapsed={collapsedSections.quote} onToggle={() => toggleSection("quote")}>
+        <div className="detail-table" aria-label={t("detail.quoteTable")}>
+          <DetailItem label={t("detail.lastPrice")} value={formatMaybe(price, 2)} color={profitColor(theme, percent ?? 0)} strong />
+          <DetailItem label={t("detail.change")} value={formatOptionalSigned(priceChange, 2)} color={priceChange === undefined ? undefined : profitColor(theme, priceChange)} />
+          <DetailItem label={t("detail.changePercent")} value={formatOptionalSigned(percent, 2, "%")} color={percent === undefined ? undefined : profitColor(theme, percent)} />
+          <DetailItem label={t("detail.open")} value={formatMaybe(stock.market?.open, 2)} />
+          <DetailItem label={t("detail.high")} value={formatMaybe(stock.market?.high, 2)} />
+          <DetailItem label={t("detail.low")} value={formatMaybe(stock.market?.low, 2)} />
+          <DetailItem label={t("detail.prevClose")} value={formatMaybe(stock.market?.prev_close, 2)} />
+          <DetailItem label={t("detail.shares")} value={`${totalShares(stock) || "--"}`} />
+          <DetailItem label={t("detail.marketValue")} value={formatMaybe(marketValue(stock), 0)} />
+          <DetailItem label={t("detail.volume")} value={formatShareVolume(stock.market?.volume)} />
+          <DetailItem label={t("detail.amount")} value={formatLargeAmount(stock.market?.amount)} />
+          <DetailItem label={t("detail.dayProfitLoss")} value={formatOptionalSigned(dayProfit(stock), 0)} color={profitColor(theme, dayProfit(stock))} />
+          <DetailItem label={t("detail.totalProfitLoss")} value={formatOptionalSigned(totalProfit(stock), 0)} color={profitColor(theme, totalProfit(stock) ?? 0)} />
+          <DetailItem label={t("detail.returnRate")} value={formatOptionalSigned(totalProfitPoints(stock), 2, "%")} color={profitColor(theme, totalProfitPoints(stock) ?? 0)} />
+          <DetailItem label={t("detail.quoteTime")} value={stock.market?.time || "--"} />
+          <DetailItem label={t("detail.updated")} value={state.last_market_update ? new Date(state.last_market_update).toLocaleTimeString(locale) : "--"} />
+        </div>
+      </DetailCurtainSection>
+      <DetailCurtainSection title="交易强度" collapsed={collapsedSections.intensity} onToggle={() => toggleSection("intensity")}>
+        <TradingIntensityPanel stock={stock} theme={theme} />
+      </DetailCurtainSection>
+      {minuteOpen && (
+        <DetailCurtainSection title={t("detail.minute")} collapsed={collapsedSections.minute} onToggle={() => toggleSection("minute")}>
+          <MinutePanel stock={stock} theme={theme} onClose={() => setMinuteOpen(false)} />
+        </DetailCurtainSection>
+      )}
+      <DetailCurtainSection title={t("detail.tags")} collapsed={collapsedSections.tags} onToggle={() => toggleSection("tags")}>
       <section className="tags-editor">
         <div className="tags-title">
           <span>{t("detail.tags")}</span>
@@ -2059,6 +2426,8 @@ function StockDetail({ state, stock, theme, onOpenChart }: { state: AppState; st
           </button>
         </div>
       </section>
+      </DetailCurtainSection>
+      <DetailCurtainSection title={t("detail.positions")} collapsed={collapsedSections.positions} onToggle={() => toggleSection("positions")}>
       <section className="positions-editor">
         <div className="positions-title">
           <span>{t("detail.positions")}</span>
@@ -2108,6 +2477,8 @@ function StockDetail({ state, stock, theme, onOpenChart }: { state: AppState; st
           </button>
         </div>
       </section>
+      </DetailCurtainSection>
+      <DetailCurtainSection title={t("detail.discussions")} collapsed={collapsedSections.comments} onToggle={() => toggleSection("comments")}>
       <section className="comments-panel">
         <div className="news-title">
           <span>{t("detail.discussions")}</span>
@@ -2144,6 +2515,10 @@ function StockDetail({ state, stock, theme, onOpenChart }: { state: AppState; st
           </div>
         )}
       </section>
+      </DetailCurtainSection>
+      <DetailCurtainSection title={t("detail.aiAnalysis")} collapsed={collapsedSections.ai} onToggle={() => toggleSection("ai")}>
+        <AiAnalysisPanel stock={stock} enabled={state.config.ai_analysis.enabled} onOpenSettings={onOpenAiSettings} />
+      </DetailCurtainSection>
     </div>
   );
 }
@@ -2167,14 +2542,15 @@ function SettingsOutline({ active, onSelect }: { active: SettingsView; onSelect:
   );
 }
 
-function settingsViewLabel(view: SettingsView, t: (key: `settings.${"title" | "general" | "marketRefresh" | "mottoFloat" | "watchlistFloat" | "camouflageFloat"}`) => string): string {
+function settingsViewLabel(view: SettingsView, t: (key: `settings.${"title" | "general" | "marketRefresh" | "aiAnalysis" | "mottoFloat" | "watchlistFloat" | "camouflageFloat"}`) => string): string {
   const key = settingsNavItems.find((item) => item.value === view)?.labelKey;
   return key ? t(key) : t("settings.title");
 }
 
-function settingsViewDescription(view: SettingsView, t: (key: `settings.${"generalDescription" | "marketRefreshDescription" | "mottoDescription" | "watchlistDescription" | "camouflageDescription"}`) => string): string {
+function settingsViewDescription(view: SettingsView, t: (key: `settings.${"generalDescription" | "marketRefreshDescription" | "aiAnalysisDescription" | "mottoDescription" | "watchlistDescription" | "camouflageDescription"}`) => string): string {
   if (view === "general") return t("settings.generalDescription");
   if (view === "market-refresh") return t("settings.marketRefreshDescription");
+  if (view === "ai-analysis") return t("settings.aiAnalysisDescription");
   if (view === "motto") return t("settings.mottoDescription");
   if (view === "watch-float") return t("settings.watchlistDescription");
   return t("settings.camouflageDescription");
@@ -2313,6 +2689,7 @@ function SettingsPage({
   themeError,
   onWindowCloseBehaviorChange,
   onWatchFloatConfigChange,
+  onAiAnalysisConfigChange,
   onTradingRefreshIntervalChange,
   onThemeSelect,
   onOpenConfigFile,
@@ -2334,6 +2711,7 @@ function SettingsPage({
   themeError: string;
   onWindowCloseBehaviorChange: (behavior: AppConfig["window_close_behavior"]) => void;
   onWatchFloatConfigChange: (patch: Partial<WatchFloatConfig>) => void;
+  onAiAnalysisConfigChange: (patch: Partial<AiAnalysisConfig>) => void;
   onTradingRefreshIntervalChange: (intervalMs: number) => void;
   onThemeSelect: (themeName: string) => void;
   onOpenConfigFile: () => void;
@@ -2351,6 +2729,8 @@ function SettingsPage({
   const [draggedWatchFloatColumn, setDraggedWatchFloatColumn] = useState<WatchFloatColumn>();
   const [watchFloatProfileName, setWatchFloatProfileName] = useState("");
   const [refreshIntervalDraft, setRefreshIntervalDraft] = useState(() => String(state.config.trading_refresh_interval_ms ?? DEFAULT_TRADING_REFRESH_INTERVAL_MS));
+  const [aiCommandDraft, setAiCommandDraft] = useState(() => state.config.ai_analysis.codex_command);
+  const [aiTimeoutDraft, setAiTimeoutDraft] = useState(() => String(state.config.ai_analysis.timeout_ms));
   const entries = Object.keys(state.config.themes).sort((left, right) => left.localeCompare(right));
   const watchFloatColumns = new Set(state.config.watch_float.columns);
   const orderedColumnOptions = useMemo(() => orderedWatchFloatColumns(state.config.watch_float.columns), [state.config.watch_float.columns]);
@@ -2447,10 +2827,29 @@ function SettingsPage({
     setRefreshIntervalDraft(String(next));
     if (next !== state.config.trading_refresh_interval_ms) onTradingRefreshIntervalChange(next);
   };
+  const commitAiCommand = () => {
+    const next = aiCommandDraft.trim() || "codex";
+    setAiCommandDraft(next);
+    if (next !== state.config.ai_analysis.codex_command) onAiAnalysisConfigChange({ codex_command: next });
+  };
+  const commitAiTimeout = () => {
+    const parsed = Number(aiTimeoutDraft);
+    const next = Number.isFinite(parsed) ? clamp(Math.round(parsed), 10000, 300000) : 60000;
+    setAiTimeoutDraft(String(next));
+    if (next !== state.config.ai_analysis.timeout_ms) onAiAnalysisConfigChange({ timeout_ms: next });
+  };
 
   useEffect(() => {
     setRefreshIntervalDraft(String(state.config.trading_refresh_interval_ms ?? DEFAULT_TRADING_REFRESH_INTERVAL_MS));
   }, [state.config.trading_refresh_interval_ms]);
+
+  useEffect(() => {
+    setAiCommandDraft(state.config.ai_analysis.codex_command);
+  }, [state.config.ai_analysis.codex_command]);
+
+  useEffect(() => {
+    setAiTimeoutDraft(String(state.config.ai_analysis.timeout_ms));
+  }, [state.config.ai_analysis.timeout_ms]);
 
   useEffect(() => {
     if (watchFloatSearch.trim()) setWatchFloatExpandedKeys(watchFloatTree.expandedKeys);
@@ -2519,6 +2918,88 @@ function SettingsPage({
             />
             <small>{t("settings.tradingRefreshIntervalHint")}</small>
           </label>
+        </section>
+      </div>
+    );
+  }
+
+  if (view === "ai-analysis") {
+    return (
+      <div className="settings-page">
+        <SettingsPageHeader view={view} />
+        <section className="settings-section">
+          <div className="settings-section-title">
+            <h3>{t("settings.aiAnalysis")}</h3>
+            <p>{t("settings.aiAnalysisDescription")}</p>
+          </div>
+          <div className="settings-motto-actions">
+            <button className="tool-button" type="button" onClick={() => void api.openExternalUrl(AI_ANALYSIS_GUIDE_URL)}>
+              <ExternalLink size={14} />
+              {t("settings.aiAnalysisGuide")}
+            </button>
+          </div>
+          <label className="watch-float-style-toggle">
+            <span>{t("settings.enableAiAnalysis")}</span>
+            <input
+              type="checkbox"
+              checked={state.config.ai_analysis.enabled}
+              onChange={(event) => onAiAnalysisConfigChange({ enabled: event.target.checked })}
+            />
+          </label>
+          <label className="settings-field">
+            <span>{t("settings.codexCommand")}</span>
+            <input
+              value={aiCommandDraft}
+              onChange={(event) => setAiCommandDraft(event.target.value)}
+              onBlur={commitAiCommand}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") event.currentTarget.blur();
+              }}
+            />
+            <small>{t("settings.codexCommandHint")}</small>
+          </label>
+          <label className="settings-field">
+            <span>{t("settings.aiTimeout")}</span>
+            <input
+              type="number"
+              min={10000}
+              max={300000}
+              step={5000}
+              value={aiTimeoutDraft}
+              onChange={(event) => setAiTimeoutDraft(event.target.value)}
+              onBlur={commitAiTimeout}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") event.currentTarget.blur();
+              }}
+            />
+            <small>{t("settings.aiTimeoutHint")}</small>
+          </label>
+          <div className="watch-float-style-grid">
+            <label className="watch-float-style-toggle">
+              <span>{t("settings.includeNotes")}</span>
+              <input
+                type="checkbox"
+                checked={state.config.ai_analysis.include_notes}
+                onChange={(event) => onAiAnalysisConfigChange({ include_notes: event.target.checked })}
+              />
+            </label>
+            <label className="watch-float-style-toggle">
+              <span>{t("settings.includeNews")}</span>
+              <input
+                type="checkbox"
+                checked={state.config.ai_analysis.include_news}
+                onChange={(event) => onAiAnalysisConfigChange({ include_news: event.target.checked })}
+              />
+            </label>
+            <label className="watch-float-style-toggle">
+              <span>{t("settings.includeComments")}</span>
+              <input
+                type="checkbox"
+                checked={state.config.ai_analysis.include_comments}
+                onChange={(event) => onAiAnalysisConfigChange({ include_comments: event.target.checked })}
+              />
+            </label>
+          </div>
         </section>
       </div>
     );
@@ -2868,6 +3349,18 @@ function DetailItem({ label, value, color, strong = false }: { label: string; va
   );
 }
 
+function DetailCurtainSection({ title, collapsed, onToggle, children }: { title: string; collapsed?: boolean; onToggle: () => void; children: ReactNode }) {
+  return (
+    <section className={`detail-curtain-section ${collapsed ? "collapsed" : ""}`}>
+      <button className="detail-curtain-title" type="button" onClick={onToggle}>
+        <ChevronRight size={14} />
+        <span>{title}</span>
+      </button>
+      {!collapsed && <div className="detail-curtain-body">{children}</div>}
+    </section>
+  );
+}
+
 function SignedMetric({
   value,
   digits,
@@ -2885,6 +3378,20 @@ function SignedMetric({
 
 function formatOptionalSigned(value: number | undefined, digits: number, suffix = "") {
   return value === undefined ? "--" : `${formatSigned(value, digits)}${suffix}`;
+}
+
+function formatLargeAmount(value: number | undefined, digits = 2) {
+  if (value === undefined || !Number.isFinite(value) || value <= 0) return "--";
+  if (value >= 100000000) return `${(value / 100000000).toFixed(digits)}亿`;
+  if (value >= 10000) return `${(value / 10000).toFixed(digits)}万`;
+  return value.toFixed(0);
+}
+
+function formatShareVolume(value: number | undefined) {
+  if (value === undefined || !Number.isFinite(value) || value <= 0) return "--";
+  if (value >= 100000000) return `${(value / 100000000).toFixed(2)}亿股`;
+  if (value >= 10000) return `${(value / 10000).toFixed(2)}万股`;
+  return `${value.toFixed(0)}股`;
 }
 
 function formatThemeName(themeName: string) {

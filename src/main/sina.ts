@@ -1,5 +1,6 @@
 import iconv from "iconv-lite";
 import type { FiveDayMinutePoint, KLinePoint, KLineScale, MarketData, MinutePoint, StockCommentItem, StockCommentPage, StockNewsArticle, StockNewsItem, StockNewsPage, StockSearchResult } from "../shared/types";
+import { loggedFetch } from "./requestLog";
 
 const referer = "https://finance.sina.com.cn/";
 const thsNewsPageSize = 20;
@@ -9,19 +10,19 @@ export async function fetchMultipleStocks(codes: string[]): Promise<Map<string, 
   if (codes.length === 0) return new Map();
   const quoteCodes = codes.map(toSinaQuoteCode);
   const url = `http://hq.sinajs.cn/list=${quoteCodes.join(",")}`;
-  const response = await fetch(url, {
+  const response = await loggedFetch(url, {
     headers: {
       Referer: referer,
       "User-Agent": "Mozilla/5.0"
     }
-  });
+  }, "Sina Quotes");
   const bytes = Buffer.from(await response.arrayBuffer());
   return parseSinaQuote(iconv.decode(bytes, "gbk"));
 }
 
 export async function searchStocks(query: string): Promise<StockSearchResult[]> {
   const url = `http://suggest3.sinajs.cn/suggest/type=&key=${encodeURIComponent(query)}&name=suggestdata_${Date.now()}`;
-  const response = await fetch(url, { headers: { Referer: referer } });
+  const response = await loggedFetch(url, { headers: { Referer: referer } }, "Sina Suggest");
   const bytes = Buffer.from(await response.arrayBuffer());
   const results = parseSuggest(iconv.decode(bytes, "gbk"));
   const directHongKongCode = normalizeHongKongSearchCode(query);
@@ -38,7 +39,7 @@ export async function fetchKLineData(code: string, scale: KLineScale): Promise<K
   const url =
     `http://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketData.getKLineData` +
     `?symbol=${symbol}&scale=${scale}&ma=no&datalen=300`;
-  const response = await fetch(url);
+  const response = await loggedFetch(url, undefined, "Sina KLine");
   const text = await response.text();
   const data = JSON.parse(text) as Array<Record<string, string>>;
   return data.map((point) => ({
@@ -54,13 +55,13 @@ export async function fetchKLineData(code: string, scale: KLineScale): Promise<K
 async function fetchTencentKLineData(symbol: string, scale: KLineScale): Promise<KLinePoint[]> {
   const period = scale === 240 ? "day" : `m${scale}`;
   const url = `https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=${encodeURIComponent(`${symbol},${period},,,300,qfq`)}`;
-  const response = await fetch(url, {
+  const response = await loggedFetch(url, {
     headers: {
       Referer: "https://gu.qq.com/",
       "User-Agent": "Mozilla/5.0",
       Accept: "application/json, text/plain, */*"
     }
-  });
+  }, "Tencent KLine");
   const payload = await response.json() as TencentKLineResponse;
   const root = payload.data?.[symbol] ?? payload.data?.[symbol.toUpperCase()];
   const rows = root?.[`qfq${period}`] ?? root?.[period] ?? [];
@@ -70,13 +71,13 @@ async function fetchTencentKLineData(symbol: string, scale: KLineScale): Promise
 export async function fetchTencentFiveDayMinuteData(code: string): Promise<FiveDayMinutePoint[]> {
   const symbol = code.toLowerCase();
   const url = `https://web.ifzq.gtimg.cn/appstock/app/day/query?code=${encodeURIComponent(symbol)}`;
-  const response = await fetch(url, {
+  const response = await loggedFetch(url, {
     headers: {
       Referer: "https://gu.qq.com/",
       "User-Agent": "Mozilla/5.0",
       Accept: "application/json, text/plain, */*"
     }
-  });
+  }, "Tencent Five Day Minute");
   const payload = await response.json() as TencentFiveDayResponse;
   const root = payload.data?.[symbol] ?? payload.data?.[symbol.toUpperCase()];
   if (!root) return [];
@@ -106,13 +107,13 @@ export async function fetchTencentFiveDayMinuteData(code: string): Promise<FiveD
 export async function fetchTencentMinuteData(code: string): Promise<MinutePoint[]> {
   const symbol = code.toLowerCase();
   const url = `https://web.ifzq.gtimg.cn/appstock/app/minute/query?code=${encodeURIComponent(symbol)}`;
-  const response = await fetch(url, {
+  const response = await loggedFetch(url, {
     headers: {
       Referer: "https://gu.qq.com/",
       "User-Agent": "Mozilla/5.0",
       Accept: "application/json, text/plain, */*"
     }
-  });
+  }, "Tencent Minute");
   const text = await response.text();
   return parseTencentMinuteData(text, symbol);
 }
@@ -166,13 +167,13 @@ async function fetchThsDiscussionPage(code: string, page: number): Promise<Stock
   const url = page <= 1
     ? `https://guba.10jqka.com.cn/${simpleCode}/`
     : `https://guba.10jqka.com.cn/${simpleCode}/index_${page}.html`;
-  const response = await fetch(url, {
+  const response = await loggedFetch(url, {
     headers: {
       Referer: `https://guba.10jqka.com.cn/${simpleCode}/`,
       "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
       Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
     }
-  });
+  }, "THS Discussion");
   if (!response.ok) return [];
 
   const bytes = Buffer.from(await response.arrayBuffer());
@@ -182,13 +183,13 @@ async function fetchThsDiscussionPage(code: string, page: number): Promise<Stock
 
 async function fetchThsRealtimeNewsPage(page: number): Promise<StockNewsItem[]> {
   const url = `https://news.10jqka.com.cn/tapp/news/push/stock?page=${page}&tag=&track=website&pagesize=${thsNewsPageSize}`;
-  const response = await fetch(url, {
+  const response = await loggedFetch(url, {
     headers: {
       Referer: "https://news.10jqka.com.cn/realtimenews.html",
       "User-Agent": "Mozilla/5.0",
       Accept: "application/json, text/plain, */*"
     }
-  });
+  }, "THS Realtime News");
   const payload = await response.json() as ThsRealtimeNewsResponse;
   return parseThsRealtimeNews(payload);
 }
@@ -199,12 +200,12 @@ export async function fetchStockNewsArticle(url: string): Promise<StockNewsArtic
     throw new Error("Unsupported news URL.");
   }
 
-  const response = await fetch(parsedUrl.toString(), {
+  const response = await loggedFetch(parsedUrl.toString(), {
     headers: {
       Referer: referer,
       "User-Agent": "Mozilla/5.0"
     }
-  });
+  }, "Stock News Article");
   const bytes = Buffer.from(await response.arrayBuffer());
   const html = decodeHtmlResponse(bytes, response.headers.get("content-type"));
   return parseStockNewsArticle(html, parsedUrl.toString());
@@ -247,6 +248,8 @@ function parseSinaQuote(body: string): Map<string, MarketData> {
       current_price: numberAt(parts, 3),
       high: numberAt(parts, 4),
       low: numberAt(parts, 5),
+      volume: numberAt(parts, 8),
+      amount: numberAt(parts, 9),
       time: `${parts[30] ?? ""} ${parts[31] ?? ""}`.trim()
     });
   }

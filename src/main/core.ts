@@ -2,9 +2,11 @@ import { app, BrowserWindow, shell } from "electron";
 import fs from "node:fs";
 import path from "node:path";
 import * as yaml from "js-yaml";
-import { ConfigManager, normalizeTradingRefreshInterval } from "./config";
+import { dayProfit, displayName, effectivePrice, marketValue, totalProfit, totalProfitPoints, totalShares } from "../shared/finance";
+import { runCodexAnalysis } from "./aiAnalysis";
+import { ConfigManager, normalizeAiAnalysis, normalizeTradingRefreshInterval, normalizeWatchColumns } from "./config";
 import { fetchKLineData, fetchMultipleStocks, fetchStockComments as fetchThsStockComments, fetchStockNews as fetchSinaStockNews, fetchStockNewsArticle as fetchSinaStockNewsArticle, fetchTencentFiveDayMinuteData, fetchTencentMinuteData, searchStocks } from "./sina";
-import type { AppConfig, AppState, KLinePoint, KLineScale, MottoConfig, Position, StockConfig, StockJournal, StockJournalNote, WatchFloatColumn, WatchFloatConfig, WatchFloatStyle } from "../shared/types";
+import type { AiAnalysisConfig, AiAnalysisProcessLog, AiAnalysisResult, AppConfig, AppState, KLinePoint, KLineScale, MottoConfig, Position, StockConfig, StockJournal, StockJournalNote, StockStatus, WatchFloatColumn, WatchFloatConfig, WatchFloatStyle } from "../shared/types";
 
 const INDEX_CODE = "sh000001";
 const OFF_HOURS_REFRESH_MS = 300000;
@@ -148,6 +150,22 @@ export class AppCore {
       active_profile: watchFloat.active_profile.trim() || "custom",
       profiles: normalizeWatchFloatProfiles(watchFloat.profiles, config.watch_float.profiles)
     };
+
+    this.configManager.save(config);
+    this.applyConfig(config);
+  }
+
+  updateWatchTreeColumns(columns: WatchFloatColumn[]): void {
+    const config = this.configManager.loadOrDefault();
+    config.watch_tree_columns = normalizeWatchColumns(columns);
+
+    this.configManager.save(config);
+    this.applyConfig(config);
+  }
+
+  updateAiAnalysisConfig(aiAnalysis: AiAnalysisConfig): void {
+    const config = this.configManager.loadOrDefault();
+    config.ai_analysis = normalizeAiAnalysis(aiAnalysis);
 
     this.configManager.save(config);
     this.applyConfig(config);
@@ -349,6 +367,134 @@ export class AppCore {
     return fetchThsStockComments(code, page);
   }
 
+  getAiAnalysisHistory(code: string): AiAnalysisResult[] {
+    return structuredClone(readAiAnalysisResults(code));
+  }
+
+  getAiAnalysisProcess(code: string): AiAnalysisProcessLog | undefined {
+    const log = readAiAnalysisProcess(code);
+    return log ? structuredClone(log) : undefined;
+  }
+
+  async runAiAnalysis(code: string): Promise<AiAnalysisResult> {
+    const config = this.state.config.ai_analysis;
+    if (!config.enabled) throw new Error("AI analysis is disabled.");
+
+    const normalizedCode = code.toLowerCase();
+    const stock = this.state.stocks.find((item) => item.config.code.toLowerCase() === normalizedCode);
+    if (!stock) throw new Error("Stock does not exist.");
+
+    const runId = `ai-${Date.now()}`;
+    const processLog: AiAnalysisProcessLog = {
+      id: runId,
+      code: stock.config.code,
+      startedAt: Date.now(),
+      updatedAt: Date.now(),
+      status: "running",
+      command: config.codex_command,
+      output: "Preparing stock data snapshot...\n"
+    };
+    this.updateAiAnalysisProcess(processLog);
+
+    try {
+      const snapshot = await this.createAiAnalysisSnapshot(stock, config);
+      processLog.output += "Stock data snapshot is ready. Starting Codex...\n";
+      this.updateAiAnalysisProcess(processLog);
+      const content = await runCodexAnalysis(config, buildAiAnalysisPrompt(snapshot), app.getAppPath(), (progress) => {
+        processLog.output = trimAiAnalysisProcessOutput(`${processLog.output}${formatCodexProgress(progress.stream, progress.text)}`);
+        this.updateAiAnalysisProcess(processLog);
+      });
+      const result: AiAnalysisResult = {
+        id: runId,
+        code: stock.config.code,
+        generatedAt: Date.now(),
+        quoteTime: stock.market?.time,
+        dataUpdatedAt: this.state.last_market_update,
+        content
+      };
+      appendAiAnalysisResult(result);
+      processLog.status = "success";
+      processLog.resultId = result.id;
+      processLog.output += "Analysis result was saved.\n";
+      this.updateAiAnalysisProcess(processLog);
+      return result;
+    } catch (error) {
+      processLog.status = error instanceof Error && error.message === "AI analysis timed out." ? "timeout" : "error";
+      processLog.error = error instanceof Error ? error.message : String(error);
+      processLog.output += `Analysis failed: ${processLog.error}\n`;
+      this.updateAiAnalysisProcess(processLog);
+      throw error;
+    }
+  }
+
+  private updateAiAnalysisProcess(log: AiAnalysisProcessLog): void {
+    log.updatedAt = Date.now();
+    writeAiAnalysisProcess(log);
+    for (const win of this.getWindows()) {
+      if (!win.isDestroyed()) win.webContents.send("ai-analysis-process", structuredClone(log));
+    }
+  }
+
+  private async createAiAnalysisSnapshot(stock: StockStatus, config: AiAnalysisConfig) {
+    const sourceErrors: string[] = [];
+    const [dailyResult, minuteResult, newsResult, commentsResult] = await Promise.allSettled([
+      this.fetchKLine(stock.config.code, 240),
+      this.fetchMinuteData(stock.config.code),
+      config.include_news ? this.fetchStockNews(stock.config.code, 1) : Promise.resolve(undefined),
+      config.include_comments ? this.fetchStockComments(stock.config.code, 1) : Promise.resolve(undefined)
+    ]);
+    const dailyKLine = settledValue(dailyResult, sourceErrors, "daily_kline")?.slice(-80) ?? [];
+    const minute = settledValue(minuteResult, sourceErrors, "minute")?.slice(-120) ?? [];
+    const news = settledValue(newsResult, sourceErrors, "news")?.items.slice(0, 8) ?? [];
+    const comments = settledValue(commentsResult, sourceErrors, "comments")?.items.slice(0, 12) ?? [];
+    const journal = config.include_notes ? this.readStockJournal(stock.config.code) : undefined;
+    const price = effectivePrice(stock.market);
+    const change = price !== undefined && stock.market ? price - stock.market.prev_close : undefined;
+    const changePercent = price !== undefined && stock.market?.prev_close
+      ? ((price - stock.market.prev_close) / stock.market.prev_close) * 100
+      : undefined;
+
+    return {
+      generated_at: new Date().toISOString(),
+      application: "FinBox",
+      stock: {
+        code: stock.config.code,
+        name: displayName(stock),
+        tags: stock.config.tags,
+        alias: stock.config.alias
+      },
+      quote: {
+        current_price: price,
+        change,
+        change_percent: changePercent,
+        open: stock.market?.open,
+        high: stock.market?.high,
+        low: stock.market?.low,
+        volume: stock.market?.volume,
+        amount: stock.market?.amount,
+        prev_close: stock.market?.prev_close,
+        quote_time: stock.market?.time,
+        app_last_market_update: this.state.last_market_update ? new Date(this.state.last_market_update).toISOString() : undefined
+      },
+      position: {
+        shares: totalShares(stock),
+        market_value: marketValue(stock),
+        day_profit: dayProfit(stock),
+        total_profit: totalProfit(stock),
+        return_rate_percent: totalProfitPoints(stock),
+        lots: stock.config.positions
+      },
+      data: {
+        daily_kline: dailyKLine,
+        minute,
+        notes: journal?.notes.slice(-20) ?? [],
+        news: news.map((item) => ({ title: item.title, date: item.date, source: item.source, url: item.url })),
+        comments: comments.map((item) => ({ user: item.user, text: item.text, date: item.date, url: item.url }))
+      },
+      source_errors: sourceErrors
+    };
+  }
+
   private scheduleNextRefresh(): void {
     if (this.timer) clearTimeout(this.timer);
     const interval = dataRefreshIntervalMs(
@@ -529,8 +675,24 @@ function stockNotesRoot(): string {
   return path.join(app.getPath("userData"), "stock-notes");
 }
 
+function aiAnalysisRoot(): string {
+  return path.join(app.getPath("userData"), "ai-analysis");
+}
+
 function stockJournalCodeDir(code: string): string {
   return path.join(stockJournalRoot(), normalizeCode(code));
+}
+
+function aiAnalysisCodeDir(code: string): string {
+  return path.join(aiAnalysisRoot(), normalizeCode(code));
+}
+
+function aiAnalysisResultsPath(code: string): string {
+  return path.join(aiAnalysisCodeDir(code), "results.json");
+}
+
+function aiAnalysisProcessPath(code: string): string {
+  return path.join(aiAnalysisCodeDir(code), "process.json");
 }
 
 function stockJournalMetaPath(code: string): string {
@@ -560,6 +722,83 @@ function emptyStockJournal(code: string): StockJournal {
     notes: [],
     updatedAt: Date.now()
   };
+}
+
+function readAiAnalysisResults(code: string): AiAnalysisResult[] {
+  try {
+    const value = JSON.parse(fs.readFileSync(aiAnalysisResultsPath(code), "utf8")) as unknown;
+    if (!Array.isArray(value)) return [];
+    return value
+      .map(normalizeAiAnalysisResult)
+      .filter((item): item is AiAnalysisResult => Boolean(item))
+      .sort((left, right) => right.generatedAt - left.generatedAt);
+  } catch {
+    return [];
+  }
+}
+
+function appendAiAnalysisResult(result: AiAnalysisResult): void {
+  const normalizedCode = normalizeCode(result.code);
+  const results = readAiAnalysisResults(normalizedCode);
+  const next = [result, ...results.filter((item) => item.id !== result.id)].sort((left, right) => right.generatedAt - left.generatedAt);
+  fs.mkdirSync(aiAnalysisCodeDir(normalizedCode), { recursive: true });
+  fs.writeFileSync(aiAnalysisResultsPath(normalizedCode), `${JSON.stringify(next, null, 2)}\n`, "utf8");
+}
+
+function readAiAnalysisProcess(code: string): AiAnalysisProcessLog | undefined {
+  try {
+    return normalizeAiAnalysisProcess(JSON.parse(fs.readFileSync(aiAnalysisProcessPath(code), "utf8")) as unknown);
+  } catch {
+    return undefined;
+  }
+}
+
+function writeAiAnalysisProcess(log: AiAnalysisProcessLog): void {
+  const normalizedCode = normalizeCode(log.code);
+  fs.mkdirSync(aiAnalysisCodeDir(normalizedCode), { recursive: true });
+  fs.writeFileSync(aiAnalysisProcessPath(normalizedCode), `${JSON.stringify(log, null, 2)}\n`, "utf8");
+}
+
+function normalizeAiAnalysisResult(value: unknown): AiAnalysisResult | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const result = value as Partial<AiAnalysisResult>;
+  if (!result.code || !result.content) return undefined;
+  const generatedAt = Number(result.generatedAt);
+  return {
+    id: typeof result.id === "string" && result.id ? result.id : `ai-${Number.isFinite(generatedAt) ? generatedAt : Date.now()}`,
+    code: normalizeCode(result.code),
+    generatedAt: Number.isFinite(generatedAt) ? generatedAt : Date.now(),
+    quoteTime: typeof result.quoteTime === "string" ? result.quoteTime : undefined,
+    dataUpdatedAt: Number.isFinite(Number(result.dataUpdatedAt)) ? Number(result.dataUpdatedAt) : undefined,
+    content: String(result.content)
+  };
+}
+
+function normalizeAiAnalysisProcess(value: unknown): AiAnalysisProcessLog | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const log = value as Partial<AiAnalysisProcessLog>;
+  if (!log.id || !log.code) return undefined;
+  const statuses: AiAnalysisProcessLog["status"][] = ["running", "success", "error", "timeout"];
+  return {
+    id: String(log.id),
+    code: normalizeCode(log.code),
+    startedAt: Number(log.startedAt) || Date.now(),
+    updatedAt: Number(log.updatedAt) || Date.now(),
+    status: statuses.includes(log.status as AiAnalysisProcessLog["status"]) ? log.status as AiAnalysisProcessLog["status"] : "error",
+    command: typeof log.command === "string" ? log.command : undefined,
+    output: typeof log.output === "string" ? log.output : "",
+    error: typeof log.error === "string" ? log.error : undefined,
+    resultId: typeof log.resultId === "string" ? log.resultId : undefined
+  };
+}
+
+function trimAiAnalysisProcessOutput(output: string): string {
+  return output.length > 120000 ? output.slice(-120000) : output;
+}
+
+function formatCodexProgress(stream: "system" | "stdout" | "stderr", text: string): string {
+  const prefix = stream === "system" ? "[system]" : stream === "stderr" ? "[stderr]" : "[stdout]";
+  return `${prefix} ${text.endsWith("\n") ? text : `${text}\n`}`;
 }
 
 function upsertKLinePoint(journal: StockJournal, point: KLinePoint): void {
@@ -745,6 +984,29 @@ function normalizeWatchFloatMetricColors(
 
 function normalizeHexColor(value: unknown, fallback: string): string {
   return typeof value === "string" && /^#[0-9a-fA-F]{6}$/.test(value) ? value : fallback;
+}
+
+function settledValue<T>(result: PromiseSettledResult<T>, errors: string[], source: string): T | undefined {
+  if (result.status === "fulfilled") return result.value;
+  errors.push(`${source}: ${result.reason instanceof Error ? result.reason.message : String(result.reason)}`);
+  return undefined;
+}
+
+function buildAiAnalysisPrompt(snapshot: unknown): string {
+  return [
+    "你是一个严格的证券交易辅助分析器。请只基于输入 JSON 中的事实数据进行分析。",
+    "要求：",
+    "1. 使用中文输出。",
+    "2. 不得声称能够预测市场，必须把建议写成条件化方案。",
+    "3. 明确区分事实、推断和风险。",
+    "4. 如果数据不足，必须说明不足，不得补造新闻、财务数据或盘口数据。",
+    "5. 不得调用工具、不得修改文件、不得读取本地文件。",
+    "6. 输出固定 Markdown 结构：## 结论、## 依据、## 操作条件、## 风险、## 数据时间。",
+    "7. 结论中的操作倾向只能使用：观望、减仓、加仓、止损、止盈、等待确认。",
+    "",
+    "输入 JSON：",
+    JSON.stringify(snapshot, null, 2)
+  ].join("\n");
 }
 
 function createState(config: AppConfig): AppState {

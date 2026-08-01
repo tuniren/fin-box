@@ -8,9 +8,13 @@ https://github.com/tuniren/fin-box/releases
 1. FinBox-Setup-x.x.x-win-x64.exe（标准安装版）（推荐安装） 
 2. FinBox-Portable-x.x.x-win-x64.exe（便携免安装版）
 
-## 功能截图
+## 功能简要说明
 
 > 以下图片为 README 展示用样例路径，可将实际截图放到 `docs/screenshots` 目录后替换文件名或图片内容。
+
+### AI分析(实验版本)
+
+可在设置界面开启ai分析，按照文档配置使用ai分析。
 
 ### 自选盯盘
 

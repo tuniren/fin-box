@@ -67,11 +67,22 @@ export type WatchFloatConfig = {
   profiles: Record<string, WatchFloatStyle>;
 };
 
+export type AiAnalysisConfig = {
+  enabled: boolean;
+  codex_command: string;
+  timeout_ms: number;
+  include_notes: boolean;
+  include_news: boolean;
+  include_comments: boolean;
+};
+
 export type AppConfig = {
   total_investment?: number;
   cash?: number;
   motto: MottoConfig;
   watch_float: WatchFloatConfig;
+  watch_tree_columns: WatchFloatColumn[];
+  ai_analysis: AiAnalysisConfig;
   trading_refresh_interval_ms: number;
   window_close_behavior: "tray" | "close";
   hide_zero_shares: boolean;
@@ -89,6 +100,8 @@ export type MarketData = {
   open: number;
   high: number;
   low: number;
+  volume?: number;
+  amount?: number;
   time: string;
 };
 
@@ -208,10 +221,51 @@ export type UpdateStatus = {
   message?: string;
 };
 
+export type RequestLogItem = {
+  id: string;
+  method: string;
+  url: string;
+  source?: string;
+  requestHeaders?: Record<string, string>;
+  requestBody?: string;
+  status?: number;
+  statusText?: string;
+  responseHeaders?: Record<string, string>;
+  responseBodyPreview?: string;
+  responseBodyTruncated?: boolean;
+  ok?: boolean;
+  durationMs: number;
+  startedAt: number;
+  error?: string;
+};
+
+export type AiAnalysisResult = {
+  id: string;
+  code: string;
+  generatedAt: number;
+  quoteTime?: string;
+  dataUpdatedAt?: number;
+  content: string;
+};
+
+export type AiAnalysisProcessLog = {
+  id: string;
+  code: string;
+  startedAt: number;
+  updatedAt: number;
+  status: "running" | "success" | "error" | "timeout";
+  command?: string;
+  output: string;
+  error?: string;
+  resultId?: string;
+};
+
 export type FinBoxApi = {
   getState: () => Promise<AppState>;
   forceRefresh: () => Promise<void>;
   getUpdateStatus: () => Promise<UpdateStatus>;
+  getRequestLogs: () => Promise<RequestLogItem[]>;
+  clearRequestLogs: () => Promise<void>;
   checkForUpdates: () => Promise<UpdateStatus>;
   downloadUpdate: () => Promise<UpdateStatus>;
   installUpdate: () => Promise<void>;
@@ -224,6 +278,8 @@ export type FinBoxApi = {
   updateAccountConfig: (patch: Pick<AppConfig, "total_investment" | "cash">) => Promise<void>;
   updateMotto: (motto: MottoConfig) => Promise<void>;
   updateWatchFloatConfig: (config: WatchFloatConfig) => Promise<void>;
+  updateWatchTreeColumns: (columns: WatchFloatColumn[]) => Promise<void>;
+  updateAiAnalysisConfig: (config: AiAnalysisConfig) => Promise<void>;
   updateTradingRefreshInterval: (intervalMs: number) => Promise<void>;
   updateWindowCloseBehavior: (behavior: AppConfig["window_close_behavior"]) => Promise<void>;
   updateTheme: (themeName: string) => Promise<void>;
@@ -243,6 +299,9 @@ export type FinBoxApi = {
   fetchStockNewsArticle: (url: string) => Promise<StockNewsArticle>;
   openExternalUrl: (url: string) => Promise<void>;
   fetchStockComments: (code: string, page: number) => Promise<StockCommentPage>;
+  getAiAnalysisHistory: (code: string) => Promise<AiAnalysisResult[]>;
+  getAiAnalysisProcess: (code: string) => Promise<AiAnalysisProcessLog | undefined>;
+  runAiAnalysis: (code: string) => Promise<AiAnalysisResult>;
   listNotes: () => Promise<NoteTreeItem[]>;
   readNote: (notePath: string) => Promise<NoteFile>;
   saveNote: (notePath: string, content: string) => Promise<void>;
@@ -263,6 +322,8 @@ export type FinBoxApi = {
   closeWindow: () => Promise<void>;
   onState: (callback: (state: AppState) => void) => () => void;
   onUpdateStatus: (callback: (status: UpdateStatus) => void) => () => void;
+  onRequestLogs: (callback: (logs: RequestLogItem[]) => void) => () => void;
+  onAiAnalysisProcess: (callback: (log: AiAnalysisProcessLog) => void) => () => void;
   onCycleStock: (callback: () => void) => () => void;
   onToggleExpand: (callback: () => void) => () => void;
   onOpenWatchlistFloatSettings: (callback: () => void) => () => void;

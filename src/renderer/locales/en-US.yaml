@@ -58,11 +58,21 @@ detail:
   prevClose: Prev Close
   shares: Shares
   marketValue: Market Value
+  volume: Volume
+  amount: Turnover
   dayProfitLoss: Day P/L
   totalProfitLoss: Total P/L
   returnRate: Return
   quoteTime: Quote Time
   updated: Updated
+  aiAnalysis: AI Analysis
+  aiAnalyzing: Analyzing...
+  aiHistory: AI Analysis History
+  aiProcess: AI Analysis Process
+  aiRiskNotice: AI output is an auxiliary review only and is not investment advice.
+  aiDisabledTitle: AI analysis is disabled
+  aiDisabledHint: AI analysis is optional. Install and configure Codex CLI or a compatible plugin before enabling it.
+  openAiSettings: Open AI Analysis Settings
   tags: Tags
   noTags: No tags
   removeTag: Remove tag
@@ -97,6 +107,7 @@ side:
   toggleCamouflageFloat: Toggle camouflage float
   toggleWatchlistFloat: Toggle watchlist float
   more: More
+  watchTreeColumns: Display columns
   selectedSymbol: Selected Symbol
   none: None
   code: Code
@@ -119,11 +130,14 @@ settings:
   title: Settings
   general: General Settings
   marketRefresh: Market Refresh
+  aiAnalysis: AI Analysis
   mottoFloat: Motto Float
   watchlistFloat: Watchlist Float
   camouflageFloat: Camouflage Float
   generalDescription: Configure FinBox windows, appearance, and common behavior.
   marketRefreshDescription: Set the quote refresh interval used by the watch tree and watchlist float while markets are open.
+  aiAnalysisDescription: Enable manual Codex analysis from the stock detail page.
+  aiAnalysisGuide: AI analysis guide
   mottoDescription: Edit the motto float text and display style.
   watchlistDescription: Choose which symbols and columns appear in the watchlist float.
   camouflageDescription: Manage the camouflage float that looks like system monitor metrics.
@@ -132,6 +146,14 @@ settings:
   appearanceDescription: Choose the color theme used by the app.
   tradingRefreshInterval: Open-market refresh interval
   tradingRefreshIntervalHint: Applies during trading hours. Range 500-10000 ms.
+  enableAiAnalysis: Enable AI analysis
+  codexCommand: Codex command
+  codexCommandHint: Command executable only, for example codex or npx codex. FinBox appends safe non-interactive arguments.
+  aiTimeout: Analysis timeout
+  aiTimeoutHint: Unit ms. Range 10000-300000.
+  includeNotes: Include stock notes
+  includeNews: Include latest news
+  includeComments: Include discussions
   watchlistProfile: Profile
   profileName: Profile name
   saveProfile: Save Profile
@@ -203,3 +225,5 @@ error:
   savePositionsFailed: Failed to save positions.
   aliasEditorUnavailable: Alias editor IPC is not available. Restart the app.
   saveAliasFailed: Failed to save alias.
+  aiAnalysisUnavailable: AI analysis IPC is not available. Restart the app.
+  aiAnalysisFailed: AI analysis failed.

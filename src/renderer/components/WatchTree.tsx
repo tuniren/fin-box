@@ -1,13 +1,13 @@
 import { Tree } from "antd";
 import "antd/dist/reset.css";
 import { useMemo, useState } from "react";
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import type { TreeDataNode } from "antd";
 import { Folder, Plus } from "lucide-react";
-import { displayName } from "../../shared/finance";
+import { dayProfit, displayName, effectivePrice } from "../../shared/finance";
 import { profitColor } from "../../shared/theme";
-import type { StockStatus, Theme } from "../../shared/types";
-import { formatSigned, stockPercent } from "../utils";
+import type { StockStatus, Theme, WatchFloatColumn } from "../../shared/types";
+import { formatMaybe, formatSigned, stockPercent } from "../utils";
 
 const WATCH_ROOT_KEY = "watch-root";
 
@@ -36,6 +36,7 @@ export function GroupedWatchlist({
   onSelectNode,
   onSelect,
   onOpenDetails,
+  columns = ["name", "change"],
   readOnly = false
 }: {
   stocks: StockStatus[];
@@ -51,6 +52,7 @@ export function GroupedWatchlist({
   onSelectNode?: (selection: WatchTreeSelection) => void;
   onSelect: (stock: StockStatus) => void;
   onOpenDetails?: (stock: StockStatus) => void;
+  columns?: WatchFloatColumn[];
   readOnly?: boolean;
 }) {
   const groups = useMemo(() => groupStocksByTag(stocks, groupNames, groupOrder), [stocks, groupNames, groupOrder]);
@@ -177,6 +179,7 @@ export function GroupedWatchlist({
           stock={node.stock}
           selected={node.stock.config.code === selectedCode}
           theme={theme}
+          columns={columns}
           onSelect={() => selectNode(node)}
           onOpenDetails={onOpenDetails ? () => onOpenDetails(node.stock!) : undefined}
         />
@@ -278,27 +281,49 @@ function WatchStockTitle({
   stock,
   selected,
   theme,
+  columns,
   onSelect,
   onOpenDetails
 }: {
   stock: StockStatus;
   selected: boolean;
   theme: Theme;
+  columns: WatchFloatColumn[];
   onSelect: () => void;
   onOpenDetails?: () => void;
 }) {
+  const safeColumns: WatchFloatColumn[] = columns.length ? columns : ["name", "change"];
   return (
     <div
       className={`watch-tree-stock ${selected ? "active" : ""}`}
+      style={{ "--watch-tree-stock-columns": watchTreeGridColumns(safeColumns) } as CSSProperties}
       role="button"
       tabIndex={0}
       onClick={onSelect}
       onDoubleClick={onOpenDetails}
     >
-      <span className="stock-name">{displayName(stock)}</span>
-      <SignedMetric value={stockPercent(stock)} digits={2} suffix="" theme={theme} />
+      {safeColumns.map((column) => (
+        <WatchStockCell column={column} stock={stock} theme={theme} key={column} />
+      ))}
     </div>
   );
+}
+
+function WatchStockCell({ column, stock, theme }: { column: WatchFloatColumn; stock: StockStatus; theme: Theme }) {
+  if (column === "name") return <span className="watch-tree-cell name">{displayName(stock)}</span>;
+  if (column === "price") return <span className="watch-tree-cell price">{formatMaybe(effectivePrice(stock.market), 2)}</span>;
+  if (column === "day_profit") return <SignedMetric className="watch-tree-cell day-profit" value={dayProfit(stock)} digits={0} theme={theme} />;
+  return <SignedMetric className="watch-tree-cell change" value={stockPercent(stock)} digits={2} theme={theme} />;
+}
+
+function watchTreeGridColumns(columns: WatchFloatColumn[]): string {
+  const widths: Record<WatchFloatColumn, string> = {
+    name: "76px",
+    price: "50px",
+    change: "42px",
+    day_profit: "54px"
+  };
+  return columns.map((column) => widths[column]).join(" ");
 }
 
 function groupStocksByTag(stocks: StockStatus[], groupNames: string[], groupOrder: Record<string, string[]>) {
@@ -367,16 +392,18 @@ function parseWatchStockKey(key: string): { sourceTag: string; code: string } | 
 }
 
 function SignedMetric({
+  className,
   value,
   digits,
   suffix = "",
   theme
 }: {
+  className?: string;
   value: number | undefined;
   digits: number;
   suffix?: string;
   theme: Pick<Theme, "color_up" | "color_down">;
 }) {
-  if (value === undefined) return <span className="muted">--</span>;
-  return <span style={{ color: profitColor(theme, value) }}>{formatSigned(value, digits)}{suffix}</span>;
+  if (value === undefined) return <span className={`${className ? `${className} ` : ""}muted`}>--</span>;
+  return <span className={className} style={{ color: profitColor(theme, value) }}>{formatSigned(value, digits)}{suffix}</span>;
 }

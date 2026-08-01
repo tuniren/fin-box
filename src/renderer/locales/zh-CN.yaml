@@ -58,11 +58,21 @@ detail:
   prevClose: 昨收
   shares: 持仓数量
   marketValue: 市值
+  volume: 今日成交量
+  amount: 今日成交额
   dayProfitLoss: 今日盈亏
   totalProfitLoss: 累计盈亏
   returnRate: 收益率
   quoteTime: 行情时间
   updated: 更新时间
+  aiAnalysis: AI分析
+  aiAnalyzing: 分析中...
+  aiHistory: AI分析历史
+  aiProcess: AI分析过程
+  aiRiskNotice: AI输出仅用于辅助复盘，不构成投资建议。
+  aiDisabledTitle: AI分析尚未开启
+  aiDisabledHint: AI分析是可选功能。开启前需要本机安装并配置 Codex CLI 或兼容插件。
+  openAiSettings: 前往AI分析设置
   tags: 标签
   noTags: 暂无标签
   removeTag: 删除标签
@@ -97,6 +107,7 @@ side:
   toggleCamouflageFloat: 切换伪装浮窗
   toggleWatchlistFloat: 切换自选浮窗
   more: 更多
+  watchTreeColumns: 展示列
   selectedSymbol: 当前股票
   none: 无
   code: 代码
@@ -119,11 +130,14 @@ settings:
   title: 设置
   general: 通用设置
   marketRefresh: 行情刷新
+  aiAnalysis: AI分析
   mottoFloat: 座右铭浮窗
   watchlistFloat: 自选浮窗
   camouflageFloat: 伪装浮窗
   generalDescription: 配置 FinBox 的窗口、外观和常用行为。
   marketRefreshDescription: 设置开盘期间左侧自选树和自选浮窗使用的行情刷新间隔。
+  aiAnalysisDescription: 开启后可在个股详情页手动调用 Codex 生成操盘辅助分析。
+  aiAnalysisGuide: AI分析使用说明
   mottoDescription: 编辑座右铭浮窗的文本和显示样式。
   watchlistDescription: 配置自选浮窗展示哪些个股和列。
   camouflageDescription: 管理伪装成系统监控指标的伪装浮窗。
@@ -132,6 +146,14 @@ settings:
   appearanceDescription: 选择程序使用的颜色主题。
   tradingRefreshInterval: 开盘刷新间隔
   tradingRefreshIntervalHint: 单位 ms，范围 500-10000，默认 1000。
+  enableAiAnalysis: 启用AI分析
+  codexCommand: Codex命令
+  codexCommandHint: 只填写命令入口，例如 codex 或 npx codex，FinBox 会追加安全的非交互参数。
+  aiTimeout: 分析超时
+  aiTimeoutHint: 单位 ms，范围 10000-300000。
+  includeNotes: 附带个股笔记
+  includeNews: 附带最新资讯
+  includeComments: 附带讨论
   watchlistProfile: 配置方案
   profileName: 方案名称
   saveProfile: 保存当前方案
@@ -203,3 +225,5 @@ error:
   savePositionsFailed: 保存持仓失败。
   aliasEditorUnavailable: 别名编辑功能不可用，请重启应用。
   saveAliasFailed: 保存别名失败。
+  aiAnalysisUnavailable: AI分析 IPC 不可用，请重启应用。
+  aiAnalysisFailed: AI分析失败。

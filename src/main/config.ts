@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import * as yaml from "js-yaml";
 import { defaultThemes } from "../shared/theme";
-import type { AppConfig, MottoConfig, StockConfig, WatchFloatColumn, WatchFloatConfig, WatchFloatStyle } from "../shared/types";
+import type { AiAnalysisConfig, AppConfig, MottoConfig, StockConfig, WatchFloatColumn, WatchFloatConfig, WatchFloatStyle } from "../shared/types";
 
 export const DEFAULT_TRADING_REFRESH_INTERVAL_MS = 1000;
 export const MIN_TRADING_REFRESH_INTERVAL_MS = 500;
@@ -80,6 +80,15 @@ const builtInWatchFloatProfiles: Record<string, WatchFloatStyle> = {
   }
 };
 
+const defaultAiAnalysis: AiAnalysisConfig = {
+  enabled: false,
+  codex_command: "codex",
+  timeout_ms: 60000,
+  include_notes: true,
+  include_news: false,
+  include_comments: false
+};
+
 export class ConfigManager {
   private readonly configPath: string;
   private lastModified = 0;
@@ -115,6 +124,8 @@ export class ConfigManager {
         active_profile: "simple",
         profiles: builtInWatchFloatProfiles
       },
+      watch_tree_columns: ["name", "change"],
+      ai_analysis: defaultAiAnalysis,
       trading_refresh_interval_ms: DEFAULT_TRADING_REFRESH_INTERVAL_MS,
       window_close_behavior: "close",
       hide_zero_shares: false,
@@ -176,6 +187,8 @@ export class ConfigManager {
         cash: config.cash,
         motto: normalizeMotto(config.motto),
         watch_float: normalizeWatchFloat(config.watch_float, stocks),
+        watch_tree_columns: normalizeWatchColumns(config.watch_tree_columns),
+        ai_analysis: normalizeAiAnalysis(config.ai_analysis),
         trading_refresh_interval_ms: normalizeTradingRefreshInterval(config.trading_refresh_interval_ms),
         window_close_behavior: config.window_close_behavior === "close" ? "close" : "tray",
         hide_zero_shares: config.hide_zero_shares ?? false,
@@ -201,7 +214,30 @@ export class ConfigManager {
   }
 }
 
+export function normalizeAiAnalysis(value: unknown): AiAnalysisConfig {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return defaultAiAnalysis;
+  const config = value as Partial<AiAnalysisConfig>;
+  const command = typeof config.codex_command === "string" && config.codex_command.trim()
+    ? config.codex_command.trim()
+    : defaultAiAnalysis.codex_command;
+  const timeout = Number(config.timeout_ms);
+  return {
+    enabled: Boolean(config.enabled),
+    codex_command: command,
+    timeout_ms: Number.isFinite(timeout) ? Math.min(Math.max(Math.round(timeout), 10000), 300000) : defaultAiAnalysis.timeout_ms,
+    include_notes: config.include_notes ?? defaultAiAnalysis.include_notes,
+    include_news: Boolean(config.include_news),
+    include_comments: Boolean(config.include_comments)
+  };
+}
+
 const watchFloatColumns: WatchFloatColumn[] = ["name", "price", "change", "day_profit"];
+
+export function normalizeWatchColumns(value: unknown): WatchFloatColumn[] {
+  if (!Array.isArray(value)) return ["name", "change"];
+  const columns = [...new Set(value.filter((column): column is WatchFloatColumn => watchFloatColumns.includes(column as WatchFloatColumn)))];
+  return columns.length ? columns : ["name", "change"];
+}
 
 function normalizeWatchFloat(value: unknown, stocks: StockConfig[]): WatchFloatConfig {
   const knownCodes = new Map(stocks.map((stock) => [stock.code.toLowerCase(), stock.code]));
@@ -224,14 +260,12 @@ function normalizeWatchFloat(value: unknown, stocks: StockConfig[]): WatchFloatC
   const stockCodes = Array.isArray(config.stock_codes)
     ? [...new Set(config.stock_codes.map((code) => knownCodes.get(String(code).toLowerCase())).filter((code): code is string => Boolean(code)))]
     : stocks.map((stock) => stock.code);
-  const columns = Array.isArray(config.columns)
-    ? [...new Set(config.columns.filter((column): column is WatchFloatColumn => watchFloatColumns.includes(column as WatchFloatColumn)))]
-    : [];
+  const columns = normalizeWatchColumns(config.columns);
   const legacyStyle = config.style as ({ layout?: unknown } & Partial<WatchFloatStyle>) | undefined;
 
   return {
     stock_codes: stockCodes,
-    columns: columns.length ? columns : ["name", "change"],
+    columns,
     layout: normalizeWatchFloatLayout(config.layout ?? legacyStyle?.layout),
     show_news: Boolean(config.show_news),
     horizontal_stock_ratio: normalizeWatchFloatRatio(config.horizontal_stock_ratio, 3),

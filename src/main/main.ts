@@ -3,7 +3,8 @@ import { autoUpdater } from "electron-updater";
 import fs from "node:fs";
 import path from "node:path";
 import { AppCore } from "./core";
-import type { AppConfig, KLinePoint, KLineScale, MottoConfig, NoteTreeItem, Position, StockJournalNote, UpdateStatus, WatchFloatConfig } from "../shared/types";
+import { clearRequestLogs, getRequestLogs, onRequestLogsChanged } from "./requestLog";
+import type { AiAnalysisConfig, AppConfig, KLinePoint, KLineScale, MottoConfig, NoteTreeItem, Position, StockJournalNote, UpdateStatus, WatchFloatColumn, WatchFloatConfig } from "../shared/types";
 
 process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = "true";
 
@@ -28,6 +29,12 @@ let isQuitting = false;
 let core: AppCore;
 const klineWindows = new Map<string, BrowserWindow>();
 let appIcon: Electron.NativeImage | undefined;
+
+onRequestLogsChanged((logs) => {
+  BrowserWindow.getAllWindows().forEach((window) => {
+    if (!window.isDestroyed()) window.webContents.send("request-logs", logs);
+  });
+});
 
 function notesRoot(): string {
   return path.join(app.getPath("userData"), "notes");
@@ -633,6 +640,8 @@ app.on("will-quit", () => {
 ipcMain.handle("get-state", () => core.getState());
 ipcMain.handle("force-refresh", () => core.forceRefresh());
 ipcMain.handle("get-update-status", () => updateStatus);
+ipcMain.handle("get-request-logs", () => getRequestLogs());
+ipcMain.handle("clear-request-logs", () => clearRequestLogs());
 ipcMain.handle("check-for-updates", () => checkForUpdates());
 ipcMain.handle("download-update", () => downloadUpdate());
 ipcMain.handle("install-update", () => {
@@ -649,6 +658,8 @@ ipcMain.handle("remove-stock", (_event, code: string) => core.removeStock(code))
 ipcMain.handle("update-account-config", (_event, patch: Pick<AppConfig, "total_investment" | "cash">) => core.updateAccountConfig(patch));
 ipcMain.handle("update-motto", (_event, motto: MottoConfig) => core.updateMotto(motto));
 ipcMain.handle("update-watch-float-config", (_event, config: WatchFloatConfig) => core.updateWatchFloatConfig(config));
+ipcMain.handle("update-watch-tree-columns", (_event, columns: WatchFloatColumn[]) => core.updateWatchTreeColumns(columns));
+ipcMain.handle("update-ai-analysis-config", (_event, config: AiAnalysisConfig) => core.updateAiAnalysisConfig(config));
 ipcMain.handle("update-trading-refresh-interval", (_event, intervalMs: number) => core.updateTradingRefreshInterval(intervalMs));
 ipcMain.handle("update-window-close-behavior", (_event, behavior: AppConfig["window_close_behavior"]) => core.updateWindowCloseBehavior(behavior));
 ipcMain.handle("update-theme", (_event, themeName: string) => core.updateTheme(themeName));
@@ -672,6 +683,9 @@ ipcMain.handle("open-external-url", (_event, url: string) => {
   return shell.openExternal(parsedUrl.toString());
 });
 ipcMain.handle("fetch-stock-comments", (_event, code: string, page: number) => core.fetchStockComments(code, page));
+ipcMain.handle("get-ai-analysis-history", (_event, code: string) => core.getAiAnalysisHistory(code));
+ipcMain.handle("get-ai-analysis-process", (_event, code: string) => core.getAiAnalysisProcess(code));
+ipcMain.handle("run-ai-analysis", (_event, code: string) => core.runAiAnalysis(code));
 ipcMain.handle("list-notes", () => readNotesTree());
 ipcMain.handle("read-note", (_event, notePath: string) => {
   const absolutePath = resolveNotePath(notePath);

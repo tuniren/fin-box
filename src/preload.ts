@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from "electron";
-import type { AppState, FinBoxApi, KLineScale, MottoConfig, UpdateStatus, WatchFloatConfig } from "./shared/types";
+import type { AiAnalysisConfig, AiAnalysisProcessLog, AppState, FinBoxApi, KLineScale, MottoConfig, RequestLogItem, UpdateStatus, WatchFloatColumn, WatchFloatConfig } from "./shared/types";
 
 // Expose only the FinBox IPC surface to the renderer.
 // React can still manage windows and market state while contextIsolation stays on.
@@ -7,6 +7,8 @@ const api: FinBoxApi = {
   getState: () => ipcRenderer.invoke("get-state"),
   forceRefresh: () => ipcRenderer.invoke("force-refresh"),
   getUpdateStatus: () => ipcRenderer.invoke("get-update-status"),
+  getRequestLogs: () => ipcRenderer.invoke("get-request-logs"),
+  clearRequestLogs: () => ipcRenderer.invoke("clear-request-logs"),
   checkForUpdates: () => ipcRenderer.invoke("check-for-updates"),
   downloadUpdate: () => ipcRenderer.invoke("download-update"),
   installUpdate: () => ipcRenderer.invoke("install-update"),
@@ -19,6 +21,8 @@ const api: FinBoxApi = {
   updateAccountConfig: (patch) => ipcRenderer.invoke("update-account-config", patch),
   updateMotto: (motto: MottoConfig) => ipcRenderer.invoke("update-motto", motto),
   updateWatchFloatConfig: (config: WatchFloatConfig) => ipcRenderer.invoke("update-watch-float-config", config),
+  updateWatchTreeColumns: (columns: WatchFloatColumn[]) => ipcRenderer.invoke("update-watch-tree-columns", columns),
+  updateAiAnalysisConfig: (config: AiAnalysisConfig) => ipcRenderer.invoke("update-ai-analysis-config", config),
   updateTradingRefreshInterval: (intervalMs: number) => ipcRenderer.invoke("update-trading-refresh-interval", intervalMs),
   updateWindowCloseBehavior: (behavior) => ipcRenderer.invoke("update-window-close-behavior", behavior),
   updateTheme: (themeName: string) => ipcRenderer.invoke("update-theme", themeName),
@@ -38,6 +42,9 @@ const api: FinBoxApi = {
   fetchStockNewsArticle: (url: string) => ipcRenderer.invoke("fetch-stock-news-article", url),
   openExternalUrl: (url: string) => ipcRenderer.invoke("open-external-url", url),
   fetchStockComments: (code: string, page: number) => ipcRenderer.invoke("fetch-stock-comments", code, page),
+  getAiAnalysisHistory: (code: string) => ipcRenderer.invoke("get-ai-analysis-history", code),
+  getAiAnalysisProcess: (code: string) => ipcRenderer.invoke("get-ai-analysis-process", code),
+  runAiAnalysis: (code: string) => ipcRenderer.invoke("run-ai-analysis", code),
   listNotes: () => ipcRenderer.invoke("list-notes"),
   readNote: (notePath: string) => ipcRenderer.invoke("read-note", notePath),
   saveNote: (notePath: string, content: string) => ipcRenderer.invoke("save-note", notePath, content),
@@ -66,6 +73,16 @@ const api: FinBoxApi = {
     const listener = (_event: Electron.IpcRendererEvent, status: UpdateStatus) => callback(status);
     ipcRenderer.on("update-status", listener);
     return () => ipcRenderer.off("update-status", listener);
+  },
+  onRequestLogs: (callback: (logs: RequestLogItem[]) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, logs: RequestLogItem[]) => callback(logs);
+    ipcRenderer.on("request-logs", listener);
+    return () => ipcRenderer.off("request-logs", listener);
+  },
+  onAiAnalysisProcess: (callback: (log: AiAnalysisProcessLog) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, log: AiAnalysisProcessLog) => callback(log);
+    ipcRenderer.on("ai-analysis-process", listener);
+    return () => ipcRenderer.off("ai-analysis-process", listener);
   },
   onCycleStock: (callback: () => void) => {
     const listener = () => callback();
