@@ -86,7 +86,12 @@ const defaultAiAnalysis: AiAnalysisConfig = {
   timeout_ms: 60000,
   include_notes: true,
   include_news: false,
-  include_comments: false
+  include_comments: false,
+  interactive_enabled: false,
+  fully_trusted_read: false,
+  allow_cross_symbol_data: true,
+  session_timeout_ms: 1800000,
+  max_tool_calls: 20
 };
 
 export class ConfigManager {
@@ -221,13 +226,24 @@ export function normalizeAiAnalysis(value: unknown): AiAnalysisConfig {
     ? config.codex_command.trim()
     : defaultAiAnalysis.codex_command;
   const timeout = Number(config.timeout_ms);
+  const sessionTimeout = Number(config.session_timeout_ms);
+  const maxToolCalls = Number(config.max_tool_calls);
   return {
     enabled: Boolean(config.enabled),
     codex_command: command,
     timeout_ms: Number.isFinite(timeout) ? Math.min(Math.max(Math.round(timeout), 10000), 300000) : defaultAiAnalysis.timeout_ms,
     include_notes: config.include_notes ?? defaultAiAnalysis.include_notes,
     include_news: Boolean(config.include_news),
-    include_comments: Boolean(config.include_comments)
+    include_comments: Boolean(config.include_comments),
+    interactive_enabled: Boolean(config.interactive_enabled),
+    fully_trusted_read: Boolean(config.fully_trusted_read),
+    allow_cross_symbol_data: config.allow_cross_symbol_data ?? defaultAiAnalysis.allow_cross_symbol_data,
+    session_timeout_ms: Number.isFinite(sessionTimeout)
+      ? Math.min(Math.max(Math.round(sessionTimeout), 60000), 7200000)
+      : defaultAiAnalysis.session_timeout_ms,
+    max_tool_calls: Number.isFinite(maxToolCalls)
+      ? Math.min(Math.max(Math.round(maxToolCalls), 1), 200)
+      : defaultAiAnalysis.max_tool_calls
   };
 }
 

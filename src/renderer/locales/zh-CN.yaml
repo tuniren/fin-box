@@ -206,6 +206,56 @@ news:
   latestLoaded: 已更新最新资讯
   latestUpToDate: 已是最新资讯
   noMore: 没有更多资讯
+aiTab:
+  defaultSubtitle: 默认空聊天框，发送前选择本次授权上下文
+  chatInput: 聊天输入
+  promptPlaceholder: 询问任何问题
+  defaultSymbol: 标的
+  noSymbol: 未选择标的
+  confirmContextOnSend: 发送时仍需确认上下文
+  contextOptions: 本次可携带信息
+  contextCollapsedHint: 已折叠
+  contextExpandedHint: 已展开
+  stage2Notice: 阶段 2 只创建本地聊天记录和授权摘要，不调用 AI。
+  send: 发送
+  emptyTitle: 暂无聊天会话
+  emptyHint: 输入问题并发送后，会在这里生成独立会话。用户消息、分析摘要和后续工具结果都将支持单独折叠。
+  disabledTitle: AI分析未启用
+  disabledHint: 启用后可以在此创建聊天会话。本页不会自动发送任何数据。
+  openAiSettings: 打开AI设置
+  userMessage: 用户消息
+  authorizationSummary: 发送前授权摘要
+  targetSymbol: 目标标的
+  selectedContexts: 上下文选择
+  noContext: 未携带上下文
+  stage2Summary: 阶段 2 仅创建本地聊天会话和授权摘要，不调用 AI，不读取或发送任何实际数据。
+  unspecified: 未指定
+  collapseAll: 一键折叠
+  expandAll: 一键展开
+  collapseBlock: 折叠内容块
+  expandBlock: 展开内容块
+  copyBlock: 复制内容块
+aiContext:
+  quote: 当前行情
+  dailyKline: 日 K
+  minute: 分时
+  positionSummary: 持仓摘要
+  positionDetail: 分账户明细
+  profit: 成本盈亏
+  notes: 个股笔记
+  tradingLogic: 交易逻辑库
+  news: 资讯
+  comments: 讨论
+aiScope:
+  marketData: 市场数据
+  privateData: 私有数据
+  tradingLogic: 交易逻辑
+  noiseData: 噪声数据
+aiBlock:
+  message: 消息
+  answer: 回答
+  analysis: 分析
+  toolResult: 工具结果
 status:
   shIndex: 上证指数
   accountProfitLoss: 账户盈亏

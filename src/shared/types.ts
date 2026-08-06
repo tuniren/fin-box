@@ -74,6 +74,87 @@ export type AiAnalysisConfig = {
   include_notes: boolean;
   include_news: boolean;
   include_comments: boolean;
+  interactive_enabled: boolean;
+  fully_trusted_read: boolean;
+  allow_cross_symbol_data: boolean;
+  session_timeout_ms: number;
+  max_tool_calls: number;
+};
+
+export type AiSessionMode = "non_interactive" | "interactive";
+
+export type AiSessionStatus = "created" | "running" | "waiting_confirmation" | "success" | "error" | "timeout" | "stopped";
+
+export type AiDataScope =
+  | "public_market_data"
+  | "derived_market_data"
+  | "user_private_summary"
+  | "user_private_detail"
+  | "user_strategy_data"
+  | "external_noise_data";
+
+export type AiToolName =
+  | "get_quote"
+  | "get_kline"
+  | "get_minute"
+  | "get_position_summary"
+  | "get_trading_logic";
+
+export type AiToolCallStatus = "pending" | "confirmed" | "rejected" | "success" | "error";
+
+export type JsonPrimitive = string | number | boolean | null;
+
+export type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
+
+export type ContextBundle = {
+  id: string;
+  sessionId: string;
+  code: string;
+  createdAt: number;
+  includedScopes: AiDataScope[];
+  data: Record<string, JsonValue>;
+};
+
+export type AiSessionPolicy = {
+  sessionId: string;
+  code: string;
+  allowedTools: AiToolName[];
+  allowedDataScopes: AiDataScope[];
+  allowCrossSymbolData: boolean;
+  requirePrivateDataConfirmation: boolean;
+  maxToolCalls: number;
+  expiresAt: number;
+};
+
+export type AiSession = {
+  id: string;
+  mode: AiSessionMode;
+  code: string;
+  status: AiSessionStatus;
+  createdAt: number;
+  updatedAt: number;
+  policy: AiSessionPolicy;
+  contextBundleId?: string;
+  error?: string;
+};
+
+export type AiToolCall = {
+  id: string;
+  sessionId: string;
+  tool: AiToolName;
+  requestedAt: number;
+  updatedAt: number;
+  status: AiToolCallStatus;
+  params: Record<string, JsonValue>;
+  dataScopes: AiDataScope[];
+  privateData: boolean;
+  requiresConfirmation: boolean;
+  confirmedAt?: number;
+  error?: string;
+};
+
+export type ToolAuditLog = AiToolCall & {
+  resultSummary?: string;
 };
 
 export type AppConfig = {

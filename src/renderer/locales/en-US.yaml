@@ -199,6 +199,56 @@ stockNotes:
   resizePanels: Resize note sections
   unsaved: Unsaved
   saveShortcut: Press Ctrl+S to save
+aiTab:
+  defaultSubtitle: Empty chat by default. Choose authorized context before sending.
+  chatInput: Chat input
+  promptPlaceholder: Ask anything
+  defaultSymbol: Symbols
+  noSymbol: No symbols selected
+  confirmContextOnSend: Context still requires confirmation when sending.
+  contextOptions: Context for this message
+  contextCollapsedHint: Collapsed
+  contextExpandedHint: Expanded
+  stage2Notice: Stage 2 only creates local chat records and an authorization summary. It does not call AI.
+  send: Send
+  emptyTitle: No chat sessions
+  emptyHint: After you send a question, an independent session appears here. User messages, analysis summaries, and later tool results can be collapsed individually.
+  disabledTitle: AI analysis is disabled
+  disabledHint: Enable AI analysis to create chat sessions here. This page never sends data automatically.
+  openAiSettings: Open AI settings
+  userMessage: User message
+  authorizationSummary: Pre-send authorization summary
+  targetSymbol: Target symbol
+  selectedContexts: Selected contexts
+  noContext: No context
+  stage2Summary: Stage 2 only creates a local chat session and authorization summary. It does not call AI, read data, or send actual data.
+  unspecified: Unspecified
+  collapseAll: Collapse all
+  expandAll: Expand all
+  collapseBlock: Collapse block
+  expandBlock: Expand block
+  copyBlock: Copy block
+aiContext:
+  quote: Current quote
+  dailyKline: Daily K-line
+  minute: Minute data
+  positionSummary: Position summary
+  positionDetail: Account-level positions
+  profit: Cost and P/L
+  notes: Stock notes
+  tradingLogic: Trading logic library
+  news: News
+  comments: Discussions
+aiScope:
+  marketData: Market data
+  privateData: Private data
+  tradingLogic: Trading logic
+  noiseData: Noise data
+aiBlock:
+  message: Message
+  answer: Answer
+  analysis: Analysis
+  toolResult: Tool result
 news:
   noNews: No news
   pullLatest: Scroll up for latest news

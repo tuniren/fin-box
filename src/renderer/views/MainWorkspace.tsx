@@ -1,5 +1,5 @@
 ﻿import { useEffect, useMemo, useRef, useState } from "react";
-import { Input, Tag as AntTag, Tree } from "antd";
+import { Button, Checkbox, Input, Popover, Select, Tag as AntTag, Tree } from "antd";
 import type { TreeDataNode } from "antd";
 import {
   BookOpen,
@@ -43,7 +43,6 @@ import {
 } from "../../shared/finance";
 import { currentTheme, profitColor } from "../../shared/theme";
 import type { AiAnalysisConfig, AppConfig, AppState, MottoConfig, NoteTreeItem, Position, RequestLogItem, StockCommentItem, StockCommentPage, StockJournal, StockNewsItem, StockNewsPage, StockSearchResult, StockStatus, Theme, UpdateStatus, WatchFloatColumn, WatchFloatConfig } from "../../shared/types";
-import { AiAnalysisPanel } from "../components/AiAnalysisPanel";
 import { KLineView } from "../components/KLineView";
 import { MarketStatusBar } from "../components/MarketStatusBar";
 import { MinutePanel } from "../components/MinutePanel";
@@ -52,7 +51,7 @@ import { TradingIntensityPanel } from "../components/TradingIntensityPanel";
 import { GroupedWatchlist, mergeWatchGroups, normalizeWatchGroupName } from "../components/WatchTree";
 import type { WatchTreeSelection } from "../components/WatchTree";
 import { formatMaybe, formatSigned, stockPercent } from "../utils";
-import { useI18n } from "../i18n";
+import { useI18n, type TranslationKey } from "../i18n";
 
 const api = window.finBox;
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
@@ -75,6 +74,93 @@ const watchFloatMetricColorOptions: Array<{ value: "change" | "day_profit"; labe
   { value: "change", label: "涨幅" },
   { value: "day_profit", label: "今日收益" }
 ];
+const aiContextOptions: Array<{ value: AiContextKey; labelKey: TranslationKey; scopeKey: TranslationKey }> = [
+  { value: "quote", labelKey: "aiContext.quote", scopeKey: "aiScope.marketData" },
+  { value: "daily_kline", labelKey: "aiContext.dailyKline", scopeKey: "aiScope.marketData" },
+  { value: "minute", labelKey: "aiContext.minute", scopeKey: "aiScope.marketData" },
+  { value: "position_summary", labelKey: "aiContext.positionSummary", scopeKey: "aiScope.privateData" },
+  { value: "position_detail", labelKey: "aiContext.positionDetail", scopeKey: "aiScope.privateData" },
+  { value: "profit", labelKey: "aiContext.profit", scopeKey: "aiScope.privateData" },
+  { value: "notes", labelKey: "aiContext.notes", scopeKey: "aiScope.privateData" },
+  { value: "trading_logic", labelKey: "aiContext.tradingLogic", scopeKey: "aiScope.tradingLogic" },
+  { value: "news", labelKey: "aiContext.news", scopeKey: "aiScope.noiseData" },
+  { value: "comments", labelKey: "aiContext.comments", scopeKey: "aiScope.noiseData" }
+];
+const defaultAiContextSelection: AiContextSelection = {
+  quote: true,
+  position_summary: false,
+  position_detail: false,
+  profit: false,
+  notes: false,
+  trading_logic: false,
+  daily_kline: false,
+  minute: false,
+  news: false,
+  comments: false
+};
+const createMockAiSessions = (locale: string, t: (key: TranslationKey) => string): AiChatSession[] => {
+  const now = Date.now();
+  const zh = locale === "zh-CN";
+  return [
+    {
+      id: "ai-chat-mock-1",
+      title: zh ? "查看是否适合继续持有" : "Review current holding thesis",
+      code: zh ? "未选择标的" : "No symbols selected",
+      createdAt: now - 600000,
+      updatedAt: now - 560000,
+      blocks: [
+        {
+          id: "ai-chat-mock-1-user",
+          kind: "user",
+          title: t("aiTab.userMessage"),
+          content: zh ? "帮我检查一下目前的持仓逻辑，重点看风险点。" : "Help me review the current holding logic, focusing on risks.",
+          collapsed: false
+        },
+        {
+          id: "ai-chat-mock-1-analysis",
+          kind: "analysis",
+          title: t("aiTab.authorizationSummary"),
+          content: zh
+            ? "目标标的: 未选择标的\n已选上下文: 当前行情 (市场数据), 持仓摘要 (私有数据)\n阶段 2 mock: 仅用于调试聊天样式，不调用 AI，不读取实际数据。"
+            : "Target symbols: No symbols selected\nSelected contexts: Current quote (Market data), Position summary (Private data)\nStage 2 mock: Used only for chat styling. It does not call AI or read real data.",
+          collapsed: false
+        },
+        {
+          id: "ai-chat-mock-1-assistant",
+          kind: "assistant",
+          title: zh ? "样式预览回答" : "Mock answer",
+          content: zh
+            ? "当前阶段先确认交互结构：用户消息靠右，分析和回答靠左；上下文授权通过底部悬浮按钮打开弹窗。\n\n后续接入真实会话时，这里会展示 AI 的连续回答。"
+            : "This stage verifies the interaction structure first: user messages align right, analysis and answers align left, and context authorization opens from the floating composer button.\n\nAfter real sessions are wired in, AI responses will appear here.",
+          collapsed: false
+        }
+      ]
+    },
+    {
+      id: "ai-chat-mock-2",
+      title: zh ? "需要查看 K 线再判断" : "Need K-line before judging",
+      code: zh ? "示例会话" : "Mock session",
+      createdAt: now - 300000,
+      updatedAt: now - 240000,
+      blocks: [
+        {
+          id: "ai-chat-mock-2-user",
+          kind: "user",
+          title: t("aiTab.userMessage"),
+          content: zh ? "如果需要 K 线，你应该先说明原因再请求读取。" : "If K-line data is needed, explain why before requesting it.",
+          collapsed: false
+        },
+        {
+          id: "ai-chat-mock-2-tool",
+          kind: "tool",
+          title: zh ? "工具结果样式预览" : "Tool result preview",
+          content: "tool: get_kline\nstatus: mock\nrange: daily\nreason: verify trend and volume structure",
+          collapsed: false
+        }
+      ]
+    }
+  ];
+};
 const validNewsItems = (items: StockNewsItem[] | undefined) => (
   Array.isArray(items) ? items.filter((item) => item && typeof item === "object") : []
 );
@@ -91,7 +177,7 @@ const mergeNewsItems = (current: StockNewsItem[], incoming: StockNewsItem[], dir
   return trimNewsItems(merged, direction);
 };
 type ActivityView = "watchlist" | "news" | "requests" | "notes" | "help" | "settings";
-type ActiveView = "details" | "chart" | "note" | "help" | "settings" | "request-log";
+type ActiveView = "details" | "chart" | "note" | "help" | "settings" | "request-log" | "ai-analysis";
 type StockView = "details" | "chart";
 type DetailTab = { code: string };
 type DetailTabContextMenu = { code: string; x: number; y: number };
@@ -107,6 +193,148 @@ type WatchPromptState = {
   tag?: string;
   stockCode?: string;
 };
+type AiContextKey = "quote" | "position_summary" | "position_detail" | "profit" | "notes" | "trading_logic" | "daily_kline" | "minute" | "news" | "comments";
+type AiContextSelection = Record<AiContextKey, boolean>;
+type AiChatBlockKind = "user" | "assistant" | "analysis" | "tool";
+type AiChatBlock = {
+  id: string;
+  kind: AiChatBlockKind;
+  title: string;
+  content: string;
+  collapsed: boolean;
+};
+type AiChatSession = {
+  id: string;
+  title: string;
+  code?: string;
+  createdAt: number;
+  updatedAt: number;
+  blocks: AiChatBlock[];
+};
+const aiChatStyles = {
+  page: {
+    display: "grid",
+    gridTemplateRows: "minmax(0, 1fr)",
+    minHeight: 0,
+    overflow: "hidden",
+    background: "#ffffff"
+  },
+  contextPopover: {
+    display: "grid",
+    gap: 14,
+    width: 640,
+    maxWidth: "calc(100vw - 120px)"
+  },
+  chatPane: {
+    display: "grid",
+    gridTemplateRows: "minmax(0, 1fr)",
+    minWidth: 0,
+    minHeight: 0,
+    overflow: "hidden",
+    position: "relative",
+    background: "#ffffff"
+  },
+  shell: {
+    display: "grid",
+    gridTemplateRows: "auto minmax(0, 1fr)",
+    minHeight: 0,
+    margin: 0,
+    border: 0,
+    background: "#ffffff"
+  },
+  scroll: {
+    minHeight: 0,
+    overflow: "auto",
+    background: "#ffffff"
+  },
+  thread: {
+    display: "grid",
+    gap: 20,
+    width: "min(100%, 920px)",
+    margin: "0 auto",
+    padding: "24px 28px 280px"
+  },
+  session: {
+    display: "grid",
+    gap: 12,
+    minWidth: 0
+  },
+  sessionHeader: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+    minWidth: 0,
+    color: "#6b7280",
+    fontSize: 12
+  },
+  sessionTitle: {
+    display: "grid",
+    gap: 2,
+    minWidth: 0
+  },
+  sessionActions: {
+    display: "flex",
+    alignItems: "center",
+    gap: 6,
+    flex: "0 0 auto"
+  },
+  composerWrap: {
+    position: "absolute",
+    right: 0,
+    bottom: 0,
+    left: 0,
+    zIndex: 4,
+    padding: "12px 24px 18px",
+    background: "linear-gradient(to bottom, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0.96) 20%, #ffffff 100%)",
+    pointerEvents: "none"
+  },
+  composer: {
+    display: "grid",
+    gap: 10,
+    width: "min(100%, 920px)",
+    margin: "0 auto",
+    padding: "10px 12px",
+    border: "1px solid #dedede",
+    borderRadius: 24,
+    background: "#ffffff",
+    boxShadow: "0 8px 24px rgba(0, 0, 0, 0.08)",
+    pointerEvents: "auto"
+  },
+  composerInputRow: {
+    display: "grid",
+    gridTemplateColumns: "38px minmax(0, 1fr) 38px",
+    gap: 8,
+    alignItems: "end"
+  },
+  iconButton: {
+    display: "inline-grid",
+    placeItems: "center",
+    width: 32,
+    height: 32,
+    border: 0,
+    borderRadius: 16,
+    background: "transparent",
+    color: "#4b5563",
+    cursor: "pointer"
+  },
+  sendButton: {
+    display: "inline-grid",
+    placeItems: "center",
+    width: 38,
+    height: 38,
+    border: 0,
+    borderRadius: 19,
+    background: "#111827",
+    color: "#ffffff",
+    cursor: "pointer"
+  },
+  disabledSendButton: {
+    background: "#d9d9d9",
+    color: "#ffffff",
+    cursor: "not-allowed"
+  }
+} satisfies Record<string, CSSProperties>;
 const defaultMotto: MottoConfig = {
   text: "\u51b7\u9759\uff0c\u8010\u5fc3\uff0c\u53ea\u505a\u770b\u5f97\u61c2\u7684\u51b3\u5b9a\u3002",
   font_family: "Microsoft YaHei",
@@ -226,6 +454,11 @@ export function MainWorkspace() {
   const [detailTabs, setDetailTabs] = useState<DetailTab[]>([]);
   const [activeDetailCode, setActiveDetailCode] = useState<string>();
   const [detailTabContextMenu, setDetailTabContextMenu] = useState<DetailTabContextMenu>();
+  const [aiAnalysisOpen, setAiAnalysisOpen] = useState(false);
+  const [aiContextCodes, setAiContextCodes] = useState<string[]>([]);
+  const [aiPromptDraft, setAiPromptDraft] = useState("");
+  const [aiContextSelection, setAiContextSelection] = useState<AiContextSelection>(defaultAiContextSelection);
+  const [aiSessions, setAiSessions] = useState<AiChatSession[]>(() => createMockAiSessions(locale, t));
   const [explorerVisible, setExplorerVisible] = useState(true);
   const [editorVisible, setEditorVisible] = useState(true);
   const [sideVisible, setSideVisible] = useState(true);
@@ -286,7 +519,7 @@ export function MainWorkspace() {
       setOpenStockViews(new Set());
       setDetailTabs([]);
       setActiveDetailCode(undefined);
-      setActiveView((view) => (view === "details" || view === "chart" ? undefined : view));
+      setActiveView((view) => (view === "details" || view === "chart" ? (aiAnalysisOpen ? "ai-analysis" : undefined) : view));
       return;
     }
     if (!selectedCode || !visibleStocks.some((stock) => stock.config.code === selectedCode)) {
@@ -295,7 +528,7 @@ export function MainWorkspace() {
     const knownCodes = new Set(visibleStocks.map((stock) => stock.config.code.toLowerCase()));
     setDetailTabs((tabs) => tabs.filter((tab) => knownCodes.has(tab.code.toLowerCase())));
     setActiveDetailCode((code) => code && knownCodes.has(code.toLowerCase()) ? code : undefined);
-  }, [selectedCode, visibleStocks]);
+  }, [selectedCode, visibleStocks, aiAnalysisOpen]);
 
   useEffect(() => {
     let cancelled = false;
@@ -533,6 +766,22 @@ export function MainWorkspace() {
     setEditorVisible(true);
   };
 
+  const openAiAnalysisTab = (_code?: string) => {
+    setAiAnalysisOpen(true);
+    setActiveView("ai-analysis");
+    setEditorVisible(true);
+  };
+
+  const closeAiAnalysisTab = () => {
+    setAiAnalysisOpen(false);
+    setActiveView((current) => {
+      if (current !== "ai-analysis") return current;
+      if (detailsOpen) return "details";
+      if (chartOpen) return "chart";
+      return undefined;
+    });
+  };
+
   const openDetailTab = (code: string) => {
     const stock = visibleStocks.find((item) => item.config.code.toLowerCase() === code.toLowerCase());
     if (!stock) return;
@@ -556,6 +805,7 @@ export function MainWorkspace() {
     setActiveView((current) => {
       if (current !== view) return current;
       if (detailsOpen) return "details";
+      if (aiAnalysisOpen) return "ai-analysis";
       return undefined;
     });
   };
@@ -568,7 +818,7 @@ export function MainWorkspace() {
       if (activeDetailCode?.toLowerCase() === normalizedCode) {
         const fallback = next[Math.max(0, Math.min(index, next.length - 1))];
         setActiveDetailCode(fallback?.code);
-        setActiveView(fallback ? "details" : chartOpen ? "chart" : undefined);
+        setActiveView(fallback ? "details" : chartOpen ? "chart" : aiAnalysisOpen ? "ai-analysis" : undefined);
       }
       return next;
     });
@@ -601,7 +851,7 @@ export function MainWorkspace() {
   const closeAllDetailTabs = () => {
     setDetailTabs([]);
     setActiveDetailCode(undefined);
-    setActiveView(chartOpen ? "chart" : undefined);
+    setActiveView(chartOpen ? "chart" : aiAnalysisOpen ? "ai-analysis" : undefined);
   };
 
   const openDetailTabContextMenu = (code: string, event: ReactMouseEvent<HTMLButtonElement>) => {
@@ -691,6 +941,7 @@ export function MainWorkspace() {
   const updateAiAnalysisConfig = (patch: Partial<AiAnalysisConfig>) => {
     if (!state) return;
     void api.updateAiAnalysisConfig({
+      ...state.config.ai_analysis,
       enabled: patch.enabled ?? state.config.ai_analysis.enabled,
       codex_command: patch.codex_command ?? state.config.ai_analysis.codex_command,
       timeout_ms: patch.timeout_ms ?? state.config.ai_analysis.timeout_ms,
@@ -1023,6 +1274,75 @@ export function MainWorkspace() {
     setActiveView("request-log");
   };
 
+  const updateAiContextSelection = (key: AiContextKey, checked: boolean) => {
+    setAiContextSelection((selection) => ({ ...selection, [key]: checked }));
+  };
+
+  const submitAiChatPrompt = (event: FormEvent) => {
+    event.preventDefault();
+    const prompt = aiPromptDraft.trim();
+    if (!prompt) return;
+    const selectedStocks = aiContextCodes
+      .map((code) => visibleStocks.find((item) => item.config.code.toLowerCase() === code.toLowerCase()))
+      .filter((item): item is StockStatus => Boolean(item));
+    const selectedContexts = aiContextOptions.filter((option) => aiContextSelection[option.value]);
+    const now = Date.now();
+    const sessionId = `ai-chat-${now}`;
+    const contextText = selectedContexts.length
+      ? selectedContexts.map((option) => `${t(option.labelKey)} (${t(option.scopeKey)})`).join(", ")
+      : t("aiTab.noContext");
+    const session: AiChatSession = {
+      id: sessionId,
+      title: prompt.length > 24 ? `${prompt.slice(0, 24)}...` : prompt,
+      code: selectedStocks.map((stock) => stock.config.code).join(", ") || undefined,
+      createdAt: now,
+      updatedAt: now,
+      blocks: [
+        {
+          id: `${sessionId}-user`,
+          kind: "user",
+          title: t("aiTab.userMessage"),
+          content: prompt,
+          collapsed: false
+        },
+        {
+          id: `${sessionId}-analysis`,
+          kind: "analysis",
+          title: t("aiTab.authorizationSummary"),
+          content: [
+            `${t("aiTab.targetSymbol")}: ${selectedStocks.length ? selectedStocks.map((stock) => `${displayName(stock)} ${stock.config.code}`).join(", ") : t("aiTab.noSymbol")}`,
+            `${t("aiTab.selectedContexts")}: ${contextText}`,
+            t("aiTab.stage2Summary")
+          ].join("\n"),
+          collapsed: false
+        }
+      ]
+    };
+    setAiSessions((items) => [...items, session]);
+    setAiPromptDraft("");
+    setAiAnalysisOpen(true);
+    setActiveView("ai-analysis");
+  };
+
+  const toggleAiChatBlock = (sessionId: string, blockId: string) => {
+    setAiSessions((sessions) => sessions.map((session) => (
+      session.id === sessionId
+        ? {
+            ...session,
+            blocks: session.blocks.map((block) => block.id === blockId ? { ...block, collapsed: !block.collapsed } : block)
+          }
+        : session
+    )));
+  };
+
+  const setAiSessionBlocksCollapsed = (sessionId: string, collapsed: boolean) => {
+    setAiSessions((sessions) => sessions.map((session) => (
+      session.id === sessionId
+        ? { ...session, blocks: session.blocks.map((block) => ({ ...block, collapsed })) }
+        : session
+    )));
+  };
+
   const saveStrategyNote = async () => {
     if (!detailStockCode) return;
     setJournalSaving(true);
@@ -1189,6 +1509,7 @@ export function MainWorkspace() {
             <button className={`activity-item ${activityView === "requests" ? "active" : ""}`} onClick={() => toggleActivityPane("requests")} aria-label="请求日志" title="请求日志">
               <Network size={23} />
             </button>
+            <button className={`activity-item ${activeView === "ai-analysis" ? "active" : ""}`} onClick={() => openAiAnalysisTab()} aria-label={t("detail.aiAnalysis")} title={t("detail.aiAnalysis")}><MessageSquare size={23} /></button>
             <button className={`activity-item ${activityView === "help" ? "active" : ""}`} onClick={() => toggleActivityPane("help")} aria-label="使用说明" title="使用说明"><BookOpen size={23} /></button>
           </div>
           <div className="activity-bottom">
@@ -1340,6 +1661,15 @@ export function MainWorkspace() {
                 </button>
               </div>
             )}
+            {aiAnalysisOpen && (
+              <button className={`editor-tab ${activeView === "ai-analysis" ? "active" : ""}`} onClick={() => setActiveView("ai-analysis")}>
+                <MessageSquare size={14} />
+                {t("detail.aiAnalysis")}
+                <span className="tab-close" onClick={(event) => { event.stopPropagation(); closeAiAnalysisTab(); }} role="button" aria-label="Close AI analysis tab" title="Close AI analysis tab">
+                  <X size={14} />
+                </span>
+              </button>
+            )}
             {activeView === "help" && (
               <button className="editor-tab active">
                 <BookOpen size={14} />
@@ -1376,7 +1706,7 @@ export function MainWorkspace() {
             <ChevronRight size={14} />
             <span>renderer</span>
             <ChevronRight size={14} />
-            <span>{activeView === "help" ? "使用说明" : activeView === "settings" ? settingsViewLabel(settingsView, t) : activeView === "request-log" ? "请求报文" : activeDetailStock ? activeDetailStock.config.code : selectedStock ? selectedStock.config.code : "portfolio"}</span>
+            <span>{activeView === "help" ? "使用说明" : activeView === "settings" ? settingsViewLabel(settingsView, t) : activeView === "request-log" ? "请求报文" : activeView === "ai-analysis" ? t("detail.aiAnalysis") : activeDetailStock ? activeDetailStock.config.code : selectedStock ? selectedStock.config.code : "portfolio"}</span>
           </div>
           <div className="editor-panel">
             {activeView === "help" ? (
@@ -1407,8 +1737,25 @@ export function MainWorkspace() {
               />
             ) : activeView === "request-log" && selectedRequestLog ? (
               <RequestLogDetail item={selectedRequestLog} />
+            ) : activeView === "ai-analysis" ? (
+              <AiAnalysisTab
+                enabled={state.config.ai_analysis.enabled}
+                stocks={visibleStocks}
+                contextCodes={aiContextCodes}
+                promptDraft={aiPromptDraft}
+                contextSelection={aiContextSelection}
+                sessions={aiSessions}
+                onContextCodesChange={setAiContextCodes}
+                onPromptChange={setAiPromptDraft}
+                onContextSelectionChange={updateAiContextSelection}
+                onSubmit={submitAiChatPrompt}
+                onOpenSettings={openAiAnalysisSettings}
+                onToggleBlock={toggleAiChatBlock}
+                onCollapseAll={(sessionId) => setAiSessionBlocksCollapsed(sessionId, true)}
+                onExpandAll={(sessionId) => setAiSessionBlocksCollapsed(sessionId, false)}
+              />
             ) : activeDetailStock && activeView === "details" ? (
-              <StockDetail state={state} stock={activeDetailStock} theme={theme} onOpenChart={() => openStockView("chart")} onOpenAiSettings={openAiAnalysisSettings} />
+              <StockDetail state={state} stock={activeDetailStock} theme={theme} onOpenChart={() => openStockView("chart")} onOpenAiAnalysis={() => openAiAnalysisTab(activeDetailStock.config.code)} />
             ) : selectedStock && activeView === "chart" ? (
               <KLineView code={selectedStock.config.code} name={displayName(selectedStock)} />
             ) : (
@@ -2126,18 +2473,286 @@ function NoteTreeRow({
   );
 }
 
+function AiContextPopoverContent({
+  enabled,
+  stocks,
+  contextCodes,
+  contextSelection,
+  onContextCodesChange,
+  onContextSelectionChange
+}: {
+  enabled: boolean;
+  stocks: StockStatus[];
+  contextCodes: string[];
+  contextSelection: AiContextSelection;
+  onContextCodesChange: (codes: string[]) => void;
+  onContextSelectionChange: (key: AiContextKey, checked: boolean) => void;
+}) {
+  const { t } = useI18n();
+  const selectedStocks = contextCodes
+    .map((code) => stocks.find((stock) => stock.config.code.toLowerCase() === code.toLowerCase()))
+    .filter((stock): stock is StockStatus => Boolean(stock));
+  return (
+    <div style={aiChatStyles.contextPopover}>
+      <div>
+        <strong>{t("aiTab.contextOptions")}</strong>
+        <div className="muted">{t("aiTab.confirmContextOnSend")}</div>
+      </div>
+      <label className="settings-field compact">
+        <span>{t("aiTab.defaultSymbol")}</span>
+        <Select
+          mode="multiple"
+          allowClear
+          value={contextCodes}
+          disabled={!enabled}
+          placeholder={t("aiTab.noSymbol")}
+          onChange={onContextCodesChange}
+          options={stocks.map((stock) => ({ value: stock.config.code, label: `${displayName(stock)} ${stock.config.code}` }))}
+        />
+        <small>{selectedStocks.length ? selectedStocks.map((stock) => `${displayName(stock)} ${stock.config.code}`).join(", ") : t("aiTab.noSymbol")}</small>
+      </label>
+      <div style={{ display: "grid", gap: 8, minWidth: 0 }}>
+        <span className="watch-float-settings-label">{t("aiTab.contextOptions")}</span>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 8 }}>
+          {aiContextOptions.map((option) => (
+            <Checkbox
+              checked={contextSelection[option.value]}
+              disabled={!enabled}
+              onChange={(event) => onContextSelectionChange(option.value, event.target.checked)}
+              key={option.value}
+            >
+              <span>{t(option.labelKey)}</span>
+              <small style={{ display: "block", color: "#6b7280" }}>{t(option.scopeKey)}</small>
+            </Checkbox>
+          ))}
+        </div>
+      </div>
+      <span className="muted">{t("aiTab.stage2Notice")}</span>
+    </div>
+  );
+}
+
+function AiAnalysisTab({
+  enabled,
+  stocks,
+  contextCodes,
+  promptDraft,
+  contextSelection,
+  sessions,
+  onContextCodesChange,
+  onPromptChange,
+  onContextSelectionChange,
+  onSubmit,
+  onOpenSettings,
+  onToggleBlock,
+  onCollapseAll,
+  onExpandAll
+}: {
+  enabled: boolean;
+  stocks: StockStatus[];
+  contextCodes: string[];
+  promptDraft: string;
+  contextSelection: AiContextSelection;
+  sessions: AiChatSession[];
+  onContextCodesChange: (codes: string[]) => void;
+  onPromptChange: (value: string) => void;
+  onContextSelectionChange: (key: AiContextKey, checked: boolean) => void;
+  onSubmit: (event: FormEvent) => void;
+  onOpenSettings: () => void;
+  onToggleBlock: (sessionId: string, blockId: string) => void;
+  onCollapseAll: (sessionId: string) => void;
+  onExpandAll: (sessionId: string) => void;
+}) {
+  const { locale, t } = useI18n();
+  const [contextOpen, setContextOpen] = useState(false);
+  const sendButtonStyle = (!enabled || !promptDraft.trim())
+    ? { ...aiChatStyles.sendButton, ...aiChatStyles.disabledSendButton }
+    : aiChatStyles.sendButton;
+  const submitOnEnter = (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) return;
+    event.preventDefault();
+    if (enabled && promptDraft.trim()) event.currentTarget.form?.requestSubmit();
+  };
+
+  return (
+    <div className="stock-detail-view" style={{ display: "grid", minHeight: 0, overflow: "hidden" }}>
+      <section className="detail-curtain-section" style={aiChatStyles.shell}>
+        <div className="stock-notes-header">
+          <div>
+            <strong>{t("detail.aiAnalysis")}</strong>
+            <span>{t("aiTab.defaultSubtitle")}</span>
+          </div>
+          <Button size="small" icon={<Settings size={13} />} onClick={onOpenSettings}>{t("settings.title")}</Button>
+        </div>
+        <div className="detail-curtain-body" style={aiChatStyles.page}>
+          <div style={aiChatStyles.chatPane}>
+            <div className="detail-curtain-body" style={aiChatStyles.scroll}>
+              <div style={aiChatStyles.thread}>
+                {!enabled && (
+                  <div className="stock-ai-disabled">
+                    <strong>{t("aiTab.disabledTitle")}</strong>
+                    <span>{t("aiTab.disabledHint")}</span>
+                    <Button onClick={onOpenSettings}>{t("aiTab.openAiSettings")}</Button>
+                  </div>
+                )}
+                {sessions.length === 0 ? (
+                  <div className="stock-notes-empty">
+                    <strong>{t("aiTab.emptyTitle")}</strong>
+                    <span>{t("aiTab.emptyHint")}</span>
+                  </div>
+                ) : sessions.map((session) => (
+                  <article style={aiChatStyles.session} key={session.id}>
+                    <header style={aiChatStyles.sessionHeader}>
+                      <div style={aiChatStyles.sessionTitle}>
+                        <strong>{session.title}</strong>
+                        <span>{session.code ?? t("aiTab.unspecified")} / {new Date(session.updatedAt).toLocaleString(locale, { hour12: false })}</span>
+                      </div>
+                      <div style={aiChatStyles.sessionActions}>
+                        <Button size="small" onClick={() => onCollapseAll(session.id)}>{t("aiTab.collapseAll")}</Button>
+                        <Button size="small" onClick={() => onExpandAll(session.id)}>{t("aiTab.expandAll")}</Button>
+                      </div>
+                    </header>
+                    <div style={{ display: "grid", gap: 16 }}>
+                      {session.blocks.map((block) => (
+                        <AiChatBlockView block={block} onToggle={() => onToggleBlock(session.id, block.id)} key={block.id} />
+                      ))}
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </div>
+            <form onSubmit={onSubmit} style={aiChatStyles.composerWrap}>
+              <div style={aiChatStyles.composer}>
+                <div style={aiChatStyles.composerInputRow}>
+                  <Popover
+                    trigger="click"
+                    placement="topLeft"
+                    open={contextOpen}
+                    onOpenChange={setContextOpen}
+                    content={(
+                      <AiContextPopoverContent
+                        enabled={enabled}
+                        stocks={stocks}
+                        contextCodes={contextCodes}
+                        contextSelection={contextSelection}
+                        onContextCodesChange={onContextCodesChange}
+                        onContextSelectionChange={onContextSelectionChange}
+                      />
+                    )}
+                  >
+                    <Button
+                      shape="circle"
+                      disabled={!enabled}
+                      aria-label={t("aiTab.contextOptions")}
+                      title={t("aiTab.contextOptions")}
+                      icon={<FileText size={17} />}
+                    />
+                  </Popover>
+                  <Input.TextArea
+                    value={promptDraft}
+                    disabled={!enabled}
+                    onChange={(event) => onPromptChange(event.target.value)}
+                    onKeyDown={submitOnEnter}
+                    aria-label={t("aiTab.chatInput")}
+                    placeholder={t("aiTab.promptPlaceholder")}
+                    autoSize={{ minRows: 1, maxRows: 5 }}
+                    variant="borderless"
+                    style={{ lineHeight: 1.5, padding: "8px 0", color: "#111827" }}
+                  />
+                  <Button
+                    type="primary"
+                    shape="circle"
+                    htmlType="submit"
+                    disabled={!enabled || !promptDraft.trim()}
+                    aria-label={t("aiTab.send")}
+                    title={t("aiTab.send")}
+                    icon={<MessageSquare size={17} />}
+                    style={sendButtonStyle}
+                  />
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function AiChatBlockView({ block, onToggle }: { block: AiChatBlock; onToggle: () => void }) {
+  const { t } = useI18n();
+  const isUser = block.kind === "user";
+  const copyContent = (event: ReactMouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    void navigator.clipboard?.writeText(block.content);
+  };
+  if (isUser) {
+    return (
+      <section style={{ display: "grid", justifyItems: "end", gap: 6 }}>
+        <button
+          type="button"
+          onClick={onToggle}
+          style={{ maxWidth: "76%", border: 0, borderRadius: 18, padding: "10px 16px", background: "#f3f4f6", color: "#111827", lineHeight: 1.55, textAlign: "left", whiteSpace: "pre-wrap", wordBreak: "break-word", cursor: "pointer" }}
+          aria-label={block.collapsed ? t("aiTab.expandBlock") : t("aiTab.collapseBlock")}
+          title={block.collapsed ? t("aiTab.expandBlock") : t("aiTab.collapseBlock")}
+        >
+          {block.collapsed ? block.title : block.content}
+        </button>
+      </section>
+    );
+  }
+  return (
+    <section style={{ display: "grid", justifyItems: "start", gap: 8, minWidth: 0 }}>
+      <div style={{ display: "grid", gap: 8, width: "min(100%, 760px)", minWidth: 0 }}>
+        <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, minWidth: 0 }}>
+          <button
+            type="button"
+            onClick={onToggle}
+            style={{ display: "inline-flex", alignItems: "center", gap: 8, minWidth: 0, border: 0, background: "transparent", color: "#111827", fontWeight: 600, cursor: "pointer", padding: 0 }}
+            aria-label={block.collapsed ? t("aiTab.expandBlock") : t("aiTab.collapseBlock")}
+            title={block.collapsed ? t("aiTab.expandBlock") : t("aiTab.collapseBlock")}
+          >
+            <ChevronRight className={block.collapsed ? "" : "reverse-icon"} size={14} />
+            <span>{block.title}</span>
+            <small style={{ color: "#6b7280", fontWeight: 400 }}>{t(aiChatBlockKindLabelKey(block.kind))}</small>
+          </button>
+          <button
+            type="button"
+            onClick={copyContent}
+            style={aiChatStyles.iconButton}
+            aria-label={t("aiTab.copyBlock")}
+            title={t("aiTab.copyBlock")}
+          >
+            <Files size={16} />
+          </button>
+        </header>
+        {!block.collapsed && (
+          <pre style={{ minWidth: 0, margin: 0, overflow: "auto", padding: "14px 16px", borderRadius: 18, background: "#f4f4f4", color: "#111827", fontFamily: block.kind === "tool" ? "Consolas, monospace" : "\"Microsoft YaHei\", Arial, sans-serif", fontSize: 13, lineHeight: 1.7, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{block.content}</pre>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function aiChatBlockKindLabelKey(kind: AiChatBlockKind): TranslationKey {
+  if (kind === "user") return "aiBlock.message";
+  if (kind === "assistant") return "aiBlock.answer";
+  if (kind === "tool") return "aiBlock.toolResult";
+  return "aiBlock.analysis";
+}
+
 function StockDetail({
   state,
   stock,
   theme,
   onOpenChart,
-  onOpenAiSettings
+  onOpenAiAnalysis
 }: {
   state: AppState;
   stock?: StockStatus;
   theme: Theme;
   onOpenChart: () => void;
-  onOpenAiSettings: () => void;
+  onOpenAiAnalysis: () => void;
 }) {
   const { locale, t } = useI18n();
   const [draft, setDraft] = useState<Position[]>([]);
@@ -2350,6 +2965,10 @@ function StockDetail({
             <Maximize2 size={15} />
             {t("menu.chart")}
           </button>
+          <button className="tool-button" onClick={onOpenAiAnalysis} title={t("detail.aiAnalysis")} aria-label={t("detail.aiAnalysis")}>
+            <MessageSquare size={14} />
+            {t("detail.aiAnalysis")}
+          </button>
         </div>
       </div>
       {aliasError && <div className="save-error alias-error">{aliasError}</div>}
@@ -2515,9 +3134,6 @@ function StockDetail({
           </div>
         )}
       </section>
-      </DetailCurtainSection>
-      <DetailCurtainSection title={t("detail.aiAnalysis")} collapsed={collapsedSections.ai} onToggle={() => toggleSection("ai")}>
-        <AiAnalysisPanel stock={stock} enabled={state.config.ai_analysis.enabled} onOpenSettings={onOpenAiSettings} />
       </DetailCurtainSection>
     </div>
   );
