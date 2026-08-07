@@ -48,6 +48,7 @@ const api: FinBoxApi = {
   listNotes: () => ipcRenderer.invoke("list-notes"),
   readNote: (notePath: string) => ipcRenderer.invoke("read-note", notePath),
   saveNote: (notePath: string, content: string) => ipcRenderer.invoke("save-note", notePath, content),
+  getCamouflageDocument: () => ipcRenderer.invoke("get-camouflage-document"),
   createNote: (parentPath: string, type: "file" | "directory", name: string) => ipcRenderer.invoke("create-note", parentPath, type, name),
   renameNote: (notePath: string, name: string) => ipcRenderer.invoke("rename-note", notePath, name),
   deleteNote: (notePath: string) => ipcRenderer.invoke("delete-note", notePath),

@@ -256,6 +256,45 @@ aiBlock:
   answer: 回答
   analysis: 分析
   toolResult: 工具结果
+portfolio:
+  title: 持仓管理
+  description: 统一查询、排序和维护所有股票的持仓数据；包含 0 股股票。
+  totalMarketValue: 总持股金额
+  totalInvestment: 总投入
+  cash: 现金
+  totalPosition: 总仓位
+  positionRatio: 仓位
+  query: 查询
+  queryPlaceholder: 按标签、股票名称、别名或代码查询
+  sort: 排序
+  sortDesc: 降序
+  sortAsc: 升序
+  tagFilterLabel: 标签包含任一：
+  noTags: 暂无标签
+  clear: 清除
+  tableLabel: 持仓列表
+  stock: 股票
+  tags: 标签
+  shares: 数量
+  currentPrice: 现价
+  marketValue: 持仓金额
+  costValue: 成本金额
+  holdingRatio: 持仓占比
+  dayProfit: 今日盈亏
+  totalProfit: 累计盈亏
+  change: 涨跌幅
+  actions: 操作
+  noMatches: 没有匹配的股票。
+  collapse: 收起
+  edit: 编辑
+  editPositions: 编辑持仓
+  addRow: 新增行
+  account: 账户
+  cost: 成本
+  noPositions: 暂无持仓
+  removePosition: 删除持仓
+  unsavedPositions: 持仓修改未保存
+  savePositions: 保存持仓
 status:
   shIndex: 上证指数
   accountProfitLoss: 账户盈亏

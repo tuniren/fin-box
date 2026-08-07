@@ -3,6 +3,7 @@ import { Button, Checkbox, Input, Popover, Select, Tag as AntTag, Tree } from "a
 import type { TreeDataNode } from "antd";
 import {
   BookOpen,
+  BriefcaseBusiness,
   Check,
   ChevronLeft,
   ChevronRight,
@@ -43,13 +44,13 @@ import {
   totalShares
 } from "../../shared/finance";
 import { currentTheme, profitColor } from "../../shared/theme";
-import type { AiAnalysisConfig, AppConfig, AppState, MottoConfig, NoteTreeItem, Position, RequestLogItem, StockCommentItem, StockCommentPage, StockJournal, StockNewsItem, StockNewsPage, StockSearchResult, StockStatus, Theme, UpdateStatus, WatchFloatColumn, WatchFloatConfig } from "../../shared/types";
+import type { AiAnalysisConfig, AppConfig, AppState, CamouflageDocument, MottoConfig, NoteTreeItem, Position, RequestLogItem, StockCommentItem, StockCommentPage, StockJournal, StockNewsItem, StockNewsPage, StockSearchResult, StockStatus, Theme, UpdateStatus, WatchFloatColumn, WatchFloatConfig } from "../../shared/types";
 import { KLineView } from "../components/KLineView";
 import { MarketStatusBar } from "../components/MarketStatusBar";
 import { MinutePanel } from "../components/MinutePanel";
 import { SearchPane } from "../components/SearchPane";
 import { TradingIntensityPanel } from "../components/TradingIntensityPanel";
-import { GroupedWatchlist, mergeWatchGroups, normalizeWatchGroupName } from "../components/WatchTree";
+import { DEFAULT_WATCH_TREE_EXPANDED_KEYS, GroupedWatchlist, mergeWatchGroups, normalizeWatchGroupName } from "../components/WatchTree";
 import type { WatchTreeSelection } from "../components/WatchTree";
 import { formatMaybe, formatSigned, stockPercent } from "../utils";
 import { useI18n, type TranslationKey } from "../i18n";
@@ -178,7 +179,7 @@ const mergeNewsItems = (current: StockNewsItem[], incoming: StockNewsItem[], dir
   return trimNewsItems(merged, direction);
 };
 type ActivityView = "watchlist" | "portfolio" | "news" | "requests" | "notes" | "help" | "settings";
-type ActiveView = "details" | "chart" | "note" | "help" | "settings" | "request-log" | "ai-analysis" | "portfolio";
+type ActiveView = "camouflage" | "details" | "chart" | "note" | "news" | "requests" | "help" | "settings" | "request-log" | "ai-analysis" | "portfolio";
 type StockView = "details" | "chart";
 type DetailTab = { code: string };
 type DetailTabContextMenu = { code: string; x: number; y: number };
@@ -352,7 +353,7 @@ const settingsNavItems: Array<{ value: SettingsView; labelKey: `settings.${"gene
 ];
 
 function activityViewTitle(view: ActivityView) {
-  if (view === "portfolio") return "持仓";
+  if (view === "portfolio") return "Portfolio";
   if (view === "news") return "7X24";
   if (view === "requests") return "请求日志";
   if (view === "settings") return "设置";
@@ -365,6 +366,141 @@ function MenuCheckItem({ checked, radio = false, onClick, children }: { checked:
       <span>{children}</span>
     </button>
   );
+}
+
+function SinglePageShell({
+  title,
+  description,
+  actions,
+  children
+}: {
+  title: string;
+  description?: string;
+  actions?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <div className="single-page-shell">
+      <header className="single-page-header">
+        <div>
+          <h2>{title}</h2>
+          {description && <p>{description}</p>}
+        </div>
+        {actions && <div className="single-page-actions">{actions}</div>}
+      </header>
+      <div className="single-page-body">{children}</div>
+    </div>
+  );
+}
+
+const cppKeywords = new Set([
+  "alignas", "alignof", "auto", "bool", "break", "case", "catch", "char", "class", "const", "constexpr",
+  "continue", "decltype", "default", "delete", "do", "double", "else", "enum", "explicit", "export",
+  "extern", "false", "float", "for", "friend", "if", "inline", "int", "long", "namespace", "new",
+  "noexcept", "nullptr", "operator", "private", "protected", "public", "return", "short", "signed",
+  "sizeof", "static", "static_cast", "std", "struct", "switch", "template", "this", "throw", "true",
+  "try", "typename", "using", "virtual", "void", "while"
+]);
+const cppTypes = new Set(["Matrix", "vector", "size_t", "invalid_argument", "cout"]);
+
+function CamouflageCodeEditor() {
+  const [doc, setDoc] = useState<CamouflageDocument>();
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError("");
+    void api.getCamouflageDocument()
+      .then((nextDoc) => {
+        if (cancelled) return;
+        setDoc(nextDoc);
+      })
+      .catch((reason) => {
+        if (!cancelled) setError(reason instanceof Error ? reason.message : "代码加载失败。");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const status = loading
+    ? "加载中"
+    : error
+      ? "加载失败"
+      : "只读展示";
+
+  return (
+    <div className="camouflage-code-editor">
+      <header className="camouflage-doc-toolbar">
+        <div>
+          <strong>transformer.cpp</strong>
+          <span>{doc?.path ?? "配置目录 / camouflage / transformer.cpp"}</span>
+        </div>
+        <small>
+          {status}
+          {doc?.updatedAt ? ` · ${new Date(doc.updatedAt).toLocaleString()}` : ""}
+        </small>
+      </header>
+      {error && <div className="inline-error">{error}</div>}
+      <div className="camouflage-code-body">
+        <section className="camouflage-code-preview" aria-label="C++ highlighted source">
+          <CodeHighlight content={doc?.content ?? ""} />
+        </section>
+      </div>
+    </div>
+  );
+}
+
+function CodeHighlight({ content }: { content: string }) {
+  return (
+    <pre className="code-highlight-content">
+      {content.split(/\r?\n/).map((line, index) => (
+        <span className="code-line" key={`code-${index}`}>
+          <span className="code-line-number">{index + 1}</span>
+          <span className="code-line-content">{highlightCppLine(line)}</span>
+        </span>
+      ))}
+    </pre>
+  );
+}
+
+function highlightCppLine(value: string): ReactNode[] {
+  const nodes: ReactNode[] = [];
+  const pattern = /(\/\/.*$|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|#[a-zA-Z_]\w*|\b\d+(?:\.\d+)?\b|\b[A-Za-z_]\w*\b|::|->|==|!=|<=|>=|&&|\|\||[{}()[\];,.<>:+\-*/%=!&|^~?])/g;
+  let lastIndex = 0;
+
+  for (const match of value.matchAll(pattern)) {
+    if (match.index === undefined) continue;
+    if (match.index > lastIndex) nodes.push(value.slice(lastIndex, match.index));
+    const token = match[0];
+    if (token.startsWith("//")) {
+      nodes.push(<span className="code-token comment" key={`${match.index}-comment`}>{token}</span>);
+    } else if (token.startsWith("\"") || token.startsWith("'")) {
+      nodes.push(<span className="code-token string" key={`${match.index}-string`}>{token}</span>);
+    } else if (token.startsWith("#")) {
+      nodes.push(<span className="code-token preprocessor" key={`${match.index}-preprocessor`}>{token}</span>);
+    } else if (/^\d/.test(token)) {
+      nodes.push(<span className="code-token number" key={`${match.index}-number`}>{token}</span>);
+    } else if (cppKeywords.has(token)) {
+      nodes.push(<span className="code-token keyword" key={`${match.index}-keyword`}>{token}</span>);
+    } else if (cppTypes.has(token)) {
+      nodes.push(<span className="code-token type" key={`${match.index}-type`}>{token}</span>);
+    } else if (/^[{}()[\];,.<>:+\-*/%=!&|^~?]|::|->$/.test(token)) {
+      nodes.push(<span className="code-token operator" key={`${match.index}-operator`}>{token}</span>);
+    } else {
+      nodes.push(token);
+    }
+    lastIndex = match.index + token.length;
+  }
+
+  if (lastIndex < value.length) nodes.push(value.slice(lastIndex));
+  return nodes;
 }
 
 function useAppState() {
@@ -445,13 +581,14 @@ export function MainWorkspace() {
   const holdStocks = useHoldStocks(visibleStocks);
   const [selectedCode, setSelectedCode] = useState<string>();
   const [selectedWatchNode, setSelectedWatchNode] = useState<WatchTreeSelection>();
+  const [watchTreeExpandedKeys, setWatchTreeExpandedKeys] = useState<string[]>(DEFAULT_WATCH_TREE_EXPANDED_KEYS);
   const [watchPrompt, setWatchPrompt] = useState<WatchPromptState>();
   const [watchPromptValue, setWatchPromptValue] = useState("");
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<StockSearchResult[]>([]);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchTargetGroup, setSearchTargetGroup] = useState<string>();
-  const [activeView, setActiveView] = useState<ActiveView>();
+  const [activeView, setActiveView] = useState<ActiveView>("camouflage");
   const [openStockViews, setOpenStockViews] = useState<Set<StockView>>(() => new Set());
   const [detailTabs, setDetailTabs] = useState<DetailTab[]>([]);
   const [activeDetailCode, setActiveDetailCode] = useState<string>();
@@ -469,8 +606,8 @@ export function MainWorkspace() {
   const [watchTreeColumnMenuOpen, setWatchTreeColumnMenuOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [themeError, setThemeError] = useState("");
-  const [explorerWidth, setExplorerWidth] = useState(332);
-  const [sideWidth, setSideWidth] = useState(420);
+  const [explorerWidth, setExplorerWidth] = useState(220);
+  const [sideWidth, setSideWidth] = useState(260);
   const [activityView, setActivityView] = useState<ActivityView>("watchlist");
   const [settingsView, setSettingsView] = useState<SettingsView>("general");
   const [marketNewsItems, setMarketNewsItems] = useState<StockNewsItem[]>([]);
@@ -521,7 +658,7 @@ export function MainWorkspace() {
       setOpenStockViews(new Set());
       setDetailTabs([]);
       setActiveDetailCode(undefined);
-      setActiveView((view) => (view === "details" || view === "chart" ? (aiAnalysisOpen ? "ai-analysis" : undefined) : view));
+      setActiveView((view) => (view === "details" || view === "chart" ? (aiAnalysisOpen ? "ai-analysis" : "camouflage") : view));
       return;
     }
     if (!selectedCode || !visibleStocks.some((stock) => stock.config.code === selectedCode)) {
@@ -589,7 +726,7 @@ export function MainWorkspace() {
     if (!selectedRequestLogId) return;
     if (requestLogs.some((item) => item.id === selectedRequestLogId)) return;
     setSelectedRequestLogId("");
-    setActiveView((view) => (view === "request-log" ? undefined : view));
+    setActiveView((view) => (view === "request-log" ? "camouflage" : view));
   }, [requestLogs, selectedRequestLogId]);
 
   useEffect(() => {
@@ -780,7 +917,7 @@ export function MainWorkspace() {
       if (current !== "ai-analysis") return current;
       if (detailsOpen) return "details";
       if (chartOpen) return "chart";
-      return undefined;
+      return "camouflage";
     });
   };
 
@@ -808,7 +945,7 @@ export function MainWorkspace() {
       if (current !== view) return current;
       if (detailsOpen) return "details";
       if (aiAnalysisOpen) return "ai-analysis";
-      return undefined;
+      return "camouflage";
     });
   };
 
@@ -820,7 +957,7 @@ export function MainWorkspace() {
       if (activeDetailCode?.toLowerCase() === normalizedCode) {
         const fallback = next[Math.max(0, Math.min(index, next.length - 1))];
         setActiveDetailCode(fallback?.code);
-        setActiveView(fallback ? "details" : chartOpen ? "chart" : aiAnalysisOpen ? "ai-analysis" : undefined);
+        setActiveView(fallback ? "details" : chartOpen ? "chart" : aiAnalysisOpen ? "ai-analysis" : "camouflage");
       }
       return next;
     });
@@ -853,7 +990,7 @@ export function MainWorkspace() {
   const closeAllDetailTabs = () => {
     setDetailTabs([]);
     setActiveDetailCode(undefined);
-    setActiveView(chartOpen ? "chart" : aiAnalysisOpen ? "ai-analysis" : undefined);
+    setActiveView(chartOpen ? "chart" : aiAnalysisOpen ? "ai-analysis" : "camouflage");
   };
 
   const openDetailTabContextMenu = (code: string, event: ReactMouseEvent<HTMLButtonElement>) => {
@@ -1230,7 +1367,7 @@ export function MainWorkspace() {
       setNoteTree(items);
       if (selectedNotePath === item.path || selectedNotePath.startsWith(`${item.path}/`)) {
         setSelectedNotePath("");
-        setActiveView(detailsOpen ? "details" : chartOpen ? "chart" : undefined);
+        setActiveView(detailsOpen ? "details" : chartOpen ? "chart" : "camouflage");
       }
     } catch (error) {
       setNoteError(error instanceof Error ? error.message : "Failed to delete note.");
@@ -1267,13 +1404,14 @@ export function MainWorkspace() {
   const clearRequestLogItems = async () => {
     await api.clearRequestLogs();
     setSelectedRequestLogId("");
-    setActiveView((view) => (view === "request-log" ? undefined : view));
+    setActiveView((view) => (view === "request-log" ? "requests" : view));
   };
 
   const openRequestLog = (item: RequestLogItem) => {
     setSelectedRequestLogId(item.id);
     setEditorVisible(true);
-    setActiveView("request-log");
+    setActivityView("requests");
+    setActiveView("requests");
   };
 
   const updateAiContextSelection = (key: AiContextKey, checked: boolean) => {
@@ -1383,32 +1521,28 @@ export function MainWorkspace() {
   };
 
   const toggleActivityPane = (view: ActivityView) => {
-    if (activityView === view && explorerVisible) {
+    if (view === "watchlist" && activityView === view && explorerVisible) {
       setExplorerVisible(false);
       return;
     }
 
     setActivityView(view);
+    setEditorVisible(true);
+    if (view !== "watchlist") {
+      setActiveView(view === "notes" ? "note" : view);
+      return;
+    }
+
     setExplorerVisible(true);
-    if (view === "help") {
-      setEditorVisible(true);
-      setActiveView("help");
-      return;
+    if (activeView === "news" || activeView === "requests" || activeView === "note" || activeView === "help" || activeView === "settings" || activeView === "request-log" || activeView === "portfolio" || activeView === "ai-analysis") {
+      setActiveView(detailsOpen ? "details" : chartOpen ? "chart" : "camouflage");
     }
-    if (view === "settings") {
-      setEditorVisible(true);
-      setActiveView("settings");
-      return;
-    }
-    if (view === "portfolio") {
-      setEditorVisible(true);
-      setActiveView("portfolio");
-      setExplorerVisible(false);
-      return;
-    }
-    if (view === "watchlist" && (activeView === "note" || activeView === "help" || activeView === "settings" || activeView === "request-log" || activeView === "portfolio")) {
-      setActiveView(detailsOpen ? "details" : chartOpen ? "chart" : undefined);
-    }
+  };
+
+  const openHelpPage = () => {
+    setActivityView("help");
+    setEditorVisible(true);
+    setActiveView("help");
   };
 
   if (!state || !theme) {
@@ -1419,8 +1553,118 @@ export function MainWorkspace() {
     );
   }
 
-  const showExplorerPane = explorerVisible && activeView !== "portfolio";
-  const showSidePane = sideVisible && activeView !== "portfolio";
+  const isWatchWorkspaceView = activityView === "watchlist" && (activeView === "camouflage" || activeView === "details" || activeView === "chart");
+  const showExplorerPane = explorerVisible && isWatchWorkspaceView;
+  const showSidePane = sideVisible && isWatchWorkspaceView;
+
+  const renderMarketNewsPage = () => (
+    <SinglePageShell
+      title="7X24"
+      description="实时市场资讯流。向上滚动获取最新资讯，向下滚动加载历史资讯。"
+      actions={(
+        <button
+          className="tool-button"
+          onClick={() => {
+            setMarketNewsItems([]);
+            setMarketNewsLoadedPages(new Set());
+            setMarketNewsHasMore(true);
+            setMarketNewsLatestState("idle");
+            setMarketNewsFetchPage(1);
+            setMarketNewsReload((value) => value + 1);
+          }}
+          disabled={marketNewsLoading || marketNewsRefreshingLatest}
+        >
+          <RefreshCw size={14} />
+          刷新
+        </button>
+      )}
+    >
+      <MarketNewsPanel
+        items={marketNewsItems}
+        loading={marketNewsLoading}
+        refreshingLatest={marketNewsRefreshingLatest}
+        latestState={marketNewsLatestState}
+        error={marketNewsError}
+        hasMore={marketNewsHasMore}
+        onLoadLatest={() => void loadLatestMarketNews()}
+        onLoadMore={() => {
+          if (marketNewsLoading || marketNewsRefreshingLatest || !marketNewsHasMore) return;
+          setMarketNewsFetchPage(marketNewsNextPage);
+        }}
+      />
+    </SinglePageShell>
+  );
+
+  const renderRequestLogPage = () => (
+    <SinglePageShell
+      title="请求日志"
+      description="查看应用发出的 HTTP 请求及报文详情。日志仅缓存在内存中，最多保留最近 500 条；应用退出或手动清空后不再保留。"
+      actions={(
+        <button className="tool-button" onClick={() => void clearRequestLogItems()} disabled={requestLogs.length === 0}>
+          <Trash2 size={14} />
+          清空
+        </button>
+      )}
+    >
+      <div className="request-log-workspace">
+        <RequestLogPanel items={requestLogs} selectedId={selectedRequestLogId} onSelect={openRequestLog} />
+        <div className="request-log-workspace-detail">
+          {selectedRequestLog ? <RequestLogDetail item={selectedRequestLog} /> : <div className="empty-state">请选择一条请求记录</div>}
+        </div>
+      </div>
+    </SinglePageShell>
+  );
+
+  const renderSettingsPage = () => (
+    <div className="settings-workspace">
+      <SettingsOutline active={settingsView} onSelect={(view) => setSettingsView(view)} />
+      <SettingsPage
+        view={settingsView}
+        state={state}
+        mottoDraft={mottoDraft}
+        savedMotto={savedMotto}
+        mottoDirty={mottoDirty}
+        mottoSaving={mottoSaving}
+        mottoError={mottoError}
+        themeError={themeError}
+        onWindowCloseBehaviorChange={updateWindowCloseBehavior}
+        onWatchFloatConfigChange={updateWatchFloatConfig}
+        onAiAnalysisConfigChange={updateAiAnalysisConfig}
+        onTradingRefreshIntervalChange={updateTradingRefreshInterval}
+        onThemeSelect={(themeName) => void selectTheme(themeName)}
+        onOpenConfigFile={() => void api.openConfigFile()}
+        onOpenConfigDir={() => void api.openConfigDir()}
+        onToggleFloatWindow={() => void api.toggleCamouflageFloatWindow()}
+        onToggleWatchlistWindow={() => void api.toggleWatchlistFloatWindow()}
+        onToggleMottoWindow={() => void api.toggleMottoFloatWindow()}
+        onMottoDraftChange={updateMottoDraft}
+        onCancelMotto={() => setMottoDraft(savedMotto)}
+        onSaveMotto={() => void saveMotto()}
+      />
+    </div>
+  );
+
+  const editorTitle = activeView === "camouflage"
+    ? "transformer.cpp"
+    : activeView === "portfolio"
+    ? t("portfolio.title")
+    : activeView === "news"
+      ? "7X24"
+      : activeView === "requests"
+        ? "请求日志"
+        : activeView === "help"
+          ? "使用说明"
+          : activeView === "settings"
+            ? settingsViewLabel(settingsView, t)
+            : activeView === "request-log"
+              ? "请求报文"
+              : activeView === "ai-analysis"
+                ? t("detail.aiAnalysis")
+                : activeDetailStock
+                  ? activeDetailStock.config.code
+                  : selectedStock
+                    ? selectedStock.config.code
+                    : "portfolio";
 
   return (
     <main className={`workspace ${statusBarVisible ? "" : "hide-status-bar"}`}>
@@ -1486,7 +1730,7 @@ export function MainWorkspace() {
           <div className={`title-menu-group ${activeTitleMenu === "help" ? "open" : ""}`}>
             <button className="title-menu-root" aria-haspopup="menu" aria-expanded={activeTitleMenu === "help"} onClick={() => setActiveTitleMenu((menu) => (menu === "help" ? undefined : "help"))}>{t("menu.help")}</button>
             <div className="title-menu-dropdown" role="menu">
-              <button role="menuitem" onClick={() => runTitleMenuAction(() => { setActivityView("help"); setExplorerVisible(true); setEditorVisible(true); setActiveView("help"); })}>{t("menu.usageGuide")}</button>
+              <button role="menuitem" onClick={() => runTitleMenuAction(openHelpPage)}>{t("menu.usageGuide")}</button>
               <span className="title-menu-separator" />
               <button role="menuitem" disabled={updateStatus.state === "checking" || updateStatus.state === "downloading"} onClick={() => runTitleMenuAction(() => updateStatus.state === "downloaded" ? void api.installUpdate() : updateStatus.state === "available" ? void api.downloadUpdate() : void api.checkForUpdates())}>{updateStatus.state === "downloaded" ? t("update.restartInstall") : updateStatus.state === "available" ? t("update.download") : updateStatus.state === "checking" ? t("update.checking") : updateStatus.state === "downloading" ? `${t("update.downloading")} ${updateStatus.percent ?? 0}%` : t("update.check")}</button>
               {updateStatus.state === "error" && <button className="update-menu-status" role="menuitem" disabled>{t("update.failed")}{updateStatus.message ? `: ${updateStatus.message}` : ""}</button>}
@@ -1516,7 +1760,7 @@ export function MainWorkspace() {
         <aside className="activity-bar" aria-label="Activity bar">
           <div className="activity-top">
             <button className={`activity-item ${activityView === "watchlist" ? "active" : ""}`} onClick={() => toggleActivityPane("watchlist")} aria-label="Explorer"><Files size={24} /></button>
-            <button className={`activity-item ${activityView === "portfolio" ? "active" : ""}`} onClick={() => toggleActivityPane("portfolio")} aria-label="持仓" title="持仓"><FileText size={23} /></button>
+            <button className={`activity-item ${activityView === "portfolio" ? "active" : ""}`} onClick={() => toggleActivityPane("portfolio")} aria-label={t("portfolio.title")} title={t("portfolio.title")}><BriefcaseBusiness size={23} /></button>
             <button className={`activity-item ${activityView === "news" ? "active" : ""}`} onClick={() => toggleActivityPane("news")} aria-label="7x24"><Newspaper size={23} /></button>
             <button className={`activity-item ${activityView === "requests" ? "active" : ""}`} onClick={() => toggleActivityPane("requests")} aria-label="请求日志" title="请求日志">
               <Network size={23} />
@@ -1532,106 +1776,65 @@ export function MainWorkspace() {
         {showExplorerPane && (
         <aside className="explorer-panel">
           <div className="explorer-header">
-            {activityView !== "watchlist" && <span>{activityViewTitle(activityView)}</span>}
-            {activityView === "watchlist" ? (
-              <div className="explorer-actions">
-                <button onClick={() => openSearch()} title="Add symbol" aria-label="Add symbol"><Plus size={15} /></button>
-                <button onClick={() => void createWatchGroup()} title="New stock group" aria-label="New stock group"><Folder size={14} /></button>
-                <button onClick={() => void editSelectedWatchNode()} title="Edit selected" aria-label="Edit selected"><Edit3 size={14} /></button>
-                <button onClick={() => void deleteSelectedWatchNode()} disabled={!selectedWatchNode} title="Delete selected" aria-label="Delete selected"><Trash2 size={14} /></button>
-                <button onClick={() => void api.forceRefresh()} title="Refresh quotes" aria-label="Refresh quotes"><RefreshCw size={14} /></button>
-                <div className="explorer-action-menu">
-                  <button
-                    className={watchTreeColumnMenuOpen ? "active" : ""}
-                    title={t("side.more")}
-                    aria-label={t("side.more")}
-                    aria-haspopup="menu"
-                    aria-expanded={watchTreeColumnMenuOpen}
-                    onClick={() => setWatchTreeColumnMenuOpen((open) => !open)}
-                  >
-                    <MoreHorizontal size={15} />
-                  </button>
-                  {watchTreeColumnMenuOpen && (
-                    <div className="explorer-action-dropdown" role="menu">
-                      <span className="explorer-action-dropdown-title">{t("side.watchTreeColumns")}</span>
-                      {watchFloatColumnOptions.map((column) => {
-                        const checked = state.config.watch_tree_columns.includes(column.value);
-                        return (
-                          <label className="explorer-action-check" role="menuitemcheckbox" aria-checked={checked} key={column.value}>
-                            <input
-                              type="checkbox"
-                              checked={checked}
-                              disabled={checked && state.config.watch_tree_columns.length <= 1}
-                              onChange={(event) => updateWatchTreeColumn(column.value, event.target.checked)}
-                            />
-                            <span>{column.label}</span>
-                          </label>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              </div>
-            ) : activityView === "news" ? (
-              <div className="explorer-actions">
-                <button onClick={() => { setMarketNewsItems([]); setMarketNewsLoadedPages(new Set()); setMarketNewsHasMore(true); setMarketNewsLatestState("idle"); setMarketNewsFetchPage(1); setMarketNewsReload((value) => value + 1); }} disabled={marketNewsLoading || marketNewsRefreshingLatest} title="Refresh 7x24" aria-label="Refresh 7x24"><RefreshCw size={14} /></button>
-              </div>
-            ) : activityView === "requests" ? (
-              <div className="explorer-actions">
+            <div className="explorer-actions">
+              <button onClick={() => openSearch()} title="Add symbol" aria-label="Add symbol"><Plus size={15} /></button>
+              <button onClick={() => void createWatchGroup()} title="New stock group" aria-label="New stock group"><Folder size={14} /></button>
+              <button onClick={() => void editSelectedWatchNode()} title="Edit selected" aria-label="Edit selected"><Edit3 size={14} /></button>
+              <button onClick={() => void deleteSelectedWatchNode()} disabled={!selectedWatchNode} title="Delete selected" aria-label="Delete selected"><Trash2 size={14} /></button>
+              <button onClick={() => void api.forceRefresh()} title="Refresh quotes" aria-label="Refresh quotes"><RefreshCw size={14} /></button>
+              <div className="explorer-action-menu">
                 <button
-                  title="请求日志用于查看应用发出的 HTTP 请求及报文详情。日志仅缓存在内存中，最多保留最近 500 条；应用退出或手动清空后不再保留。"
-                  aria-label="请求日志说明"
+                  className={watchTreeColumnMenuOpen ? "active" : ""}
+                  title={t("side.more")}
+                  aria-label={t("side.more")}
+                  aria-haspopup="menu"
+                  aria-expanded={watchTreeColumnMenuOpen}
+                  onClick={() => setWatchTreeColumnMenuOpen((open) => !open)}
                 >
-                  <CircleHelp size={14} />
+                  <MoreHorizontal size={15} />
                 </button>
-                <button onClick={() => void clearRequestLogItems()} disabled={requestLogs.length === 0} title="清空请求日志" aria-label="清空请求日志"><Trash2 size={14} /></button>
+                {watchTreeColumnMenuOpen && (
+                  <div className="explorer-action-dropdown" role="menu">
+                    <span className="explorer-action-dropdown-title">{t("side.watchTreeColumns")}</span>
+                    {watchFloatColumnOptions.map((column) => {
+                      const checked = state.config.watch_tree_columns.includes(column.value);
+                      return (
+                        <label className="explorer-action-check" role="menuitemcheckbox" aria-checked={checked} key={column.value}>
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            disabled={checked && state.config.watch_tree_columns.length <= 1}
+                            onChange={(event) => updateWatchTreeColumn(column.value, event.target.checked)}
+                          />
+                          <span>{column.label}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
-            ) : activityView === "settings" ? (
-              <span />
-            ) : (
-              <span />
-            )}
+            </div>
           </div>
-          {activityView === "news" ? (
-            <MarketNewsPanel
-              items={marketNewsItems}
-              loading={marketNewsLoading}
-              refreshingLatest={marketNewsRefreshingLatest}
-              latestState={marketNewsLatestState}
-              error={marketNewsError}
-              hasMore={marketNewsHasMore}
-              onLoadLatest={() => void loadLatestMarketNews()}
-              onLoadMore={() => {
-                if (marketNewsLoading || marketNewsRefreshingLatest || !marketNewsHasMore) return;
-                setMarketNewsFetchPage(marketNewsNextPage);
-              }}
-            />
-          ) : activityView === "requests" ? (
-            <RequestLogPanel items={requestLogs} selectedId={selectedRequestLogId} onSelect={openRequestLog} />
-          ) : activityView === "help" ? (
-            <HelpOutline />
-          ) : activityView === "settings" ? (
-            <SettingsOutline active={settingsView} onSelect={(view) => { setSettingsView(view); setEditorVisible(true); setActiveView("settings"); }} />
-          ) : (
-            <GroupedWatchlist
-              stocks={visibleStocks}
-              groupNames={state.config.stock_groups}
-              groupOrder={state.config.stock_group_order}
-              selectedCode={selectedStock?.config.code}
-              selectedSelection={selectedWatchNode}
-              theme={theme}
-              columns={state.config.watch_tree_columns}
-              onCreateGroup={() => void createWatchGroup()}
-              onAddStockToGroup={(tag) => void addStockToWatchGroup(tag)}
-              onMoveStockToGroup={(code, sourceTag, targetTag, copy, sourceOrder, targetOrder) =>
-                void moveStockToWatchGroup(code, sourceTag, targetTag, copy, sourceOrder, targetOrder)
-              }
-              onReorderGroups={(groups) => void api.updateStockGroups(groups)}
-              onSelectNode={setSelectedWatchNode}
-              onSelect={(stock) => setSelectedCode(stock.config.code)}
-              onOpenDetails={(stock) => openDetailTab(stock.config.code)}
-            />
-          )}
+          <GroupedWatchlist
+            stocks={visibleStocks}
+            groupNames={state.config.stock_groups}
+            groupOrder={state.config.stock_group_order}
+            selectedCode={selectedStock?.config.code}
+            selectedSelection={selectedWatchNode}
+            theme={theme}
+            columns={state.config.watch_tree_columns}
+            onCreateGroup={() => void createWatchGroup()}
+            onAddStockToGroup={(tag) => void addStockToWatchGroup(tag)}
+            onMoveStockToGroup={(code, sourceTag, targetTag, copy, sourceOrder, targetOrder) =>
+              void moveStockToWatchGroup(code, sourceTag, targetTag, copy, sourceOrder, targetOrder)
+            }
+            onReorderGroups={(groups) => void api.updateStockGroups(groups)}
+            onSelectNode={setSelectedWatchNode}
+            onSelect={(stock) => setSelectedCode(stock.config.code)}
+            onOpenDetails={(stock) => openDetailTab(stock.config.code)}
+            expandedKeys={watchTreeExpandedKeys}
+            onExpandedKeysChange={setWatchTreeExpandedKeys}
+          />
         </aside>
         )}
 
@@ -1640,6 +1843,12 @@ export function MainWorkspace() {
         {editorVisible && (
         <section className="editor-region">
           <div className="tab-strip">
+            {activityView === "watchlist" && (
+              <button className={`editor-tab fixed ${activeView === "camouflage" ? "active" : ""}`} onClick={() => setActiveView("camouflage")}>
+                <FileText size={14} />
+                <span>transformer.cpp</span>
+              </button>
+            )}
             {detailTabs.map((tab) => {
               const stock = visibleStocks.find((item) => item.config.code.toLowerCase() === tab.code.toLowerCase());
               if (!stock) return null;
@@ -1685,7 +1894,19 @@ export function MainWorkspace() {
             {activeView === "portfolio" && (
               <button className="editor-tab active">
                 <FileText size={14} />
-                持仓
+                {t("portfolio.title")}
+              </button>
+            )}
+            {activeView === "news" && (
+              <button className="editor-tab active">
+                <Newspaper size={14} />
+                7X24
+              </button>
+            )}
+            {activeView === "requests" && (
+              <button className="editor-tab active">
+                <Network size={14} />
+                请求日志
               </button>
             )}
             {activeView === "help" && (
@@ -1704,7 +1925,7 @@ export function MainWorkspace() {
               <button className="editor-tab active">
                 <Network size={14} />
                 请求报文
-                <span className="tab-close" onClick={(event) => { event.stopPropagation(); setSelectedRequestLogId(""); setActiveView(detailsOpen ? "details" : chartOpen ? "chart" : undefined); }} role="button" aria-label="Close request log tab" title="Close request log tab">
+                <span className="tab-close" onClick={(event) => { event.stopPropagation(); setSelectedRequestLogId(""); setActiveView(detailsOpen ? "details" : chartOpen ? "chart" : "camouflage"); }} role="button" aria-label="Close request log tab" title="Close request log tab">
                   <X size={14} />
                 </span>
               </button>
@@ -1724,42 +1945,26 @@ export function MainWorkspace() {
             <ChevronRight size={14} />
             <span>renderer</span>
             <ChevronRight size={14} />
-            <span>{activeView === "portfolio" ? "持仓" : activeView === "help" ? "使用说明" : activeView === "settings" ? settingsViewLabel(settingsView, t) : activeView === "request-log" ? "请求报文" : activeView === "ai-analysis" ? t("detail.aiAnalysis") : activeDetailStock ? activeDetailStock.config.code : selectedStock ? selectedStock.config.code : "portfolio"}</span>
+            <span>{editorTitle}</span>
           </div>
           <div className="editor-panel">
-            {activeView === "portfolio" ? (
+            {activeView === "camouflage" ? (
+              <CamouflageCodeEditor />
+            ) : activeView === "portfolio" ? (
               <PortfolioManagementView
                 state={state}
                 stocks={visibleStocks}
                 theme={theme}
                 onOpenDetails={(stock) => openDetailTab(stock.config.code)}
               />
+            ) : activeView === "news" ? (
+              renderMarketNewsPage()
+            ) : activeView === "requests" ? (
+              renderRequestLogPage()
             ) : activeView === "help" ? (
               <HelpDocument />
             ) : activeView === "settings" ? (
-              <SettingsPage
-                view={settingsView}
-                state={state}
-                mottoDraft={mottoDraft}
-                savedMotto={savedMotto}
-                mottoDirty={mottoDirty}
-                mottoSaving={mottoSaving}
-                mottoError={mottoError}
-                themeError={themeError}
-                onWindowCloseBehaviorChange={updateWindowCloseBehavior}
-                onWatchFloatConfigChange={updateWatchFloatConfig}
-                onAiAnalysisConfigChange={updateAiAnalysisConfig}
-                onTradingRefreshIntervalChange={updateTradingRefreshInterval}
-                onThemeSelect={(themeName) => void selectTheme(themeName)}
-                onOpenConfigFile={() => void api.openConfigFile()}
-                onOpenConfigDir={() => void api.openConfigDir()}
-                onToggleFloatWindow={() => void api.toggleCamouflageFloatWindow()}
-                onToggleWatchlistWindow={() => void api.toggleWatchlistFloatWindow()}
-                onToggleMottoWindow={() => void api.toggleMottoFloatWindow()}
-                onMottoDraftChange={updateMottoDraft}
-                onCancelMotto={() => setMottoDraft(savedMotto)}
-                onSaveMotto={() => void saveMotto()}
-              />
+              renderSettingsPage()
             ) : activeView === "request-log" && selectedRequestLog ? (
               <RequestLogDetail item={selectedRequestLog} />
             ) : activeView === "ai-analysis" ? (
@@ -3984,14 +4189,14 @@ function SettingsPage({
 type PortfolioSortKey = "market_value" | "holding_ratio" | "position_ratio" | "day_profit" | "total_profit" | "change" | "name";
 type PortfolioSortDirection = "desc" | "asc";
 
-const portfolioSortOptions: Array<{ value: PortfolioSortKey; label: string }> = [
-  { value: "market_value", label: "持仓金额" },
-  { value: "holding_ratio", label: "持仓占比" },
-  { value: "position_ratio", label: "仓位" },
-  { value: "day_profit", label: "今日盈亏" },
-  { value: "total_profit", label: "累计盈亏" },
-  { value: "change", label: "涨跌幅" },
-  { value: "name", label: "股票名称" }
+const portfolioSortOptions: Array<{ value: PortfolioSortKey; labelKey: TranslationKey }> = [
+  { value: "market_value", labelKey: "portfolio.marketValue" },
+  { value: "holding_ratio", labelKey: "portfolio.holdingRatio" },
+  { value: "position_ratio", labelKey: "portfolio.positionRatio" },
+  { value: "day_profit", labelKey: "portfolio.dayProfit" },
+  { value: "total_profit", labelKey: "portfolio.totalProfit" },
+  { value: "change", labelKey: "portfolio.change" },
+  { value: "name", labelKey: "portfolio.stock" }
 ];
 
 function PortfolioManagementView({
@@ -4005,6 +4210,7 @@ function PortfolioManagementView({
   theme: Theme;
   onOpenDetails: (stock: StockStatus) => void;
 }) {
+  const { t } = useI18n();
   const [query, setQuery] = useState("");
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [sortKey, setSortKey] = useState<PortfolioSortKey>("market_value");
@@ -4075,7 +4281,7 @@ function PortfolioManagementView({
       setDirty(false);
       closeEdit();
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : "保存持仓失败。");
+      setError(saveError instanceof Error ? saveError.message : t("error.savePositionsFailed"));
     } finally {
       setSaving(false);
     }
@@ -4088,41 +4294,41 @@ function PortfolioManagementView({
     <div className="portfolio-management-view">
       <header className="portfolio-management-header">
         <div>
-          <h2>持仓管理</h2>
-          <p>统一查询、排序和维护所有股票的持仓数据；包含 0 股股票。</p>
+          <h2>{t("portfolio.title")}</h2>
+          <p>{t("portfolio.description")}</p>
         </div>
         <div className="portfolio-summary-grid">
-          <PortfolioSummaryItem label="总持股金额" value={formatMaybe(totalMarketValue, 0)} />
-          <PortfolioSummaryItem label="总投入" value={formatMaybe(totalInvestment, 0)} />
-          <PortfolioSummaryItem label="现金" value={formatMaybe(state.config.cash, 0)} />
-          <PortfolioSummaryItem label="总仓位" value={formatPercent(totalPositionRatio)} />
+          <PortfolioSummaryItem label={t("portfolio.totalMarketValue")} value={formatMaybe(totalMarketValue, 0)} />
+          <PortfolioSummaryItem label={t("portfolio.totalInvestment")} value={formatMaybe(totalInvestment, 0)} />
+          <PortfolioSummaryItem label={t("portfolio.cash")} value={formatMaybe(state.config.cash, 0)} />
+          <PortfolioSummaryItem label={t("portfolio.totalPosition")} value={formatPercent(totalPositionRatio)} />
         </div>
       </header>
       <section className="portfolio-toolbar">
         <label className="portfolio-search">
-          <span>查询</span>
+          <span>{t("portfolio.query")}</span>
           <input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="按标签、股票名称、别名或代码查询"
+            placeholder={t("portfolio.queryPlaceholder")}
           />
         </label>
         <label className="portfolio-sort">
-          <span>排序</span>
+          <span>{t("portfolio.sort")}</span>
           <select value={sortKey} onChange={(event) => setSortKey(event.target.value as PortfolioSortKey)}>
             {portfolioSortOptions.map((option) => (
-              <option value={option.value} key={option.value}>{option.label}</option>
+              <option value={option.value} key={option.value}>{t(option.labelKey)}</option>
             ))}
           </select>
         </label>
         <button className="tool-button" onClick={() => setSortDirection((value) => value === "desc" ? "asc" : "desc")}>
-          {sortDirection === "desc" ? "降序" : "升序"}
+          {sortDirection === "desc" ? t("portfolio.sortDesc") : t("portfolio.sortAsc")}
         </button>
       </section>
-      <section className="portfolio-tag-filters" aria-label="标签过滤">
-        <span>标签包含任一：</span>
+      <section className="portfolio-tag-filters" aria-label={t("portfolio.tagFilterLabel")}>
+        <span>{t("portfolio.tagFilterLabel")}</span>
         {allTags.length === 0 ? (
-          <small className="muted">暂无标签</small>
+          <small className="muted">{t("portfolio.noTags")}</small>
         ) : (
           allTags.map((tag) => (
             <button className={`tag-chip ${selectedTags.includes(tag) ? "active" : ""}`} onClick={() => toggleTagFilter(tag)} key={tag}>
@@ -4131,25 +4337,25 @@ function PortfolioManagementView({
             </button>
           ))
         )}
-        {selectedTags.length > 0 && <button className="tool-button compact-text" onClick={() => setSelectedTags([])}>清除</button>}
+        {selectedTags.length > 0 && <button className="tool-button compact-text" onClick={() => setSelectedTags([])}>{t("portfolio.clear")}</button>}
       </section>
       <section className="portfolio-table-wrap">
-        <div className="portfolio-table" role="table" aria-label="持仓列表">
+        <div className="portfolio-table" role="table" aria-label={t("portfolio.tableLabel")}>
           <div className="portfolio-table-head" role="row">
-            <span>股票</span>
-            <span>标签</span>
-            <span>数量</span>
-            <span>现价</span>
-            <span>持仓金额</span>
-            <span>成本金额</span>
-            <span>持仓占比</span>
-            <span>今日盈亏</span>
-            <span>累计盈亏</span>
-            <span>涨跌幅</span>
-            <span>操作</span>
+            <span>{t("portfolio.stock")}</span>
+            <span>{t("portfolio.tags")}</span>
+            <span>{t("portfolio.shares")}</span>
+            <span>{t("portfolio.currentPrice")}</span>
+            <span>{t("portfolio.marketValue")}</span>
+            <span>{t("portfolio.costValue")}</span>
+            <span>{t("portfolio.holdingRatio")}</span>
+            <span>{t("portfolio.dayProfit")}</span>
+            <span>{t("portfolio.totalProfit")}</span>
+            <span>{t("portfolio.change")}</span>
+            <span>{t("portfolio.actions")}</span>
           </div>
           {visibleRows.length === 0 ? (
-            <div className="portfolio-empty">没有匹配的股票。</div>
+            <div className="portfolio-empty">{t("portfolio.noMatches")}</div>
           ) : visibleRows.map((stock) => {
             const value = rowMarketValue(stock);
             const rowRatio = ratioPercent(value, totalInvestment);
@@ -4176,43 +4382,43 @@ function PortfolioManagementView({
                   <SignedMetric value={percent} digits={2} suffix="%" theme={theme} />
                   <span className="portfolio-actions">
                     <button className="tool-button compact-text" onClick={() => editing ? closeEdit() : startEdit(stock)}>
-                      {editing ? "收起" : "编辑"}
+                      {editing ? t("portfolio.collapse") : t("portfolio.edit")}
                     </button>
                   </span>
                 </div>
                 {editing && (
                   <section className="positions-editor portfolio-position-editor">
                     <div className="positions-title">
-                      <span>编辑 {displayName(stock)} 持仓</span>
+                      <span>{t("portfolio.editPositions")} · {displayName(stock)}</span>
                       <button className="tool-button" onClick={addPosition}>
                         <Plus size={14} />
-                        新增行
+                        {t("portfolio.addRow")}
                       </button>
                     </div>
                     <div className="positions-grid">
-                      <span>账户</span>
-                      <span>数量</span>
-                      <span>成本</span>
+                      <span>{t("portfolio.account")}</span>
+                      <span>{t("portfolio.shares")}</span>
+                      <span>{t("portfolio.cost")}</span>
                       <span />
                       {draft.length === 0 ? (
-                        <div className="positions-empty">暂无持仓</div>
+                        <div className="positions-empty">{t("portfolio.noPositions")}</div>
                       ) : draft.map((position, index) => (
                         <div className="position-row" key={`${stock.config.code}-${index}`}>
                           <input value={position.account ?? ""} onChange={(event) => updateDraft(index, { account: event.target.value })} />
                           <input type="number" step="1" value={position.shares} onChange={(event) => updateDraft(index, { shares: Number(event.target.value) })} />
                           <input type="number" step="0.001" value={position.cost} onChange={(event) => updateDraft(index, { cost: Number(event.target.value) })} />
-                          <button className="icon-tool compact" onClick={() => removePosition(index)} aria-label="删除持仓">
+                          <button className="icon-tool compact" onClick={() => removePosition(index)} aria-label={t("portfolio.removePosition")}>
                             <X size={14} />
                           </button>
                         </div>
                       ))}
                     </div>
                     <div className="positions-actions">
-                      {dirty && <span className="edit-state">持仓修改未保存</span>}
+                      {dirty && <span className="edit-state">{t("portfolio.unsavedPositions")}</span>}
                       {error && <span className="save-error">{error}</span>}
-                      <button className="tool-button" onClick={closeEdit} disabled={saving}>取消</button>
+                      <button className="tool-button" onClick={closeEdit} disabled={saving}>{t("common.cancel")}</button>
                       <button className="tool-button accent" onClick={() => void savePositions()} disabled={!dirty || saving}>
-                        {saving ? "保存中..." : "保存持仓"}
+                        {saving ? t("common.saving") : t("portfolio.savePositions")}
                       </button>
                     </div>
                   </section>

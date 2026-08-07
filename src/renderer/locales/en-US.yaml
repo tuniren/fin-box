@@ -256,6 +256,45 @@ news:
   latestLoaded: Latest news updated
   latestUpToDate: Already up to date
   noMore: No more news
+portfolio:
+  title: Portfolio
+  description: Query, sort, and maintain position data for all symbols, including zero-share symbols.
+  totalMarketValue: Total holdings
+  totalInvestment: Total investment
+  cash: Cash
+  totalPosition: Total exposure
+  positionRatio: Exposure
+  query: Search
+  queryPlaceholder: Search by tag, stock name, alias, or code
+  sort: Sort
+  sortDesc: Desc
+  sortAsc: Asc
+  tagFilterLabel: "Tags include any of:"
+  noTags: No tags
+  clear: Clear
+  tableLabel: Portfolio list
+  stock: Stock
+  tags: Tags
+  shares: Shares
+  currentPrice: Current price
+  marketValue: Market value
+  costValue: Cost value
+  holdingRatio: Holding ratio
+  dayProfit: Day P/L
+  totalProfit: Total P/L
+  change: Change
+  actions: Actions
+  noMatches: No matching stocks.
+  collapse: Collapse
+  edit: Edit
+  editPositions: Edit positions
+  addRow: Add row
+  account: Account
+  cost: Cost
+  noPositions: No positions
+  removePosition: Remove position
+  unsavedPositions: Position changes are unsaved
+  savePositions: Save positions
 status:
   shIndex: SH Index
   accountProfitLoss: Account P/L

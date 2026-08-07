@@ -21,6 +21,7 @@ export type TranslationKey =
   | `aiScope.${"marketData" | "privateData" | "tradingLogic" | "noiseData"}`
   | `aiBlock.${"message" | "answer" | "analysis" | "toolResult"}`
   | `news.${"noNews" | "pullLatest" | "refreshingLatest" | "latestLoaded" | "latestUpToDate" | "noMore"}`
+  | `portfolio.${"title" | "description" | "totalMarketValue" | "totalInvestment" | "cash" | "totalPosition" | "positionRatio" | "query" | "queryPlaceholder" | "sort" | "sortDesc" | "sortAsc" | "tagFilterLabel" | "noTags" | "clear" | "tableLabel" | "stock" | "tags" | "shares" | "currentPrice" | "marketValue" | "costValue" | "holdingRatio" | "dayProfit" | "totalProfit" | "change" | "actions" | "noMatches" | "collapse" | "edit" | "editPositions" | "addRow" | "account" | "cost" | "noPositions" | "removePosition" | "unsavedPositions" | "savePositions"}`
   | `status.${"shIndex" | "accountProfitLoss" | "refreshInterval" | "accountConfig" | "totalInvestment" | "cash"}`
   | `error.${"invalidNumbers" | "saveAccountFailed" | "loadCommentsFailed" | "tagEditorUnavailable" | "saveTagsFailed" | "positionEditorUnavailable" | "savePositionsFailed" | "aliasEditorUnavailable" | "saveAliasFailed" | "loadNewsFailed" | "saveMottoFailed" | "aiAnalysisUnavailable" | "aiAnalysisFailed"}`;
 

@@ -1,11 +1,12 @@
 import { Tree } from "antd";
 import "antd/dist/reset.css";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import type { TreeDataNode } from "antd";
 import { Folder, Plus } from "lucide-react";
 import { dayProfit, displayName, effectivePrice } from "../../shared/finance";
 import { profitColor } from "../../shared/theme";
+import { WATCH_FLOAT_COLUMN } from "../../shared/types";
 import type { StockStatus, Theme, WatchFloatColumn } from "../../shared/types";
 import { formatMaybe, formatSigned, stockPercent } from "../utils";
 
@@ -22,6 +23,8 @@ type WatchTreeNode = TreeDataNode & {
 
 export type WatchTreeSelection = { type: "group"; tag: string } | { type: "stock"; tag: string; code: string };
 
+export const DEFAULT_WATCH_TREE_EXPANDED_KEYS = [WATCH_ROOT_KEY];
+
 export function GroupedWatchlist({
   stocks,
   groupNames,
@@ -36,7 +39,9 @@ export function GroupedWatchlist({
   onSelectNode,
   onSelect,
   onOpenDetails,
-  columns = ["name", "change"],
+  expandedKeys,
+  onExpandedKeysChange,
+  columns = [WATCH_FLOAT_COLUMN.Name, WATCH_FLOAT_COLUMN.Price, WATCH_FLOAT_COLUMN.Change],
   readOnly = false
 }: {
   stocks: StockStatus[];
@@ -52,11 +57,12 @@ export function GroupedWatchlist({
   onSelectNode?: (selection: WatchTreeSelection) => void;
   onSelect: (stock: StockStatus) => void;
   onOpenDetails?: (stock: StockStatus) => void;
+  expandedKeys: string[];
+  onExpandedKeysChange: (keys: string[]) => void;
   columns?: WatchFloatColumn[];
   readOnly?: boolean;
 }) {
   const groups = useMemo(() => groupStocksByTag(stocks, groupNames, groupOrder), [stocks, groupNames, groupOrder]);
-  const [expandedKeys, setExpandedKeys] = useState<string[]>([WATCH_ROOT_KEY]);
   const selectedWatchKey = watchSelectionKey(selectedSelection);
 
   const treeData = useMemo<WatchTreeNode[]>(() => [
@@ -213,7 +219,7 @@ export function GroupedWatchlist({
       selectedKeys={selectedWatchKey ? [selectedWatchKey] : []}
       onDrop={handleDrop}
       onSelect={handleSelect}
-      onExpand={(keys) => setExpandedKeys(keys.map(String))}
+      onExpand={(keys) => onExpandedKeysChange(keys.map(String))}
     />
   );
 }
@@ -292,7 +298,7 @@ function WatchStockTitle({
   onSelect: () => void;
   onOpenDetails?: () => void;
 }) {
-  const safeColumns: WatchFloatColumn[] = columns.length ? columns : ["name", "change"];
+  const safeColumns: WatchFloatColumn[] = columns.length ? columns : [WATCH_FLOAT_COLUMN.Name, WATCH_FLOAT_COLUMN.Change];
   return (
     <div
       className={`watch-tree-stock ${selected ? "active" : ""}`}
@@ -310,18 +316,18 @@ function WatchStockTitle({
 }
 
 function WatchStockCell({ column, stock, theme }: { column: WatchFloatColumn; stock: StockStatus; theme: Theme }) {
-  if (column === "name") return <span className="watch-tree-cell name">{displayName(stock)}</span>;
-  if (column === "price") return <span className="watch-tree-cell price">{formatMaybe(effectivePrice(stock.market), 2)}</span>;
-  if (column === "day_profit") return <SignedMetric className="watch-tree-cell day-profit" value={dayProfit(stock)} digits={0} theme={theme} />;
+  if (column === WATCH_FLOAT_COLUMN.Name) return <span className="watch-tree-cell name">{displayName(stock)}</span>;
+  if (column === WATCH_FLOAT_COLUMN.Price) return <span className="watch-tree-cell price">{formatMaybe(effectivePrice(stock.market), 2)}</span>;
+  if (column === WATCH_FLOAT_COLUMN.DayProfit) return <SignedMetric className="watch-tree-cell day-profit" value={dayProfit(stock)} digits={0} theme={theme} />;
   return <SignedMetric className="watch-tree-cell change" value={stockPercent(stock)} digits={2} theme={theme} />;
 }
 
 function watchTreeGridColumns(columns: WatchFloatColumn[]): string {
   const widths: Record<WatchFloatColumn, string> = {
-    name: "76px",
-    price: "50px",
-    change: "42px",
-    day_profit: "54px"
+    [WATCH_FLOAT_COLUMN.Name]: "76px",
+    [WATCH_FLOAT_COLUMN.Price]: "50px",
+    [WATCH_FLOAT_COLUMN.Change]: "42px",
+    [WATCH_FLOAT_COLUMN.DayProfit]: "54px"
   };
   return columns.map((column) => widths[column]).join(" ");
 }

@@ -32,7 +32,14 @@ export type MottoConfig = {
   color: string;
 };
 
-export type WatchFloatColumn = "name" | "price" | "change" | "day_profit";
+export const WATCH_FLOAT_COLUMN = {
+  Name: "name",
+  Price: "price",
+  Change: "change",
+  DayProfit: "day_profit"
+} as const;
+
+export type WatchFloatColumn = typeof WATCH_FLOAT_COLUMN[keyof typeof WATCH_FLOAT_COLUMN];
 
 export type WatchFloatMetricColumn = "change" | "day_profit";
 
@@ -286,6 +293,12 @@ export type NoteFile = {
   content: string;
 };
 
+export type CamouflageDocument = {
+  path: string;
+  content: string;
+  updatedAt: number;
+};
+
 export type AppState = {
   config: AppConfig;
   stocks: StockStatus[];
@@ -386,6 +399,7 @@ export type FinBoxApi = {
   listNotes: () => Promise<NoteTreeItem[]>;
   readNote: (notePath: string) => Promise<NoteFile>;
   saveNote: (notePath: string, content: string) => Promise<void>;
+  getCamouflageDocument: () => Promise<CamouflageDocument>;
   createNote: (parentPath: string, type: "file" | "directory", name: string) => Promise<NoteTreeItem[]>;
   renameNote: (notePath: string, name: string) => Promise<NoteTreeItem[]>;
   deleteNote: (notePath: string) => Promise<NoteTreeItem[]>;

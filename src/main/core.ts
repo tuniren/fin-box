@@ -6,7 +6,7 @@ import { dayProfit, displayName, effectivePrice, marketValue, totalProfit, total
 import { runCodexAnalysis } from "./aiAnalysis";
 import { ConfigManager, normalizeAiAnalysis, normalizeTradingRefreshInterval, normalizeWatchColumns } from "./config";
 import { fetchKLineData, fetchMultipleStocks, fetchStockComments as fetchThsStockComments, fetchStockNews as fetchSinaStockNews, fetchStockNewsArticle as fetchSinaStockNewsArticle, fetchTencentFiveDayMinuteData, fetchTencentMinuteData, searchStocks } from "./sina";
-import type { AiAnalysisConfig, AiAnalysisProcessLog, AiAnalysisResult, AppConfig, AppState, KLinePoint, KLineScale, MottoConfig, Position, StockConfig, StockJournal, StockJournalNote, StockStatus, WatchFloatColumn, WatchFloatConfig, WatchFloatStyle } from "../shared/types";
+import type { AiAnalysisConfig, AiAnalysisProcessLog, AiAnalysisResult, AppConfig, AppState, CamouflageDocument, KLinePoint, KLineScale, MottoConfig, Position, StockConfig, StockJournal, StockJournalNote, StockStatus, WatchFloatColumn, WatchFloatConfig, WatchFloatStyle } from "../shared/types";
 
 const INDEX_CODE = "sh000001";
 const OFF_HOURS_REFRESH_MS = 300000;
@@ -75,6 +75,10 @@ export class AppCore {
 
   openConfigDir(): void {
     void shell.openPath(this.configManager.dir());
+  }
+
+  getCamouflageDocument(): CamouflageDocument {
+    return readCamouflageDocument(this.configManager.dir());
   }
 
   openStockNotesDir(): void {
@@ -677,6 +681,225 @@ function stockNotesRoot(): string {
 
 function aiAnalysisRoot(): string {
   return path.join(app.getPath("userData"), "ai-analysis");
+}
+
+function camouflageDocumentDir(configDir: string): string {
+  return path.join(configDir, "camouflage");
+}
+
+function camouflageDocumentPath(configDir: string): string {
+  return path.join(camouflageDocumentDir(configDir), "transformer.cpp");
+}
+
+function readCamouflageDocument(configDir: string): CamouflageDocument {
+  const filePath = camouflageDocumentPath(configDir);
+  if (!fs.existsSync(filePath)) {
+    return writeCamouflageDocument(configDir, defaultCamouflageCode());
+  }
+
+  const stat = fs.statSync(filePath);
+  return {
+    path: filePath,
+    content: fs.readFileSync(filePath, "utf8"),
+    updatedAt: stat.mtimeMs
+  };
+}
+
+function writeCamouflageDocument(configDir: string, content: string): CamouflageDocument {
+  if (typeof content !== "string") throw new Error("Document content must be a string.");
+
+  const dir = camouflageDocumentDir(configDir);
+  const filePath = camouflageDocumentPath(configDir);
+  fs.mkdirSync(dir, { recursive: true });
+
+  const tempPath = path.join(dir, `.${path.basename(filePath)}.${process.pid}.${Date.now()}.tmp`);
+  fs.writeFileSync(tempPath, content, "utf8");
+  fs.renameSync(tempPath, filePath);
+
+  const stat = fs.statSync(filePath);
+  return {
+    path: filePath,
+    content,
+    updatedAt: stat.mtimeMs
+  };
+}
+
+function defaultCamouflageCode(): string {
+  return `// transformer.cpp
+// 这份文件用最小 C++ 代码说明 Transformer 中最核心的一段计算：
+// Scaled Dot-Product Attention，即缩放点积注意力。
+//
+// Transformer 的基本思想：
+// 1. 文本会先被切分成 token，每个 token 被表示为向量。
+// 2. 每个向量会线性变换成 Query、Key、Value 三类向量。
+// 3. Query 与 Key 做点积，得到“当前位置应该关注其他位置多少”的分数。
+// 4. 分数除以 sqrt(d_k) 做缩放，避免维度较高时点积过大导致 softmax 饱和。
+// 5. softmax 把分数归一化为概率权重。
+// 6. 权重再乘以 Value，得到融合上下文信息后的表示。
+// 7. 多头注意力会并行执行多组 Q/K/V，再拼接结果；此处只展示单头核心。
+// 8. Attention 后通常接残差连接、归一化和前馈网络，形成一个 Transformer Block。
+
+#include <algorithm>
+#include <cmath>
+#include <iostream>
+#include <numeric>
+#include <stdexcept>
+#include <utility>
+#include <vector>
+
+using Matrix = std::vector<std::vector<double>>;
+
+namespace transformer {
+
+constexpr double kEpsilon = 1e-9;
+
+// Matrix 是二维矩阵：
+// - 行通常表示序列中的不同 token。
+// - 列通常表示每个 token 的隐藏维度。
+// 例如 2 x 3 矩阵可以表示 2 个 token，每个 token 是 3 维向量。
+
+Matrix matmul(const Matrix& lhs, const Matrix& rhs) {
+    // 矩阵乘法要求 lhs 的列数等于 rhs 的行数。
+    // 在注意力中常见的乘法包括：
+    // - Q * K^T：计算 token 与 token 之间的相关性。
+    // - AttentionWeights * V：按注意力权重汇总 Value。
+    if (lhs.empty() || rhs.empty() || lhs.front().size() != rhs.size()) {
+        throw std::invalid_argument("incompatible matrix shape");
+    }
+
+    Matrix out(lhs.size(), std::vector<double>(rhs.front().size(), 0.0));
+    for (std::size_t i = 0; i < lhs.size(); ++i) {
+        for (std::size_t k = 0; k < rhs.size(); ++k) {
+            for (std::size_t j = 0; j < rhs.front().size(); ++j) {
+                // out[i][j] 是 lhs 的第 i 行与 rhs 的第 j 列的点积。
+                out[i][j] += lhs[i][k] * rhs[k][j];
+            }
+        }
+    }
+    return out;
+}
+
+Matrix transpose(const Matrix& input) {
+    // Key 需要转置，是因为 Q 和 K 都按 token x hidden_dim 存储。
+    // Q * K^T 后得到 token x token 的分数矩阵：
+    // scores[i][j] 表示第 i 个 token 对第 j 个 token 的关注强度。
+    Matrix out(input.front().size(), std::vector<double>(input.size(), 0.0));
+    for (std::size_t i = 0; i < input.size(); ++i) {
+        for (std::size_t j = 0; j < input[i].size(); ++j) {
+            out[j][i] = input[i][j];
+        }
+    }
+    return out;
+}
+
+std::vector<double> softmax(const std::vector<double>& logits) {
+    // softmax 的作用是把任意实数分数转换为概率分布。
+    // 输出满足：
+    // - 每个值都大于 0。
+    // - 所有值之和约等于 1。
+    //
+    // 注意这里先减去 maxValue，这是数值稳定性技巧。
+    // 它不改变 softmax 结果，但可以避免 exp(value) 溢出。
+    const double maxValue = *std::max_element(logits.begin(), logits.end());
+    std::vector<double> expValues(logits.size());
+
+    std::transform(logits.begin(), logits.end(), expValues.begin(), [maxValue](double value) {
+        return std::exp(value - maxValue);
+    });
+
+    const double sum = std::accumulate(expValues.begin(), expValues.end(), kEpsilon);
+    for (double& value : expValues) {
+        value /= sum;
+    }
+    return expValues;
+}
+
+Matrix scaledDotProductAttention(const Matrix& query, const Matrix& key, const Matrix& value) {
+    // 这是 Transformer 最核心的公式：
+    //
+    // Attention(Q, K, V) = softmax((Q * K^T) / sqrt(d_k)) * V
+    //
+    // Q：Query，表示“当前位置想找什么信息”。
+    // K：Key，表示“每个位置能被怎样匹配”。
+    // V：Value，表示“每个位置实际提供什么内容”。
+    //
+    // 直观理解：
+    // - Query 与 Key 的点积越大，说明两个 token 越相关。
+    // - softmax 后的权重越大，对应 Value 对最终输出的贡献越大。
+    const Matrix scores = matmul(query, transpose(key));
+
+    // d_k 是 Key 向量维度。
+    // 如果不除以 sqrt(d_k)，维度越高，点积方差越大，softmax 越容易接近 one-hot，
+    // 导致梯度变小，训练不稳定。
+    const double scale = std::sqrt(static_cast<double>(key.front().size()));
+    Matrix weights(scores.size(), std::vector<double>(scores.front().size(), 0.0));
+
+    for (std::size_t row = 0; row < scores.size(); ++row) {
+        std::vector<double> logits(scores[row].size());
+        for (std::size_t col = 0; col < scores[row].size(); ++col) {
+            // 对每一行分数做缩放。每一行对应一个 token 对全部 token 的注意力分布。
+            logits[col] = scores[row][col] / scale;
+        }
+        weights[row] = softmax(logits);
+    }
+
+    // 用注意力权重对 Value 加权求和。
+    // 输出仍然是 token x hidden_dim，每个 token 的表示已经融合了上下文信息。
+    return matmul(weights, value);
+}
+
+class FeedForward {
+public:
+    FeedForward(Matrix first, Matrix second)
+        : w1_(std::move(first)), w2_(std::move(second)) {}
+
+    Matrix operator()(const Matrix& hidden) const {
+        // Transformer Block 中的前馈网络通常独立作用在每个 token 上。
+        // 典型结构是 Linear -> Activation -> Linear。
+        // 这里用 ReLU 作为激活函数，真实模型也常用 GELU 或 SwiGLU。
+        Matrix activated = matmul(hidden, w1_);
+        for (auto& row : activated) {
+            for (double& value : row) {
+                value = std::max(0.0, value);
+            }
+        }
+        return matmul(activated, w2_);
+    }
+
+private:
+    Matrix w1_;
+    Matrix w2_;
+};
+
+}  // namespace transformer
+
+int main() {
+    // 这里构造一个极小的示例：
+    // - 两行表示两个 token。
+    // - 两列表示每个 token 的二维隐藏向量。
+    //
+    // query 和 key 接近单位矩阵，表示第一个 token 更关注第一个 token，
+    // 第二个 token 更关注第二个 token。
+    Matrix query = {{1.0, 0.0}, {0.0, 1.0}};
+    Matrix key = {{1.0, 0.0}, {0.0, 1.0}};
+
+    // value 表示每个 token 携带的实际内容。
+    // 注意力权重会决定每一行输出从这些 value 中吸收多少信息。
+    Matrix value = {{0.8, 0.2}, {0.1, 0.9}};
+
+    const Matrix context = transformer::scaledDotProductAttention(query, key, value);
+
+    // 输出 context 后，可以观察到每个 token 的表示不再只是自身 value，
+    // 而是按注意力分布融合了其他 token 的信息。
+    // 这就是 Transformer 能建模上下文依赖的关键。
+    for (const auto& row : context) {
+        for (double value : row) {
+            std::cout << value << " ";
+        }
+        std::cout << "\\n";
+    }
+}
+`;
 }
 
 function stockJournalCodeDir(code: string): string {

@@ -383,6 +383,7 @@ function createMainWindow(): BrowserWindow {
 
   applyWindowIcon(win);
   win.setMenuBarVisibility(false);
+  win.maximize();
   win.on("close", (event) => {
     if (isQuitting || core?.getState().config.window_close_behavior === "close") return;
     event.preventDefault();
@@ -701,6 +702,7 @@ ipcMain.handle("save-note", (_event, notePath: string, content: string) => {
   }
   fs.writeFileSync(absolutePath, content, "utf8");
 });
+ipcMain.handle("get-camouflage-document", () => core.getCamouflageDocument());
 ipcMain.handle("create-note", (_event, parentPath: string, type: "file" | "directory", name: string) => {
   const parent = resolveNotePath(parentPath);
   if (!fs.existsSync(parent) || !fs.statSync(parent).isDirectory()) {
