@@ -37,6 +37,7 @@ import {
   displayName,
   effectivePrice,
   marketValue,
+  totalCost,
   totalProfit,
   totalProfitPoints,
   totalShares
@@ -176,8 +177,8 @@ const mergeNewsItems = (current: StockNewsItem[], incoming: StockNewsItem[], dir
   const merged = direction === "prepend" ? [...freshItems, ...current] : [...current, ...freshItems];
   return trimNewsItems(merged, direction);
 };
-type ActivityView = "watchlist" | "news" | "requests" | "notes" | "help" | "settings";
-type ActiveView = "details" | "chart" | "note" | "help" | "settings" | "request-log" | "ai-analysis";
+type ActivityView = "watchlist" | "portfolio" | "news" | "requests" | "notes" | "help" | "settings";
+type ActiveView = "details" | "chart" | "note" | "help" | "settings" | "request-log" | "ai-analysis" | "portfolio";
 type StockView = "details" | "chart";
 type DetailTab = { code: string };
 type DetailTabContextMenu = { code: string; x: number; y: number };
@@ -351,6 +352,7 @@ const settingsNavItems: Array<{ value: SettingsView; labelKey: `settings.${"gene
 ];
 
 function activityViewTitle(view: ActivityView) {
+  if (view === "portfolio") return "持仓";
   if (view === "news") return "7X24";
   if (view === "requests") return "请求日志";
   if (view === "settings") return "设置";
@@ -1398,7 +1400,13 @@ export function MainWorkspace() {
       setActiveView("settings");
       return;
     }
-    if (view === "watchlist" && (activeView === "note" || activeView === "help" || activeView === "settings" || activeView === "request-log")) {
+    if (view === "portfolio") {
+      setEditorVisible(true);
+      setActiveView("portfolio");
+      setExplorerVisible(false);
+      return;
+    }
+    if (view === "watchlist" && (activeView === "note" || activeView === "help" || activeView === "settings" || activeView === "request-log" || activeView === "portfolio")) {
       setActiveView(detailsOpen ? "details" : chartOpen ? "chart" : undefined);
     }
   };
@@ -1410,6 +1418,9 @@ export function MainWorkspace() {
       </main>
     );
   }
+
+  const showExplorerPane = explorerVisible && activeView !== "portfolio";
+  const showSidePane = sideVisible && activeView !== "portfolio";
 
   return (
     <main className={`workspace ${statusBarVisible ? "" : "hide-status-bar"}`}>
@@ -1499,12 +1510,13 @@ export function MainWorkspace() {
       </header>
 
       <section
-        className={`workbench ${explorerVisible ? "" : "hide-explorer"} ${editorVisible ? "" : "hide-editor"} ${sideVisible ? "" : "hide-side"}`}
+        className={`workbench ${showExplorerPane ? "" : "hide-explorer"} ${editorVisible ? "" : "hide-editor"} ${showSidePane ? "" : "hide-side"}`}
         style={{ "--explorer-width": `${explorerWidth}px`, "--side-width": `${sideWidth}px` } as CSSProperties}
       >
         <aside className="activity-bar" aria-label="Activity bar">
           <div className="activity-top">
             <button className={`activity-item ${activityView === "watchlist" ? "active" : ""}`} onClick={() => toggleActivityPane("watchlist")} aria-label="Explorer"><Files size={24} /></button>
+            <button className={`activity-item ${activityView === "portfolio" ? "active" : ""}`} onClick={() => toggleActivityPane("portfolio")} aria-label="持仓" title="持仓"><FileText size={23} /></button>
             <button className={`activity-item ${activityView === "news" ? "active" : ""}`} onClick={() => toggleActivityPane("news")} aria-label="7x24"><Newspaper size={23} /></button>
             <button className={`activity-item ${activityView === "requests" ? "active" : ""}`} onClick={() => toggleActivityPane("requests")} aria-label="请求日志" title="请求日志">
               <Network size={23} />
@@ -1517,7 +1529,7 @@ export function MainWorkspace() {
           </div>
         </aside>
 
-        {explorerVisible && (
+        {showExplorerPane && (
         <aside className="explorer-panel">
           <div className="explorer-header">
             {activityView !== "watchlist" && <span>{activityViewTitle(activityView)}</span>}
@@ -1623,7 +1635,7 @@ export function MainWorkspace() {
         </aside>
         )}
 
-        {explorerVisible && editorVisible && <div className="resize-handle resize-handle-left" onMouseDown={(event) => startResize("explorer", event)} />}
+        {showExplorerPane && editorVisible && <div className="resize-handle resize-handle-left" onMouseDown={(event) => startResize("explorer", event)} />}
 
         {editorVisible && (
         <section className="editor-region">
@@ -1670,6 +1682,12 @@ export function MainWorkspace() {
                 </span>
               </button>
             )}
+            {activeView === "portfolio" && (
+              <button className="editor-tab active">
+                <FileText size={14} />
+                持仓
+              </button>
+            )}
             {activeView === "help" && (
               <button className="editor-tab active">
                 <BookOpen size={14} />
@@ -1706,10 +1724,17 @@ export function MainWorkspace() {
             <ChevronRight size={14} />
             <span>renderer</span>
             <ChevronRight size={14} />
-            <span>{activeView === "help" ? "使用说明" : activeView === "settings" ? settingsViewLabel(settingsView, t) : activeView === "request-log" ? "请求报文" : activeView === "ai-analysis" ? t("detail.aiAnalysis") : activeDetailStock ? activeDetailStock.config.code : selectedStock ? selectedStock.config.code : "portfolio"}</span>
+            <span>{activeView === "portfolio" ? "持仓" : activeView === "help" ? "使用说明" : activeView === "settings" ? settingsViewLabel(settingsView, t) : activeView === "request-log" ? "请求报文" : activeView === "ai-analysis" ? t("detail.aiAnalysis") : activeDetailStock ? activeDetailStock.config.code : selectedStock ? selectedStock.config.code : "portfolio"}</span>
           </div>
           <div className="editor-panel">
-            {activeView === "help" ? (
+            {activeView === "portfolio" ? (
+              <PortfolioManagementView
+                state={state}
+                stocks={visibleStocks}
+                theme={theme}
+                onOpenDetails={(stock) => openDetailTab(stock.config.code)}
+              />
+            ) : activeView === "help" ? (
               <HelpDocument />
             ) : activeView === "settings" ? (
               <SettingsPage
@@ -1765,9 +1790,9 @@ export function MainWorkspace() {
         </section>
         )}
 
-        {sideVisible && editorVisible && <div className="resize-handle resize-handle-right" onMouseDown={(event) => startResize("side", event)} />}
+        {showSidePane && editorVisible && <div className="resize-handle resize-handle-right" onMouseDown={(event) => startResize("side", event)} />}
 
-        {sideVisible && (
+        {showSidePane && (
         <aside className="codex-panel">
           <StockNotesPanelView
             stock={activeView === "details" ? activeDetailStock : undefined}
@@ -3954,6 +3979,313 @@ function SettingsPage({
       </section>
     </div>
   );
+}
+
+type PortfolioSortKey = "market_value" | "holding_ratio" | "position_ratio" | "day_profit" | "total_profit" | "change" | "name";
+type PortfolioSortDirection = "desc" | "asc";
+
+const portfolioSortOptions: Array<{ value: PortfolioSortKey; label: string }> = [
+  { value: "market_value", label: "持仓金额" },
+  { value: "holding_ratio", label: "持仓占比" },
+  { value: "position_ratio", label: "仓位" },
+  { value: "day_profit", label: "今日盈亏" },
+  { value: "total_profit", label: "累计盈亏" },
+  { value: "change", label: "涨跌幅" },
+  { value: "name", label: "股票名称" }
+];
+
+function PortfolioManagementView({
+  state,
+  stocks,
+  theme,
+  onOpenDetails
+}: {
+  state: AppState;
+  stocks: StockStatus[];
+  theme: Theme;
+  onOpenDetails: (stock: StockStatus) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [sortKey, setSortKey] = useState<PortfolioSortKey>("market_value");
+  const [sortDirection, setSortDirection] = useState<PortfolioSortDirection>("desc");
+  const [editingCode, setEditingCode] = useState("");
+  const [draft, setDraft] = useState<Position[]>([]);
+  const [dirty, setDirty] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const totalMarketValue = sumPortfolioMarketValue(stocks);
+  const totalInvestment = state.config.total_investment;
+  const totalPositionRatio = ratioPercent(totalMarketValue, totalInvestment);
+  const allTags = useMemo(
+    () => [...new Set(stocks.flatMap((stock) => stock.config.tags))].sort((left, right) => left.localeCompare(right)),
+    [stocks]
+  );
+  const normalizedQuery = query.trim().toLowerCase();
+  const selectedTagSet = useMemo(() => new Set(selectedTags.map((tag) => tag.toLowerCase())), [selectedTags]);
+  const visibleRows = useMemo(() => {
+    const rows = stocks.filter((stock) => {
+      const text = [
+        stock.config.code,
+        stock.config.alias ?? "",
+        stock.market?.name ?? "",
+        displayName(stock),
+        ...stock.config.tags
+      ].join(" ").toLowerCase();
+      const queryMatched = !normalizedQuery || text.includes(normalizedQuery);
+      const tagMatched = selectedTagSet.size === 0 || stock.config.tags.some((tag) => selectedTagSet.has(tag.toLowerCase()));
+      return queryMatched && tagMatched;
+    });
+    return rows.sort((left, right) => comparePortfolioRows(left, right, sortKey, sortDirection, totalInvestment));
+  }, [normalizedQuery, selectedTagSet, sortDirection, sortKey, stocks, totalInvestment]);
+
+  const startEdit = (stock: StockStatus) => {
+    setEditingCode(stock.config.code);
+    setDraft(stock.config.positions.map((position) => ({ ...position })));
+    setDirty(false);
+    setError("");
+  };
+  const closeEdit = () => {
+    setEditingCode("");
+    setDraft([]);
+    setDirty(false);
+    setError("");
+  };
+  const updateDraft = (index: number, patch: Partial<Position>) => {
+    setDirty(true);
+    setError("");
+    setDraft((items) => items.map((item, itemIndex) => (itemIndex === index ? { ...item, ...patch } : item)));
+  };
+  const addPosition = () => {
+    setDirty(true);
+    setError("");
+    setDraft((items) => [...items, { account: "", shares: 0, cost: 0 }]);
+  };
+  const removePosition = (index: number) => {
+    setDirty(true);
+    setError("");
+    setDraft((items) => items.filter((_, itemIndex) => itemIndex !== index));
+  };
+  const savePositions = async () => {
+    if (!editingCode) return;
+    setSaving(true);
+    setError("");
+    try {
+      await api.updateStockPositions(editingCode, draft);
+      setDirty(false);
+      closeEdit();
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : "保存持仓失败。");
+    } finally {
+      setSaving(false);
+    }
+  };
+  const toggleTagFilter = (tag: string) => {
+    setSelectedTags((items) => items.includes(tag) ? items.filter((item) => item !== tag) : [...items, tag]);
+  };
+
+  return (
+    <div className="portfolio-management-view">
+      <header className="portfolio-management-header">
+        <div>
+          <h2>持仓管理</h2>
+          <p>统一查询、排序和维护所有股票的持仓数据；包含 0 股股票。</p>
+        </div>
+        <div className="portfolio-summary-grid">
+          <PortfolioSummaryItem label="总持股金额" value={formatMaybe(totalMarketValue, 0)} />
+          <PortfolioSummaryItem label="总投入" value={formatMaybe(totalInvestment, 0)} />
+          <PortfolioSummaryItem label="现金" value={formatMaybe(state.config.cash, 0)} />
+          <PortfolioSummaryItem label="总仓位" value={formatPercent(totalPositionRatio)} />
+        </div>
+      </header>
+      <section className="portfolio-toolbar">
+        <label className="portfolio-search">
+          <span>查询</span>
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="按标签、股票名称、别名或代码查询"
+          />
+        </label>
+        <label className="portfolio-sort">
+          <span>排序</span>
+          <select value={sortKey} onChange={(event) => setSortKey(event.target.value as PortfolioSortKey)}>
+            {portfolioSortOptions.map((option) => (
+              <option value={option.value} key={option.value}>{option.label}</option>
+            ))}
+          </select>
+        </label>
+        <button className="tool-button" onClick={() => setSortDirection((value) => value === "desc" ? "asc" : "desc")}>
+          {sortDirection === "desc" ? "降序" : "升序"}
+        </button>
+      </section>
+      <section className="portfolio-tag-filters" aria-label="标签过滤">
+        <span>标签包含任一：</span>
+        {allTags.length === 0 ? (
+          <small className="muted">暂无标签</small>
+        ) : (
+          allTags.map((tag) => (
+            <button className={`tag-chip ${selectedTags.includes(tag) ? "active" : ""}`} onClick={() => toggleTagFilter(tag)} key={tag}>
+              <Tag size={13} />
+              <span>{tag}</span>
+            </button>
+          ))
+        )}
+        {selectedTags.length > 0 && <button className="tool-button compact-text" onClick={() => setSelectedTags([])}>清除</button>}
+      </section>
+      <section className="portfolio-table-wrap">
+        <div className="portfolio-table" role="table" aria-label="持仓列表">
+          <div className="portfolio-table-head" role="row">
+            <span>股票</span>
+            <span>标签</span>
+            <span>数量</span>
+            <span>现价</span>
+            <span>持仓金额</span>
+            <span>成本金额</span>
+            <span>持仓占比</span>
+            <span>今日盈亏</span>
+            <span>累计盈亏</span>
+            <span>涨跌幅</span>
+            <span>操作</span>
+          </div>
+          {visibleRows.length === 0 ? (
+            <div className="portfolio-empty">没有匹配的股票。</div>
+          ) : visibleRows.map((stock) => {
+            const value = rowMarketValue(stock);
+            const rowRatio = ratioPercent(value, totalInvestment);
+            const percent = stockPercent(stock);
+            const profit = totalProfit(stock);
+            const editing = editingCode.toLowerCase() === stock.config.code.toLowerCase();
+            return (
+              <div className="portfolio-row-block" key={stock.config.code}>
+                <div className="portfolio-table-row" role="row">
+                  <button className="portfolio-stock-name" onClick={() => onOpenDetails(stock)}>
+                    <strong>{displayName(stock)}</strong>
+                    <small>{stock.config.code}{stock.market?.name && stock.market.name !== displayName(stock) ? ` · ${stock.market.name}` : ""}</small>
+                  </button>
+                  <span className="portfolio-tags">
+                    {stock.config.tags.length ? stock.config.tags.map((tag) => <small key={tag}>{tag}</small>) : <small className="muted">--</small>}
+                  </span>
+                  <span>{totalShares(stock) || "--"}</span>
+                  <span>{formatMaybe(effectivePrice(stock.market), 2)}</span>
+                  <span>{formatMaybe(value, 0)}</span>
+                  <span>{formatMaybe(totalCost(stock), 0)}</span>
+                  <span>{formatPercent(rowRatio)}</span>
+                  <SignedMetric value={dayProfit(stock)} digits={0} theme={theme} />
+                  <SignedMetric value={profit} digits={0} theme={theme} />
+                  <SignedMetric value={percent} digits={2} suffix="%" theme={theme} />
+                  <span className="portfolio-actions">
+                    <button className="tool-button compact-text" onClick={() => editing ? closeEdit() : startEdit(stock)}>
+                      {editing ? "收起" : "编辑"}
+                    </button>
+                  </span>
+                </div>
+                {editing && (
+                  <section className="positions-editor portfolio-position-editor">
+                    <div className="positions-title">
+                      <span>编辑 {displayName(stock)} 持仓</span>
+                      <button className="tool-button" onClick={addPosition}>
+                        <Plus size={14} />
+                        新增行
+                      </button>
+                    </div>
+                    <div className="positions-grid">
+                      <span>账户</span>
+                      <span>数量</span>
+                      <span>成本</span>
+                      <span />
+                      {draft.length === 0 ? (
+                        <div className="positions-empty">暂无持仓</div>
+                      ) : draft.map((position, index) => (
+                        <div className="position-row" key={`${stock.config.code}-${index}`}>
+                          <input value={position.account ?? ""} onChange={(event) => updateDraft(index, { account: event.target.value })} />
+                          <input type="number" step="1" value={position.shares} onChange={(event) => updateDraft(index, { shares: Number(event.target.value) })} />
+                          <input type="number" step="0.001" value={position.cost} onChange={(event) => updateDraft(index, { cost: Number(event.target.value) })} />
+                          <button className="icon-tool compact" onClick={() => removePosition(index)} aria-label="删除持仓">
+                            <X size={14} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="positions-actions">
+                      {dirty && <span className="edit-state">持仓修改未保存</span>}
+                      {error && <span className="save-error">{error}</span>}
+                      <button className="tool-button" onClick={closeEdit} disabled={saving}>取消</button>
+                      <button className="tool-button accent" onClick={() => void savePositions()} disabled={!dirty || saving}>
+                        {saving ? "保存中..." : "保存持仓"}
+                      </button>
+                    </div>
+                  </section>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function PortfolioSummaryItem({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="portfolio-summary-item">
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
+function rowMarketValue(stock: StockStatus): number | undefined {
+  if (totalShares(stock) === 0) return 0;
+  return marketValue(stock);
+}
+
+function sumPortfolioMarketValue(stocks: StockStatus[]): number | undefined {
+  let total = 0;
+  for (const stock of stocks) {
+    const value = rowMarketValue(stock);
+    if (value === undefined) return undefined;
+    total += value;
+  }
+  return total;
+}
+
+function ratioPercent(value: number | undefined, denominator: number | undefined): number | undefined {
+  if (value === undefined || denominator === undefined || denominator <= 0) return undefined;
+  return (value / denominator) * 100;
+}
+
+function formatPercent(value: number | undefined) {
+  return value === undefined ? "--" : `${value.toFixed(2)}%`;
+}
+
+function comparePortfolioRows(
+  left: StockStatus,
+  right: StockStatus,
+  sortKey: PortfolioSortKey,
+  direction: PortfolioSortDirection,
+  totalInvestment: number | undefined
+) {
+  const multiplier = direction === "desc" ? -1 : 1;
+  if (sortKey === "name") {
+    return displayName(left).localeCompare(displayName(right)) * multiplier;
+  }
+  const leftValue = portfolioSortValue(left, sortKey, totalInvestment);
+  const rightValue = portfolioSortValue(right, sortKey, totalInvestment);
+  if (leftValue === undefined && rightValue === undefined) return displayName(left).localeCompare(displayName(right));
+  if (leftValue === undefined) return 1;
+  if (rightValue === undefined) return -1;
+  if (leftValue === rightValue) return displayName(left).localeCompare(displayName(right));
+  return (leftValue - rightValue) * multiplier;
+}
+
+function portfolioSortValue(stock: StockStatus, sortKey: PortfolioSortKey, totalInvestment: number | undefined): number | undefined {
+  if (sortKey === "market_value") return rowMarketValue(stock);
+  if (sortKey === "holding_ratio" || sortKey === "position_ratio") return ratioPercent(rowMarketValue(stock), totalInvestment);
+  if (sortKey === "day_profit") return dayProfit(stock);
+  if (sortKey === "total_profit") return totalProfit(stock);
+  if (sortKey === "change") return stockPercent(stock);
+  return undefined;
 }
 
 function DetailItem({ label, value, color, strong = false }: { label: string; value: string; color?: string; strong?: boolean }) {

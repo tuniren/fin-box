@@ -1,0 +1,112 @@
+
+.motto-actions {
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.motto-window {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 100vw;
+  height: 100vh;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  padding: 11px 18px 11px 16px;
+  border: 1px solid rgba(148, 163, 184, 0.32);
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.9);
+  color: #f8fafc;
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.34);
+  user-select: none;
+}
+
+.motto-text {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  text-align: center;
+  font-size: 14px;
+  line-height: 1.35;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.38);
+}
+
+.motto-close {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: #cbd5e1;
+  cursor: pointer;
+  opacity: 0;
+}
+
+.motto-window:hover .motto-close {
+  opacity: 0.86;
+}
+
+.motto-close:hover {
+  background: rgba(248, 250, 252, 0.14);
+  color: #ffffff;
+}
+
+.motto-resize-handle {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  z-index: 3;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  background: linear-gradient(135deg, transparent 0 44%, rgba(203, 213, 225, 0.42) 45% 52%, transparent 53% 62%, rgba(203, 213, 225, 0.54) 63% 70%, transparent 71%);
+  cursor: nwse-resize;
+  opacity: 0.5;
+}
+
+.motto-window:hover .motto-resize-handle {
+  opacity: 0.9;
+}
+
+.status-bar {
+  background: #007acc;
+}
+
+@media (max-width: 1280px) {
+}
+
+@media (max-width: 1040px) {
+  .codex-panel {
+    display: none;
+  }
+
+  .settings-header,
+  .settings-section {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .settings-header {
+    display: grid;
+    align-items: start;
+  }
+
+  .settings-header-actions,
+  .settings-motto-actions {
+    justify-content: flex-start;
+  }
+
+  .settings-section .motto-style-grid,
+  .settings-section .motto-actions,
+  .settings-section .settings-textarea,
+  .settings-section .settings-motto-actions {
+    grid-column: 1;
+  }
+}
