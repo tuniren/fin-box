@@ -1,6 +1,4 @@
-# FinBox Electron + React 版本
-
-FinBox 盯盘软件
+# FinBox 盯盘软件
 
 ## 下载
 https://github.com/tuniren/fin-box/releases
