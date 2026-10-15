@@ -70,9 +70,6 @@ detail:
   aiHistory: AI分析历史
   aiProcess: AI分析过程
   aiRiskNotice: AI输出仅用于辅助复盘，不构成投资建议。
-  aiDisabledTitle: AI分析尚未开启
-  aiDisabledHint: AI分析是可选功能。开启前需要本机安装并配置 Codex CLI 或兼容插件。
-  openAiSettings: 前往AI分析设置
   tags: 标签
   noTags: 暂无标签
   removeTag: 删除标签
@@ -130,14 +127,11 @@ settings:
   title: 设置
   general: 通用设置
   marketRefresh: 行情刷新
-  aiAnalysis: AI分析
   mottoFloat: 座右铭浮窗
   watchlistFloat: 自选浮窗
   camouflageFloat: 伪装浮窗
   generalDescription: 配置 FinBox 的窗口、外观和常用行为。
   marketRefreshDescription: 设置开盘期间左侧自选树和自选浮窗使用的行情刷新间隔。
-  aiAnalysisDescription: 开启后可在个股详情页手动调用 Codex 生成操盘辅助分析。
-  aiAnalysisGuide: AI分析使用说明
   mottoDescription: 编辑座右铭浮窗的文本和显示样式。
   watchlistDescription: 配置自选浮窗展示哪些个股和列。
   camouflageDescription: 管理伪装成系统监控指标的伪装浮窗。
@@ -146,14 +140,6 @@ settings:
   appearanceDescription: 选择程序使用的颜色主题。
   tradingRefreshInterval: 开盘刷新间隔
   tradingRefreshIntervalHint: 单位 ms，范围 500-10000，默认 1000。
-  enableAiAnalysis: 启用AI分析
-  codexCommand: Codex命令
-  codexCommandHint: 只填写命令入口，例如 codex 或 npx codex，FinBox 会追加安全的非交互参数。
-  aiTimeout: 分析超时
-  aiTimeoutHint: 单位 ms，范围 10000-300000。
-  includeNotes: 附带个股笔记
-  includeNews: 附带最新资讯
-  includeComments: 附带讨论
   watchlistProfile: 配置方案
   profileName: 方案名称
   saveProfile: 保存当前方案
@@ -207,7 +193,6 @@ news:
   latestUpToDate: 已是最新资讯
   noMore: 没有更多资讯
 aiTab:
-  defaultSubtitle: 默认空聊天框，发送前选择本次授权上下文
   chatInput: 聊天输入
   promptPlaceholder: 询问任何问题
   defaultSymbol: 标的
@@ -216,22 +201,18 @@ aiTab:
   contextOptions: 本次可携带信息
   contextCollapsedHint: 已折叠
   contextExpandedHint: 已展开
-  stage2Notice: 阶段 2 只创建本地聊天记录和授权摘要，不调用 AI。
+  stage2Notice: 阶段 3 会在用户发送后启动受限 AI 终端；发送前不会读取真实数据。
   send: 发送
   emptyTitle: 暂无聊天会话
   emptyHint: 输入问题并发送后，会在这里生成独立会话。用户消息、分析摘要和后续工具结果都将支持单独折叠。
-  disabledTitle: AI分析未启用
-  disabledHint: 启用后可以在此创建聊天会话。本页不会自动发送任何数据。
-  openAiSettings: 打开AI设置
   userMessage: 用户消息
   authorizationSummary: 发送前授权摘要
   targetSymbol: 目标标的
   selectedContexts: 上下文选择
   noContext: 未携带上下文
   stage2Summary: 阶段 2 仅创建本地聊天会话和授权摘要，不调用 AI，不读取或发送任何实际数据。
+  stage3Summary: 阶段 3 将启动受限 AI 终端；InitialContext 只包含本次授权摘要，不主动读取真实数据。
   unspecified: 未指定
-  collapseAll: 一键折叠
-  expandAll: 一键展开
   collapseBlock: 折叠内容块
   expandBlock: 展开内容块
   copyBlock: 复制内容块

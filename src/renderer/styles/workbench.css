@@ -897,3 +897,249 @@
   min-height: 30px;
   background: #ffffff;
 }
+
+.strategy-monitor-view {
+  display: grid;
+  grid-template-columns: 220px minmax(360px, 1fr) minmax(320px, 0.9fr);
+  grid-template-rows: minmax(0, 1fr) 180px;
+  gap: 14px;
+  min-height: 0;
+  height: 100%;
+}
+
+.strategy-script-list,
+.strategy-editor,
+.strategy-signal-panel,
+.strategy-log-panel {
+  min-height: 0;
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+  border-radius: 10px;
+}
+
+.strategy-script-list,
+.strategy-signal-panel,
+.strategy-log-panel {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.strategy-editor {
+  display: grid;
+  grid-template-rows: auto auto minmax(180px, 1fr) 140px auto;
+  gap: 12px;
+  padding: 14px;
+  overflow: hidden;
+}
+
+.strategy-log-panel {
+  grid-column: 1 / -1;
+}
+
+.strategy-panel-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid #e2e8f0;
+  color: #334155;
+}
+
+.strategy-panel-title small {
+  color: #64748b;
+}
+
+.strategy-script-item {
+  display: grid;
+  gap: 3px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  border-bottom: 1px solid #f1f5f9;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.strategy-script-item:hover,
+.strategy-script-item.active {
+  background: #eff6ff;
+}
+
+.strategy-script-item span {
+  color: #0f172a;
+  font-weight: 600;
+}
+
+.strategy-script-item small {
+  color: #64748b;
+}
+
+.strategy-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.strategy-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  color: #334155;
+}
+
+.strategy-code-field,
+.strategy-param-field {
+  display: grid;
+  gap: 6px;
+  min-height: 0;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.strategy-code-field textarea,
+.strategy-param-field textarea {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  resize: none;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 10px;
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #0f172a;
+  background: #f8fafc;
+}
+
+.strategy-editor-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.tool-button.danger {
+  color: #b91c1c;
+}
+
+.strategy-signal-list,
+.strategy-log-list {
+  min-height: 0;
+  overflow: auto;
+  padding: 12px;
+}
+
+.strategy-signal-list {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+}
+
+.strategy-signal-card {
+  display: grid;
+  gap: 8px;
+  border: 1px solid #e2e8f0;
+  border-left: 4px solid #38bdf8;
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: #ffffff;
+}
+
+.strategy-signal-card.notice {
+  border-left-color: #2563eb;
+}
+
+.strategy-signal-card.warning {
+  border-left-color: #f59e0b;
+}
+
+.strategy-signal-card.critical {
+  border-left-color: #dc2626;
+}
+
+.strategy-signal-card header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.strategy-signal-card header div {
+  display: grid;
+  gap: 2px;
+}
+
+.strategy-signal-card header span,
+.strategy-signal-card small {
+  color: #64748b;
+}
+
+.strategy-signal-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.strategy-signal-meta span {
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #475569;
+  font-size: 12px;
+}
+
+.strategy-signal-card ul {
+  margin: 0;
+  padding-left: 18px;
+  color: #334155;
+}
+
+.strategy-levels {
+  font-family: Consolas, "Courier New", monospace;
+}
+
+.strategy-log-list {
+  display: grid;
+  align-content: start;
+  gap: 4px;
+}
+
+.strategy-log-row {
+  display: grid;
+  grid-template-columns: 170px minmax(160px, 1fr) 100px 120px 80px minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: #f8fafc;
+  color: #475569;
+  font-size: 12px;
+}
+
+.strategy-log-row.error {
+  background: #fef2f2;
+  color: #991b1b;
+}
+
+.empty-state.compact {
+  min-height: 80px;
+  padding: 16px;
+}
+
+@media (max-width: 1180px) {
+  .strategy-monitor-view {
+    grid-template-columns: 200px minmax(0, 1fr);
+    grid-template-rows: minmax(360px, 1fr) minmax(260px, 0.8fr) 180px;
+  }
+
+  .strategy-signal-panel {
+    grid-column: 1 / -1;
+  }
+
+  .strategy-log-panel {
+    grid-row: 3;
+  }
+}

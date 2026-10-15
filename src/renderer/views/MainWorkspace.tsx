@@ -2,6 +2,7 @@
 import { Button, Checkbox, Input, Popover, Select, Tag as AntTag, Tree } from "antd";
 import type { TreeDataNode } from "antd";
 import {
+  Activity,
   BookOpen,
   BriefcaseBusiness,
   Check,
@@ -9,7 +10,6 @@ import {
   ChevronRight,
   CircleHelp,
   Edit3,
-  ExternalLink,
   Files,
   FileText,
   Folder,
@@ -44,7 +44,7 @@ import {
   totalShares
 } from "../../shared/finance";
 import { currentTheme, profitColor } from "../../shared/theme";
-import type { AiAnalysisConfig, AppConfig, AppState, CamouflageDocument, MottoConfig, NoteTreeItem, Position, RequestLogItem, StockCommentItem, StockCommentPage, StockJournal, StockNewsItem, StockNewsPage, StockSearchResult, StockStatus, Theme, UpdateStatus, WatchFloatColumn, WatchFloatConfig } from "../../shared/types";
+import type { AiDataScope, AiTerminalSessionLog, AppConfig, AppState, CamouflageDocument, ContextBundle, MottoConfig, NoteTreeItem, Position, RequestLogItem, StockCommentItem, StockCommentPage, StockJournal, StockNewsItem, StockNewsPage, StockSearchResult, StockStatus, StrategyRunLog, StrategyScript, StrategyScriptInput, StrategyScriptParam, StrategySignal, Theme, UpdateStatus, WatchFloatColumn, WatchFloatConfig } from "../../shared/types";
 import { KLineView } from "../components/KLineView";
 import { MarketStatusBar } from "../components/MarketStatusBar";
 import { MinutePanel } from "../components/MinutePanel";
@@ -61,7 +61,6 @@ const DEFAULT_TRADING_REFRESH_INTERVAL_MS = 1000;
 const MIN_TRADING_REFRESH_INTERVAL_MS = 500;
 const MAX_TRADING_REFRESH_INTERVAL_MS = 10000;
 const STOCK_NOTES_SPLIT_STORAGE_KEY = "fin-box.stockNotesSplit";
-const AI_ANALYSIS_GUIDE_URL = "https://github.com/tuniren/fin-box/blob/main/docs/ai-analysis.md";
 const watchFloatColumnOptions: Array<{ value: WatchFloatColumn; label: string }> = [
   { value: "name", label: "名称" },
   { value: "price", label: "股价" },
@@ -178,13 +177,13 @@ const mergeNewsItems = (current: StockNewsItem[], incoming: StockNewsItem[], dir
   const merged = direction === "prepend" ? [...freshItems, ...current] : [...current, ...freshItems];
   return trimNewsItems(merged, direction);
 };
-type ActivityView = "watchlist" | "portfolio" | "news" | "requests" | "notes" | "help" | "settings";
-type ActiveView = "camouflage" | "details" | "chart" | "note" | "news" | "requests" | "help" | "settings" | "request-log" | "ai-analysis" | "portfolio";
+type ActivityView = "watchlist" | "portfolio" | "strategy" | "news" | "requests" | "notes" | "help" | "settings";
+type ActiveView = "camouflage" | "details" | "chart" | "note" | "news" | "requests" | "help" | "settings" | "request-log" | "ai-analysis" | "portfolio" | "strategy";
 type StockView = "details" | "chart";
 type DetailTab = { code: string };
 type DetailTabContextMenu = { code: string; x: number; y: number };
 type TitleMenu = "file" | "view" | "window" | "language" | "help";
-type SettingsView = "general" | "market-refresh" | "ai-analysis" | "motto" | "watch-float" | "camouflage-float";
+type SettingsView = "general" | "market-refresh" | "motto" | "watch-float" | "camouflage-float";
 type MarketNewsLatestState = "idle" | "updated" | "current";
 type WatchPromptKind = "create-group" | "rename-group" | "edit-alias";
 type WatchPromptState = {
@@ -197,7 +196,7 @@ type WatchPromptState = {
 };
 type AiContextKey = "quote" | "position_summary" | "position_detail" | "profit" | "notes" | "trading_logic" | "daily_kline" | "minute" | "news" | "comments";
 type AiContextSelection = Record<AiContextKey, boolean>;
-type AiChatBlockKind = "user" | "assistant" | "analysis" | "tool";
+type AiChatBlockKind = "user" | "assistant" | "analysis" | "tool" | "terminal";
 type AiChatBlock = {
   id: string;
   kind: AiChatBlockKind;
@@ -225,7 +224,7 @@ const aiChatStyles = {
     display: "grid",
     gap: 14,
     width: 640,
-    maxWidth: "calc(100vw - 120px)"
+    maxWidth: "calc(100vw - 32px)"
   },
   chatPane: {
     display: "grid",
@@ -238,7 +237,7 @@ const aiChatStyles = {
   },
   shell: {
     display: "grid",
-    gridTemplateRows: "auto minmax(0, 1fr)",
+    gridTemplateRows: "minmax(0, 1fr)",
     minHeight: 0,
     margin: 0,
     border: 0,
@@ -251,14 +250,15 @@ const aiChatStyles = {
   },
   thread: {
     display: "grid",
-    gap: 20,
-    width: "min(100%, 920px)",
-    margin: "0 auto",
-    padding: "24px 28px 280px"
+    gap: 12,
+    width: "100%",
+    minWidth: 0,
+    margin: 0,
+    padding: "12px 14px 220px"
   },
   session: {
     display: "grid",
-    gap: 12,
+    gap: 8,
     minWidth: 0
   },
   sessionHeader: {
@@ -287,16 +287,16 @@ const aiChatStyles = {
     bottom: 0,
     left: 0,
     zIndex: 4,
-    padding: "12px 24px 18px",
+    padding: "8px 12px 10px",
     background: "linear-gradient(to bottom, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0.96) 20%, #ffffff 100%)",
     pointerEvents: "none"
   },
   composer: {
     display: "grid",
-    gap: 10,
-    width: "min(100%, 920px)",
-    margin: "0 auto",
-    padding: "10px 12px",
+    gap: 8,
+    width: "100%",
+    margin: 0,
+    padding: "8px 10px",
     border: "1px solid #dedede",
     borderRadius: 24,
     background: "#ffffff",
@@ -343,10 +343,9 @@ const defaultMotto: MottoConfig = {
   font_size: 14,
   color: "#f8fafc"
 };
-const settingsNavItems: Array<{ value: SettingsView; labelKey: `settings.${"general" | "marketRefresh" | "aiAnalysis" | "mottoFloat" | "watchlistFloat" | "camouflageFloat"}` }> = [
+const settingsNavItems: Array<{ value: SettingsView; labelKey: `settings.${"general" | "marketRefresh" | "mottoFloat" | "watchlistFloat" | "camouflageFloat"}` }> = [
   { value: "general", labelKey: "settings.general" },
   { value: "market-refresh", labelKey: "settings.marketRefresh" },
-  { value: "ai-analysis", labelKey: "settings.aiAnalysis" },
   { value: "motto", labelKey: "settings.mottoFloat" },
   { value: "watch-float", labelKey: "settings.watchlistFloat" },
   { value: "camouflage-float", labelKey: "settings.camouflageFloat" }
@@ -354,6 +353,7 @@ const settingsNavItems: Array<{ value: SettingsView; labelKey: `settings.${"gene
 
 function activityViewTitle(view: ActivityView) {
   if (view === "portfolio") return "Portfolio";
+  if (view === "strategy") return "策略监控";
   if (view === "news") return "7X24";
   if (view === "requests") return "请求日志";
   if (view === "settings") return "设置";
@@ -722,6 +722,24 @@ export function MainWorkspace() {
     };
   }, []);
 
+  useEffect(() => api.onAiTerminalSession((log) => {
+    setAiSessions((sessions) => sessions.map((session) => (
+      session.id === log.id
+        ? {
+            ...session,
+            updatedAt: log.updatedAt,
+            blocks: session.blocks.map((block) => block.id === `${log.id}-terminal`
+              ? {
+                  ...block,
+                  title: `AI 终端 · ${terminalStatusLabel(log.status)}`,
+                  content: formatAiTerminalLog(log)
+                }
+              : block)
+          }
+        : session
+    )));
+  }), []);
+
   useEffect(() => {
     if (!selectedRequestLogId) return;
     if (requestLogs.some((item) => item.id === selectedRequestLogId)) return;
@@ -1077,29 +1095,8 @@ export function MainWorkspace() {
     void api.updateWatchTreeColumns(columns);
   };
 
-  const updateAiAnalysisConfig = (patch: Partial<AiAnalysisConfig>) => {
-    if (!state) return;
-    void api.updateAiAnalysisConfig({
-      ...state.config.ai_analysis,
-      enabled: patch.enabled ?? state.config.ai_analysis.enabled,
-      codex_command: patch.codex_command ?? state.config.ai_analysis.codex_command,
-      timeout_ms: patch.timeout_ms ?? state.config.ai_analysis.timeout_ms,
-      include_notes: patch.include_notes ?? state.config.ai_analysis.include_notes,
-      include_news: patch.include_news ?? state.config.ai_analysis.include_news,
-      include_comments: patch.include_comments ?? state.config.ai_analysis.include_comments
-    });
-  };
-
   const updateTradingRefreshInterval = (intervalMs: number) => {
     void api.updateTradingRefreshInterval(intervalMs);
-  };
-
-  const openAiAnalysisSettings = () => {
-    setActivityView("settings");
-    setSettingsView("ai-analysis");
-    setExplorerVisible(true);
-    setEditorVisible(true);
-    setActiveView("settings");
   };
 
   const toggleMaximizeFromTitleBar = (event: ReactMouseEvent<HTMLElement>) => {
@@ -1452,8 +1449,15 @@ export function MainWorkspace() {
           content: [
             `${t("aiTab.targetSymbol")}: ${selectedStocks.length ? selectedStocks.map((stock) => `${displayName(stock)} ${stock.config.code}`).join(", ") : t("aiTab.noSymbol")}`,
             `${t("aiTab.selectedContexts")}: ${contextText}`,
-            t("aiTab.stage2Summary")
+            t("aiTab.stage3Summary")
           ].join("\n"),
+          collapsed: false
+        },
+        {
+          id: `${sessionId}-terminal`,
+          kind: "terminal",
+          title: "AI 终端 · 启动中",
+          content: "正在启动受限 AI 终端会话...",
           collapsed: false
         }
       ]
@@ -1462,6 +1466,48 @@ export function MainWorkspace() {
     setAiPromptDraft("");
     setAiAnalysisOpen(true);
     setActiveView("ai-analysis");
+    const contextBundle: ContextBundle = {
+      id: `${sessionId}-context`,
+      sessionId,
+      code: selectedStocks[0]?.config.code ?? "",
+      createdAt: now,
+      includedScopes: selectedContexts.map((option) => aiContextDataScope(option.value)),
+      data: {}
+    };
+    void api.startAiTerminalSession({
+      sessionId,
+      prompt,
+      code: selectedStocks[0]?.config.code,
+      contextBundle
+    }).catch((error) => {
+      const message = error instanceof Error ? error.message : String(error);
+      setAiSessions((items) => items.map((item) => item.id === sessionId
+        ? {
+            ...item,
+            blocks: item.blocks.map((block) => block.id === `${sessionId}-terminal`
+              ? { ...block, title: "AI 终端 · 启动失败", content: message }
+              : block)
+          }
+        : item));
+    });
+  };
+
+  const sendAiTerminalInput = (sessionId: string, value: string) => {
+    void api.sendAiTerminalInput(sessionId, value).catch((error) => {
+      const message = error instanceof Error ? error.message : String(error);
+      setAiSessions((items) => items.map((item) => item.id === sessionId
+        ? {
+            ...item,
+            blocks: item.blocks.map((block) => block.id === `${sessionId}-terminal`
+              ? { ...block, content: `${block.content}\n\n发送失败: ${message}` }
+              : block)
+          }
+        : item));
+    });
+  };
+
+  const stopAiTerminalInput = (sessionId: string) => {
+    void api.stopAiTerminalSession(sessionId);
   };
 
   const toggleAiChatBlock = (sessionId: string, blockId: string) => {
@@ -1471,14 +1517,6 @@ export function MainWorkspace() {
             ...session,
             blocks: session.blocks.map((block) => block.id === blockId ? { ...block, collapsed: !block.collapsed } : block)
           }
-        : session
-    )));
-  };
-
-  const setAiSessionBlocksCollapsed = (sessionId: string, collapsed: boolean) => {
-    setAiSessions((sessions) => sessions.map((session) => (
-      session.id === sessionId
-        ? { ...session, blocks: session.blocks.map((block) => ({ ...block, collapsed })) }
         : session
     )));
   };
@@ -1534,7 +1572,7 @@ export function MainWorkspace() {
     }
 
     setExplorerVisible(true);
-    if (activeView === "news" || activeView === "requests" || activeView === "note" || activeView === "help" || activeView === "settings" || activeView === "request-log" || activeView === "portfolio" || activeView === "ai-analysis") {
+    if (activeView === "news" || activeView === "requests" || activeView === "note" || activeView === "help" || activeView === "settings" || activeView === "request-log" || activeView === "portfolio" || activeView === "strategy" || activeView === "ai-analysis") {
       setActiveView(detailsOpen ? "details" : chartOpen ? "chart" : "camouflage");
     }
   };
@@ -1629,7 +1667,6 @@ export function MainWorkspace() {
         themeError={themeError}
         onWindowCloseBehaviorChange={updateWindowCloseBehavior}
         onWatchFloatConfigChange={updateWatchFloatConfig}
-        onAiAnalysisConfigChange={updateAiAnalysisConfig}
         onTradingRefreshIntervalChange={updateTradingRefreshInterval}
         onThemeSelect={(themeName) => void selectTheme(themeName)}
         onOpenConfigFile={() => void api.openConfigFile()}
@@ -1648,6 +1685,8 @@ export function MainWorkspace() {
     ? "transformer.cpp"
     : activeView === "portfolio"
     ? t("portfolio.title")
+    : activeView === "strategy"
+      ? "策略监控"
     : activeView === "news"
       ? "7X24"
       : activeView === "requests"
@@ -1761,6 +1800,7 @@ export function MainWorkspace() {
           <div className="activity-top">
             <button className={`activity-item ${activityView === "watchlist" ? "active" : ""}`} onClick={() => toggleActivityPane("watchlist")} aria-label="Explorer"><Files size={24} /></button>
             <button className={`activity-item ${activityView === "portfolio" ? "active" : ""}`} onClick={() => toggleActivityPane("portfolio")} aria-label={t("portfolio.title")} title={t("portfolio.title")}><BriefcaseBusiness size={23} /></button>
+            <button className={`activity-item ${activityView === "strategy" ? "active" : ""}`} onClick={() => toggleActivityPane("strategy")} aria-label="策略监控" title="策略监控"><Activity size={23} /></button>
             <button className={`activity-item ${activityView === "news" ? "active" : ""}`} onClick={() => toggleActivityPane("news")} aria-label="7x24"><Newspaper size={23} /></button>
             <button className={`activity-item ${activityView === "requests" ? "active" : ""}`} onClick={() => toggleActivityPane("requests")} aria-label="请求日志" title="请求日志">
               <Network size={23} />
@@ -1897,6 +1937,12 @@ export function MainWorkspace() {
                 {t("portfolio.title")}
               </button>
             )}
+            {activeView === "strategy" && (
+              <button className="editor-tab active">
+                <Activity size={14} />
+                策略监控
+              </button>
+            )}
             {activeView === "news" && (
               <button className="editor-tab active">
                 <Newspaper size={14} />
@@ -1957,6 +2003,8 @@ export function MainWorkspace() {
                 theme={theme}
                 onOpenDetails={(stock) => openDetailTab(stock.config.code)}
               />
+            ) : activeView === "strategy" ? (
+              <StrategyMonitorView stocks={visibleStocks} />
             ) : activeView === "news" ? (
               renderMarketNewsPage()
             ) : activeView === "requests" ? (
@@ -1969,7 +2017,6 @@ export function MainWorkspace() {
               <RequestLogDetail item={selectedRequestLog} />
             ) : activeView === "ai-analysis" ? (
               <AiAnalysisTab
-                enabled={state.config.ai_analysis.enabled}
                 stocks={visibleStocks}
                 contextCodes={aiContextCodes}
                 promptDraft={aiPromptDraft}
@@ -1979,10 +2026,9 @@ export function MainWorkspace() {
                 onPromptChange={setAiPromptDraft}
                 onContextSelectionChange={updateAiContextSelection}
                 onSubmit={submitAiChatPrompt}
-                onOpenSettings={openAiAnalysisSettings}
                 onToggleBlock={toggleAiChatBlock}
-                onCollapseAll={(sessionId) => setAiSessionBlocksCollapsed(sessionId, true)}
-                onExpandAll={(sessionId) => setAiSessionBlocksCollapsed(sessionId, false)}
+                onTerminalInput={sendAiTerminalInput}
+                onStopTerminal={stopAiTerminalInput}
               />
             ) : activeDetailStock && activeView === "details" ? (
               <StockDetail state={state} stock={activeDetailStock} theme={theme} onOpenChart={() => openStockView("chart")} onOpenAiAnalysis={() => openAiAnalysisTab(activeDetailStock.config.code)} />
@@ -2704,14 +2750,12 @@ function NoteTreeRow({
 }
 
 function AiContextPopoverContent({
-  enabled,
   stocks,
   contextCodes,
   contextSelection,
   onContextCodesChange,
   onContextSelectionChange
 }: {
-  enabled: boolean;
   stocks: StockStatus[];
   contextCodes: string[];
   contextSelection: AiContextSelection;
@@ -2734,7 +2778,6 @@ function AiContextPopoverContent({
           mode="multiple"
           allowClear
           value={contextCodes}
-          disabled={!enabled}
           placeholder={t("aiTab.noSymbol")}
           onChange={onContextCodesChange}
           options={stocks.map((stock) => ({ value: stock.config.code, label: `${displayName(stock)} ${stock.config.code}` }))}
@@ -2747,7 +2790,6 @@ function AiContextPopoverContent({
           {aiContextOptions.map((option) => (
             <Checkbox
               checked={contextSelection[option.value]}
-              disabled={!enabled}
               onChange={(event) => onContextSelectionChange(option.value, event.target.checked)}
               key={option.value}
             >
@@ -2763,7 +2805,6 @@ function AiContextPopoverContent({
 }
 
 function AiAnalysisTab({
-  enabled,
   stocks,
   contextCodes,
   promptDraft,
@@ -2773,12 +2814,10 @@ function AiAnalysisTab({
   onPromptChange,
   onContextSelectionChange,
   onSubmit,
-  onOpenSettings,
   onToggleBlock,
-  onCollapseAll,
-  onExpandAll
+  onTerminalInput,
+  onStopTerminal
 }: {
-  enabled: boolean;
   stocks: StockStatus[];
   contextCodes: string[];
   promptDraft: string;
@@ -2788,43 +2827,28 @@ function AiAnalysisTab({
   onPromptChange: (value: string) => void;
   onContextSelectionChange: (key: AiContextKey, checked: boolean) => void;
   onSubmit: (event: FormEvent) => void;
-  onOpenSettings: () => void;
   onToggleBlock: (sessionId: string, blockId: string) => void;
-  onCollapseAll: (sessionId: string) => void;
-  onExpandAll: (sessionId: string) => void;
+  onTerminalInput: (sessionId: string, value: string) => void;
+  onStopTerminal: (sessionId: string) => void;
 }) {
   const { locale, t } = useI18n();
   const [contextOpen, setContextOpen] = useState(false);
-  const sendButtonStyle = (!enabled || !promptDraft.trim())
+  const sendButtonStyle = !promptDraft.trim()
     ? { ...aiChatStyles.sendButton, ...aiChatStyles.disabledSendButton }
     : aiChatStyles.sendButton;
   const submitOnEnter = (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) return;
     event.preventDefault();
-    if (enabled && promptDraft.trim()) event.currentTarget.form?.requestSubmit();
+    if (promptDraft.trim()) event.currentTarget.form?.requestSubmit();
   };
 
   return (
-    <div className="stock-detail-view" style={{ display: "grid", minHeight: 0, overflow: "hidden" }}>
-      <section className="detail-curtain-section" style={aiChatStyles.shell}>
-        <div className="stock-notes-header">
-          <div>
-            <strong>{t("detail.aiAnalysis")}</strong>
-            <span>{t("aiTab.defaultSubtitle")}</span>
-          </div>
-          <Button size="small" icon={<Settings size={13} />} onClick={onOpenSettings}>{t("settings.title")}</Button>
-        </div>
-        <div className="detail-curtain-body" style={aiChatStyles.page}>
+    <div style={{ display: "grid", height: "100%", minHeight: 0, overflow: "hidden", background: "#ffffff" }}>
+      <div style={aiChatStyles.shell}>
+        <div style={aiChatStyles.page}>
           <div style={aiChatStyles.chatPane}>
-            <div className="detail-curtain-body" style={aiChatStyles.scroll}>
+            <div style={aiChatStyles.scroll}>
               <div style={aiChatStyles.thread}>
-                {!enabled && (
-                  <div className="stock-ai-disabled">
-                    <strong>{t("aiTab.disabledTitle")}</strong>
-                    <span>{t("aiTab.disabledHint")}</span>
-                    <Button onClick={onOpenSettings}>{t("aiTab.openAiSettings")}</Button>
-                  </div>
-                )}
                 {sessions.length === 0 ? (
                   <div className="stock-notes-empty">
                     <strong>{t("aiTab.emptyTitle")}</strong>
@@ -2837,14 +2861,16 @@ function AiAnalysisTab({
                         <strong>{session.title}</strong>
                         <span>{session.code ?? t("aiTab.unspecified")} / {new Date(session.updatedAt).toLocaleString(locale, { hour12: false })}</span>
                       </div>
-                      <div style={aiChatStyles.sessionActions}>
-                        <Button size="small" onClick={() => onCollapseAll(session.id)}>{t("aiTab.collapseAll")}</Button>
-                        <Button size="small" onClick={() => onExpandAll(session.id)}>{t("aiTab.expandAll")}</Button>
-                      </div>
                     </header>
-                    <div style={{ display: "grid", gap: 16 }}>
+                    <div style={{ display: "grid", gap: 10, minWidth: 0 }}>
                       {session.blocks.map((block) => (
-                        <AiChatBlockView block={block} onToggle={() => onToggleBlock(session.id, block.id)} key={block.id} />
+                        <AiChatBlockView
+                          block={block}
+                          onToggle={() => onToggleBlock(session.id, block.id)}
+                          onTerminalInput={(value) => onTerminalInput(session.id, value)}
+                          onStopTerminal={() => onStopTerminal(session.id)}
+                          key={block.id}
+                        />
                       ))}
                     </div>
                   </article>
@@ -2861,7 +2887,6 @@ function AiAnalysisTab({
                     onOpenChange={setContextOpen}
                     content={(
                       <AiContextPopoverContent
-                        enabled={enabled}
                         stocks={stocks}
                         contextCodes={contextCodes}
                         contextSelection={contextSelection}
@@ -2872,7 +2897,6 @@ function AiAnalysisTab({
                   >
                     <Button
                       shape="circle"
-                      disabled={!enabled}
                       aria-label={t("aiTab.contextOptions")}
                       title={t("aiTab.contextOptions")}
                       icon={<FileText size={17} />}
@@ -2880,7 +2904,6 @@ function AiAnalysisTab({
                   </Popover>
                   <Input.TextArea
                     value={promptDraft}
-                    disabled={!enabled}
                     onChange={(event) => onPromptChange(event.target.value)}
                     onKeyDown={submitOnEnter}
                     aria-label={t("aiTab.chatInput")}
@@ -2893,7 +2916,7 @@ function AiAnalysisTab({
                     type="primary"
                     shape="circle"
                     htmlType="submit"
-                    disabled={!enabled || !promptDraft.trim()}
+                    disabled={!promptDraft.trim()}
                     aria-label={t("aiTab.send")}
                     title={t("aiTab.send")}
                     icon={<MessageSquare size={17} />}
@@ -2904,25 +2927,43 @@ function AiAnalysisTab({
             </form>
           </div>
         </div>
-      </section>
+      </div>
     </div>
   );
 }
 
-function AiChatBlockView({ block, onToggle }: { block: AiChatBlock; onToggle: () => void }) {
+function AiChatBlockView({
+  block,
+  onToggle,
+  onTerminalInput,
+  onStopTerminal
+}: {
+  block: AiChatBlock;
+  onToggle: () => void;
+  onTerminalInput: (value: string) => void;
+  onStopTerminal: () => void;
+}) {
   const { t } = useI18n();
+  const [terminalDraft, setTerminalDraft] = useState("");
   const isUser = block.kind === "user";
   const copyContent = (event: ReactMouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
     void navigator.clipboard?.writeText(block.content);
   };
+  const submitTerminalInput = (event: FormEvent) => {
+    event.preventDefault();
+    const value = terminalDraft.trim();
+    if (!value) return;
+    onTerminalInput(value);
+    setTerminalDraft("");
+  };
   if (isUser) {
     return (
-      <section style={{ display: "grid", justifyItems: "end", gap: 6 }}>
+      <section style={{ display: "grid", justifyItems: "end", gap: 4, minWidth: 0 }}>
         <button
           type="button"
           onClick={onToggle}
-          style={{ maxWidth: "76%", border: 0, borderRadius: 18, padding: "10px 16px", background: "#f3f4f6", color: "#111827", lineHeight: 1.55, textAlign: "left", whiteSpace: "pre-wrap", wordBreak: "break-word", cursor: "pointer" }}
+          style={{ maxWidth: "88%", border: 0, borderRadius: 14, padding: "8px 12px", background: "#f3f4f6", color: "#111827", lineHeight: 1.5, textAlign: "left", whiteSpace: "pre-wrap", wordBreak: "break-word", cursor: "pointer" }}
           aria-label={block.collapsed ? t("aiTab.expandBlock") : t("aiTab.collapseBlock")}
           title={block.collapsed ? t("aiTab.expandBlock") : t("aiTab.collapseBlock")}
         >
@@ -2932,8 +2973,8 @@ function AiChatBlockView({ block, onToggle }: { block: AiChatBlock; onToggle: ()
     );
   }
   return (
-    <section style={{ display: "grid", justifyItems: "start", gap: 8, minWidth: 0 }}>
-      <div style={{ display: "grid", gap: 8, width: "min(100%, 760px)", minWidth: 0 }}>
+    <section style={{ display: "grid", justifyItems: "stretch", gap: 6, minWidth: 0 }}>
+      <div style={{ display: "grid", gap: 6, width: "100%", minWidth: 0 }}>
         <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, minWidth: 0 }}>
           <button
             type="button"
@@ -2957,7 +2998,22 @@ function AiChatBlockView({ block, onToggle }: { block: AiChatBlock; onToggle: ()
           </button>
         </header>
         {!block.collapsed && (
-          <pre style={{ minWidth: 0, margin: 0, overflow: "auto", padding: "14px 16px", borderRadius: 18, background: "#f4f4f4", color: "#111827", fontFamily: block.kind === "tool" ? "Consolas, monospace" : "\"Microsoft YaHei\", Arial, sans-serif", fontSize: 13, lineHeight: 1.7, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{block.content}</pre>
+          block.kind === "terminal" ? (
+            <div style={{ display: "grid", gap: 8, minWidth: 0 }}>
+              <pre style={{ minWidth: 0, maxHeight: 420, margin: 0, overflow: "auto", padding: "10px 12px", borderRadius: 8, background: "#111827", color: "#f9fafb", fontFamily: "Consolas, monospace", fontSize: 12, lineHeight: 1.55, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{block.content}</pre>
+              <form onSubmit={submitTerminalInput} style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto auto", gap: 8 }}>
+                <Input
+                  value={terminalDraft}
+                  onChange={(event) => setTerminalDraft(event.target.value)}
+                  placeholder="输入后发送到 AI 终端"
+                />
+                <Button htmlType="submit" disabled={!terminalDraft.trim()} icon={<MessageSquare size={14} />}>发送</Button>
+                <Button danger onClick={onStopTerminal} icon={<Square size={14} />}>停止</Button>
+              </form>
+            </div>
+          ) : (
+            <pre style={{ minWidth: 0, margin: 0, overflow: "auto", padding: "10px 12px", borderRadius: 8, background: "#f4f4f4", color: "#111827", fontFamily: block.kind === "tool" ? "Consolas, monospace" : "\"Microsoft YaHei\", Arial, sans-serif", fontSize: 13, lineHeight: 1.55, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{block.content}</pre>
+          )
         )}
       </div>
     </section>
@@ -2967,8 +3023,38 @@ function AiChatBlockView({ block, onToggle }: { block: AiChatBlock; onToggle: ()
 function aiChatBlockKindLabelKey(kind: AiChatBlockKind): TranslationKey {
   if (kind === "user") return "aiBlock.message";
   if (kind === "assistant") return "aiBlock.answer";
-  if (kind === "tool") return "aiBlock.toolResult";
+  if (kind === "tool" || kind === "terminal") return "aiBlock.toolResult";
   return "aiBlock.analysis";
+}
+
+function aiContextDataScope(key: AiContextKey): AiDataScope {
+  if (key === "position_summary") return "user_private_summary";
+  if (key === "position_detail" || key === "profit" || key === "notes") return "user_private_detail";
+  if (key === "trading_logic") return "user_strategy_data";
+  if (key === "news" || key === "comments") return "external_noise_data";
+  return "public_market_data";
+}
+
+function formatAiTerminalLog(log: AiTerminalSessionLog): string {
+  return [
+    `status: ${log.status}`,
+    log.code ? `symbol: ${log.code}` : "",
+    log.exitCode !== undefined ? `exit_code: ${log.exitCode}` : "",
+    log.error ? `error: ${log.error}` : "",
+    "",
+    log.output
+  ].filter(Boolean).join("\n");
+}
+
+function terminalStatusLabel(status: AiTerminalSessionLog["status"]) {
+  const labels: Record<AiTerminalSessionLog["status"], string> = {
+    starting: "启动中",
+    running: "运行中",
+    stopped: "已停止",
+    exited: "已完成",
+    error: "错误"
+  };
+  return labels[status];
 }
 
 function StockDetail({
@@ -3388,15 +3474,14 @@ function SettingsOutline({ active, onSelect }: { active: SettingsView; onSelect:
   );
 }
 
-function settingsViewLabel(view: SettingsView, t: (key: `settings.${"title" | "general" | "marketRefresh" | "aiAnalysis" | "mottoFloat" | "watchlistFloat" | "camouflageFloat"}`) => string): string {
+function settingsViewLabel(view: SettingsView, t: (key: `settings.${"title" | "general" | "marketRefresh" | "mottoFloat" | "watchlistFloat" | "camouflageFloat"}`) => string): string {
   const key = settingsNavItems.find((item) => item.value === view)?.labelKey;
   return key ? t(key) : t("settings.title");
 }
 
-function settingsViewDescription(view: SettingsView, t: (key: `settings.${"generalDescription" | "marketRefreshDescription" | "aiAnalysisDescription" | "mottoDescription" | "watchlistDescription" | "camouflageDescription"}`) => string): string {
+function settingsViewDescription(view: SettingsView, t: (key: `settings.${"generalDescription" | "marketRefreshDescription" | "mottoDescription" | "watchlistDescription" | "camouflageDescription"}`) => string): string {
   if (view === "general") return t("settings.generalDescription");
   if (view === "market-refresh") return t("settings.marketRefreshDescription");
-  if (view === "ai-analysis") return t("settings.aiAnalysisDescription");
   if (view === "motto") return t("settings.mottoDescription");
   if (view === "watch-float") return t("settings.watchlistDescription");
   return t("settings.camouflageDescription");
@@ -3535,7 +3620,6 @@ function SettingsPage({
   themeError,
   onWindowCloseBehaviorChange,
   onWatchFloatConfigChange,
-  onAiAnalysisConfigChange,
   onTradingRefreshIntervalChange,
   onThemeSelect,
   onOpenConfigFile,
@@ -3557,7 +3641,6 @@ function SettingsPage({
   themeError: string;
   onWindowCloseBehaviorChange: (behavior: AppConfig["window_close_behavior"]) => void;
   onWatchFloatConfigChange: (patch: Partial<WatchFloatConfig>) => void;
-  onAiAnalysisConfigChange: (patch: Partial<AiAnalysisConfig>) => void;
   onTradingRefreshIntervalChange: (intervalMs: number) => void;
   onThemeSelect: (themeName: string) => void;
   onOpenConfigFile: () => void;
@@ -3575,8 +3658,6 @@ function SettingsPage({
   const [draggedWatchFloatColumn, setDraggedWatchFloatColumn] = useState<WatchFloatColumn>();
   const [watchFloatProfileName, setWatchFloatProfileName] = useState("");
   const [refreshIntervalDraft, setRefreshIntervalDraft] = useState(() => String(state.config.trading_refresh_interval_ms ?? DEFAULT_TRADING_REFRESH_INTERVAL_MS));
-  const [aiCommandDraft, setAiCommandDraft] = useState(() => state.config.ai_analysis.codex_command);
-  const [aiTimeoutDraft, setAiTimeoutDraft] = useState(() => String(state.config.ai_analysis.timeout_ms));
   const entries = Object.keys(state.config.themes).sort((left, right) => left.localeCompare(right));
   const watchFloatColumns = new Set(state.config.watch_float.columns);
   const orderedColumnOptions = useMemo(() => orderedWatchFloatColumns(state.config.watch_float.columns), [state.config.watch_float.columns]);
@@ -3673,29 +3754,9 @@ function SettingsPage({
     setRefreshIntervalDraft(String(next));
     if (next !== state.config.trading_refresh_interval_ms) onTradingRefreshIntervalChange(next);
   };
-  const commitAiCommand = () => {
-    const next = aiCommandDraft.trim() || "codex";
-    setAiCommandDraft(next);
-    if (next !== state.config.ai_analysis.codex_command) onAiAnalysisConfigChange({ codex_command: next });
-  };
-  const commitAiTimeout = () => {
-    const parsed = Number(aiTimeoutDraft);
-    const next = Number.isFinite(parsed) ? clamp(Math.round(parsed), 10000, 300000) : 60000;
-    setAiTimeoutDraft(String(next));
-    if (next !== state.config.ai_analysis.timeout_ms) onAiAnalysisConfigChange({ timeout_ms: next });
-  };
-
   useEffect(() => {
     setRefreshIntervalDraft(String(state.config.trading_refresh_interval_ms ?? DEFAULT_TRADING_REFRESH_INTERVAL_MS));
   }, [state.config.trading_refresh_interval_ms]);
-
-  useEffect(() => {
-    setAiCommandDraft(state.config.ai_analysis.codex_command);
-  }, [state.config.ai_analysis.codex_command]);
-
-  useEffect(() => {
-    setAiTimeoutDraft(String(state.config.ai_analysis.timeout_ms));
-  }, [state.config.ai_analysis.timeout_ms]);
 
   useEffect(() => {
     if (watchFloatSearch.trim()) setWatchFloatExpandedKeys(watchFloatTree.expandedKeys);
@@ -3764,88 +3825,6 @@ function SettingsPage({
             />
             <small>{t("settings.tradingRefreshIntervalHint")}</small>
           </label>
-        </section>
-      </div>
-    );
-  }
-
-  if (view === "ai-analysis") {
-    return (
-      <div className="settings-page">
-        <SettingsPageHeader view={view} />
-        <section className="settings-section">
-          <div className="settings-section-title">
-            <h3>{t("settings.aiAnalysis")}</h3>
-            <p>{t("settings.aiAnalysisDescription")}</p>
-          </div>
-          <div className="settings-motto-actions">
-            <button className="tool-button" type="button" onClick={() => void api.openExternalUrl(AI_ANALYSIS_GUIDE_URL)}>
-              <ExternalLink size={14} />
-              {t("settings.aiAnalysisGuide")}
-            </button>
-          </div>
-          <label className="watch-float-style-toggle">
-            <span>{t("settings.enableAiAnalysis")}</span>
-            <input
-              type="checkbox"
-              checked={state.config.ai_analysis.enabled}
-              onChange={(event) => onAiAnalysisConfigChange({ enabled: event.target.checked })}
-            />
-          </label>
-          <label className="settings-field">
-            <span>{t("settings.codexCommand")}</span>
-            <input
-              value={aiCommandDraft}
-              onChange={(event) => setAiCommandDraft(event.target.value)}
-              onBlur={commitAiCommand}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") event.currentTarget.blur();
-              }}
-            />
-            <small>{t("settings.codexCommandHint")}</small>
-          </label>
-          <label className="settings-field">
-            <span>{t("settings.aiTimeout")}</span>
-            <input
-              type="number"
-              min={10000}
-              max={300000}
-              step={5000}
-              value={aiTimeoutDraft}
-              onChange={(event) => setAiTimeoutDraft(event.target.value)}
-              onBlur={commitAiTimeout}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") event.currentTarget.blur();
-              }}
-            />
-            <small>{t("settings.aiTimeoutHint")}</small>
-          </label>
-          <div className="watch-float-style-grid">
-            <label className="watch-float-style-toggle">
-              <span>{t("settings.includeNotes")}</span>
-              <input
-                type="checkbox"
-                checked={state.config.ai_analysis.include_notes}
-                onChange={(event) => onAiAnalysisConfigChange({ include_notes: event.target.checked })}
-              />
-            </label>
-            <label className="watch-float-style-toggle">
-              <span>{t("settings.includeNews")}</span>
-              <input
-                type="checkbox"
-                checked={state.config.ai_analysis.include_news}
-                onChange={(event) => onAiAnalysisConfigChange({ include_news: event.target.checked })}
-              />
-            </label>
-            <label className="watch-float-style-toggle">
-              <span>{t("settings.includeComments")}</span>
-              <input
-                type="checkbox"
-                checked={state.config.ai_analysis.include_comments}
-                onChange={(event) => onAiAnalysisConfigChange({ include_comments: event.target.checked })}
-              />
-            </label>
-          </div>
         </section>
       </div>
     );
@@ -4184,6 +4163,402 @@ function SettingsPage({
       </section>
     </div>
   );
+}
+
+function StrategyMonitorView({ stocks }: { stocks: StockStatus[] }) {
+  const [scripts, setScripts] = useState<StrategyScript[]>([]);
+  const [signals, setSignals] = useState<StrategySignal[]>([]);
+  const [logs, setLogs] = useState<StrategyRunLog[]>([]);
+  const [selectedScriptId, setSelectedScriptId] = useState("");
+  const [draft, setDraft] = useState<StrategyScriptInput>(() => emptyStrategyScriptDraft(stocks[0]?.config.code));
+  const [paramsText, setParamsText] = useState("[]");
+  const [loading, setLoading] = useState(true);
+  const [running, setRunning] = useState(false);
+  const [error, setError] = useState("");
+  const selectedScript = scripts.find((script) => script.id === selectedScriptId);
+
+  const reload = async () => {
+    const [nextScripts, nextSignals, nextLogs] = await Promise.all([
+      api.listStrategyScripts(),
+      api.listStrategySignals(),
+      api.listStrategyRunLogs()
+    ]);
+    setScripts(nextScripts);
+    setSignals(nextSignals);
+    setLogs(nextLogs);
+    setSelectedScriptId((id) => id || nextScripts[0]?.id || "");
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError("");
+    void reload()
+      .catch((reason) => {
+        if (!cancelled) setError(reason instanceof Error ? reason.message : "策略数据加载失败。");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    const unsubscribe = api.onStrategySignalsChanged((nextSignals) => {
+      setSignals(nextSignals);
+      void api.listStrategyRunLogs().then(setLogs).catch(() => undefined);
+    });
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!selectedScript) {
+      const next = emptyStrategyScriptDraft(stocks[0]?.config.code);
+      setDraft(next);
+      setParamsText(JSON.stringify(next.params, null, 2));
+      return;
+    }
+    setDraft({
+      name: selectedScript.name,
+      enabled: selectedScript.enabled,
+      language: selectedScript.language,
+      code: selectedScript.code,
+      targetCode: selectedScript.targetCode,
+      params: selectedScript.params,
+      triggers: selectedScript.triggers,
+      cooldownMs: selectedScript.cooldownMs
+    });
+    setParamsText(JSON.stringify(selectedScript.params, null, 2));
+  }, [selectedScript?.id, stocks]);
+
+  const saveScript = async () => {
+    setError("");
+    try {
+      const params = parseStrategyParams(paramsText);
+      const saved = await api.saveStrategyScript({
+        id: selectedScriptId || undefined,
+        ...draft,
+        params
+      });
+      await reload();
+      setSelectedScriptId(saved.id);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "策略保存失败。");
+    }
+  };
+
+  const createScript = async () => {
+    setError("");
+    try {
+      const saved = await api.saveStrategyScript(emptyStrategyScriptDraft(stocks[0]?.config.code));
+      await reload();
+      setSelectedScriptId(saved.id);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "策略创建失败。");
+    }
+  };
+
+  const deleteScript = async () => {
+    if (!selectedScriptId) return;
+    setError("");
+    try {
+      await api.deleteStrategyScript(selectedScriptId);
+      await reload();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "策略删除失败。");
+    }
+  };
+
+  const runScript = async () => {
+    if (!selectedScriptId || !draft.targetCode) return;
+    setRunning(true);
+    setError("");
+    try {
+      await api.runStrategyScript(selectedScriptId, draft.targetCode);
+      await reload();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "策略运行失败。");
+      void api.listStrategyRunLogs().then(setLogs).catch(() => undefined);
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  const deleteSignal = async (id: string) => {
+    setError("");
+    try {
+      await api.deleteStrategySignal(id);
+      await reload();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "提示删除失败。");
+    }
+  };
+
+  const updateTrigger = (trigger: "manual" | "market_refresh", checked: boolean) => {
+    setDraft((current) => {
+      const triggers = new Set(current.triggers);
+      if (checked) triggers.add(trigger);
+      else triggers.delete(trigger);
+      const next = [...triggers];
+      return { ...current, triggers: next.length ? next : ["manual"] };
+    });
+  };
+
+  return (
+    <SinglePageShell
+      title="策略监控"
+      description="用本地 TS/JS 脚本监控单只股票的行情变化，并永久记录带触发时间的策略提示。脚本只读数据，不自动下单。"
+      actions={(
+        <>
+          <button className="tool-button" onClick={() => void createScript()}>
+            <Plus size={14} />
+            新建脚本
+          </button>
+          <button className="tool-button accent" onClick={() => void saveScript()}>
+            <Save size={14} />
+            保存脚本
+          </button>
+          <button className="tool-button" disabled={!selectedScriptId || running} onClick={() => void runScript()}>
+            <Activity size={14} />
+            {running ? "运行中" : "手动运行"}
+          </button>
+        </>
+      )}
+    >
+      <div className="strategy-monitor-view">
+        <aside className="strategy-script-list">
+          <div className="strategy-panel-title">
+            <strong>脚本</strong>
+            {loading && <small>加载中</small>}
+          </div>
+          {scripts.map((script) => (
+            <button
+              className={`strategy-script-item ${script.id === selectedScriptId ? "active" : ""}`}
+              onClick={() => setSelectedScriptId(script.id)}
+              key={script.id}
+            >
+              <span>{script.name}</span>
+              <small>{script.targetCode} · {script.language.toUpperCase()} · {script.enabled ? "启用" : "禁用"}</small>
+            </button>
+          ))}
+          {!scripts.length && <div className="empty-state compact">暂无策略脚本</div>}
+        </aside>
+
+        <section className="strategy-editor">
+          {error && <div className="inline-error">{error}</div>}
+          <div className="strategy-form-grid">
+            <label className="settings-field compact">
+              <span>脚本名称</span>
+              <input value={draft.name} onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} />
+            </label>
+            <label className="settings-field compact">
+              <span>适用股票</span>
+              <select value={draft.targetCode} onChange={(event) => setDraft((current) => ({ ...current, targetCode: event.target.value }))}>
+                {stocks.map((stock) => (
+                  <option value={stock.config.code} key={stock.config.code}>{displayName(stock)} · {stock.config.code}</option>
+                ))}
+                {!stocks.some((stock) => stock.config.code === draft.targetCode) && <option value={draft.targetCode}>{draft.targetCode}</option>}
+              </select>
+            </label>
+            <label className="settings-field compact">
+              <span>语言</span>
+              <select value={draft.language} onChange={(event) => setDraft((current) => ({ ...current, language: event.target.value === "ts" ? "ts" : "js" }))}>
+                <option value="js">JS</option>
+                <option value="ts">TS</option>
+              </select>
+            </label>
+            <label className="settings-field compact">
+              <span>冷却时间(ms)</span>
+              <input type="number" min={10000} step={1000} value={draft.cooldownMs} onChange={(event) => setDraft((current) => ({ ...current, cooldownMs: Number(event.target.value) || 60000 }))} />
+            </label>
+          </div>
+          <div className="strategy-checks">
+            <Checkbox checked={draft.enabled} onChange={(event) => setDraft((current) => ({ ...current, enabled: event.target.checked }))}>启用脚本</Checkbox>
+            <Checkbox checked={draft.triggers.includes("manual")} onChange={(event) => updateTrigger("manual", event.target.checked)}>允许手动运行</Checkbox>
+            <Checkbox checked={draft.triggers.includes("market_refresh")} onChange={(event) => updateTrigger("market_refresh", event.target.checked)}>行情刷新触发</Checkbox>
+          </div>
+          <label className="strategy-code-field">
+            <span>脚本代码</span>
+            <textarea value={draft.code} spellCheck={false} onChange={(event) => setDraft((current) => ({ ...current, code: event.target.value }))} />
+          </label>
+          <label className="strategy-param-field">
+            <span>参数 JSON</span>
+            <textarea value={paramsText} spellCheck={false} onChange={(event) => setParamsText(event.target.value)} />
+          </label>
+          <div className="strategy-editor-actions">
+            <button className="tool-button danger" disabled={!selectedScriptId} onClick={() => void deleteScript()}>
+              <Trash2 size={14} />
+              删除脚本
+            </button>
+          </div>
+        </section>
+
+        <section className="strategy-signal-panel">
+          <div className="strategy-panel-title">
+            <strong>永久提示</strong>
+            <small>{signals.length} 条</small>
+          </div>
+          <div className="strategy-signal-list">
+            {signals.map((signal) => (
+              <article className={`strategy-signal-card ${signal.severity}`} key={signal.id}>
+                <header>
+                  <div>
+                    <strong>{signal.title}</strong>
+                    <span>{signal.code} · {signal.scriptName}</span>
+                  </div>
+                  <button className="icon-tool compact" onClick={() => void deleteSignal(signal.id)} aria-label="删除提示">
+                    <Trash2 size={13} />
+                  </button>
+                </header>
+                <div className="strategy-signal-meta">
+                  <span>{formatStrategyTime(signal.generatedAt)}</span>
+                  <span>{strategySignalLabel(signal.signal)}</span>
+                  <span>{strategyActionLabel(signal.action)}</span>
+                  <span>置信度 {Math.round(signal.confidence * 100)}%</span>
+                  <span>触发 {signal.triggerCount} 次</span>
+                </div>
+                {signal.reasons.length > 0 && (
+                  <ul>
+                    {signal.reasons.map((reason) => <li key={reason}>{reason}</li>)}
+                  </ul>
+                )}
+                {signal.levels && <small className="strategy-levels">{formatStrategyLevels(signal.levels)}</small>}
+              </article>
+            ))}
+            {!signals.length && <div className="empty-state compact">暂无策略提示。手动运行脚本或启用行情刷新触发后会在这里记录。</div>}
+          </div>
+        </section>
+
+        <section className="strategy-log-panel">
+          <div className="strategy-panel-title">
+            <strong>运行日志</strong>
+            <small>{logs.length} 条</small>
+          </div>
+          <div className="strategy-log-list">
+            {logs.slice(0, 80).map((log) => (
+              <div className={`strategy-log-row ${log.status}`} key={log.id}>
+                <span>{formatStrategyTime(log.finishedAt)}</span>
+                <span>{log.scriptName}</span>
+                <span>{log.code}</span>
+                <span>{log.trigger.type}</span>
+                <span>{log.status}</span>
+                {log.error && <span title={log.error}>{log.error}</span>}
+              </div>
+            ))}
+            {!logs.length && <div className="empty-state compact">暂无运行日志</div>}
+          </div>
+        </section>
+      </div>
+    </SinglePageShell>
+  );
+}
+
+function emptyStrategyScriptDraft(code = "sz002594"): StrategyScriptInput {
+  return {
+    name: "自定义策略",
+    enabled: false,
+    language: "js",
+    targetCode: code,
+    params: [
+      { key: "breakout", label: "突破确认价", type: "number", value: 0, step: 0.01 },
+      { key: "risk", label: "风险线", type: "number", value: 0, step: 0.01 }
+    ],
+    triggers: ["manual"],
+    cooldownMs: 60000,
+    code: `module.exports.analyze = function analyze(ctx) {
+  const price = Number(ctx.quote.current_price || 0);
+  const breakout = Number(ctx.params.breakout || 0);
+  const risk = Number(ctx.params.risk || 0);
+
+  if (risk > 0 && price > 0 && price < risk) {
+    return {
+      signal: "risk_break",
+      action: "reduce",
+      confidence: 0.75,
+      severity: "warning",
+      title: "跌破风险线",
+      reasons: ["当前价格低于策略参数中的风险线"],
+      levels: { stopLoss: risk }
+    };
+  }
+
+  if (breakout > 0 && price >= breakout) {
+    return {
+      signal: "buy_watch",
+      action: "watch",
+      confidence: 0.6,
+      severity: "notice",
+      title: "接近突破观察",
+      reasons: ["当前价格达到策略参数中的突破确认价"],
+      levels: { breakout }
+    };
+  }
+
+  return { signal: "none", action: "ignore", confidence: 0, severity: "info", title: "未触发", reasons: [] };
+};`
+  };
+}
+
+function parseStrategyParams(value: string): StrategyScriptParam[] {
+  const parsed = JSON.parse(value) as unknown;
+  if (!Array.isArray(parsed)) throw new Error("参数 JSON 必须是数组。");
+  return parsed.map((item) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) throw new Error("每个参数必须是对象。");
+    const param = item as Partial<StrategyScriptParam>;
+    if (!param.key || typeof param.key !== "string") throw new Error("参数缺少 key。");
+    if (param.type === "boolean") return { key: param.key, label: param.label || param.key, type: "boolean" as const, value: Boolean(param.value) };
+    if (param.type === "string") return { key: param.key, label: param.label || param.key, type: "string" as const, value: String(param.value ?? "") };
+    return {
+      key: param.key,
+      label: param.label || param.key,
+      type: "number" as const,
+      value: Number(param.value) || 0,
+      min: typeof (param as { min?: unknown }).min === "number" ? (param as { min: number }).min : undefined,
+      max: typeof (param as { max?: unknown }).max === "number" ? (param as { max: number }).max : undefined,
+      step: typeof (param as { step?: unknown }).step === "number" ? (param as { step: number }).step : undefined
+    };
+  });
+}
+
+function formatStrategyTime(value: number): string {
+  return new Date(value).toLocaleString();
+}
+
+function strategySignalLabel(signal: StrategySignal["signal"]): string {
+  const labels: Record<StrategySignal["signal"], string> = {
+    volume_up: "放量上涨",
+    volume_down: "放量下跌",
+    buy_watch: "买入观察",
+    buy_trigger: "买入触发",
+    sell_watch: "卖出观察",
+    sell_trigger: "卖出触发",
+    t_watch: "做T观察",
+    t_trigger: "做T触发",
+    risk_break: "风险破位",
+    repairing: "趋势修复",
+    main_wave_candidate: "主升候选",
+    none: "无信号"
+  };
+  return labels[signal];
+}
+
+function strategyActionLabel(action: StrategySignal["action"]): string {
+  const labels: Record<StrategySignal["action"], string> = {
+    watch: "观察",
+    small_buy: "小买",
+    buy: "买入",
+    hold: "持有",
+    reduce: "减仓",
+    sell: "卖出",
+    ignore: "忽略"
+  };
+  return labels[action];
+}
+
+function formatStrategyLevels(levels: NonNullable<StrategySignal["levels"]>): string {
+  return Object.entries(levels)
+    .filter(([, value]) => typeof value === "number")
+    .map(([key, value]) => `${key}: ${Number(value).toFixed(2)}`)
+    .join(" · ");
 }
 
 type PortfolioSortKey = "market_value" | "holding_ratio" | "position_ratio" | "day_profit" | "total_profit" | "change" | "name";

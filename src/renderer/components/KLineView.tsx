@@ -1,4 +1,7 @@
-import * as echarts from "echarts";
+import * as echarts from "echarts/core";
+import { BarChart, CandlestickChart, LineChart } from "echarts/charts";
+import { DataZoomComponent, GridComponent, LegendComponent, MarkLineComponent, TooltipComponent } from "echarts/components";
+import { CanvasRenderer } from "echarts/renderers";
 import "antd/dist/reset.css";
 import { Form, Input } from "antd";
 import { RefreshCw } from "lucide-react";
@@ -8,6 +11,7 @@ import type { FiveDayMinutePoint, KLinePoint } from "../../shared/types";
 import { formatMaybe } from "../utils";
 
 const api = window.finBox;
+echarts.use([BarChart, CandlestickChart, LineChart, DataZoomComponent, GridComponent, LegendComponent, MarkLineComponent, TooltipComponent, CanvasRenderer]);
 const DAILY_SCALE = 240;
 const DEFAULT_CHART_HEIGHT = 560;
 const MIN_CHART_WIDTH = 520;

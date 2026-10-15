@@ -32,6 +32,7 @@ export function WatchlistFloatView() {
       .map((code) => byCode.get(code.toLowerCase()))
       .filter((stock): stock is StockStatus => Boolean(stock));
   }, [visibleStocks, watchFloatConfig?.stock_codes]);
+  // 仅用于自选浮窗内部的行高亮；不表示主工作区当前选中的股票。
   const [selectedCode, setSelectedCode] = useState<string>();
   const theme = state ? currentTheme(state.config) : undefined;
   const shellStyle = watchFloatShellStyle(theme, watchFloatConfig?.style);
@@ -42,6 +43,7 @@ export function WatchlistFloatView() {
       setSelectedCode(undefined);
       return;
     }
+    // 浮窗列表变化后，保持高亮代码有效；缺失时回退到第一只浮窗股票。
     if (!selectedCode || !floatStocks.some((stock) => stock.config.code === selectedCode)) {
       setSelectedCode(floatStocks[0].config.code);
     }

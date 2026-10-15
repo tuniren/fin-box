@@ -3,10 +3,12 @@ import fs from "node:fs";
 import path from "node:path";
 import * as yaml from "js-yaml";
 import { dayProfit, displayName, effectivePrice, marketValue, totalProfit, totalProfitPoints, totalShares } from "../shared/finance";
-import { runCodexAnalysis } from "./aiAnalysis";
+import { AiDataGateway } from "./aiDataGateway";
+import { runCodexAnalysis, startCodexTerminalSession, type CodexTerminalSession, type CodexTerminalToolRequest } from "./aiAnalysis";
 import { ConfigManager, normalizeAiAnalysis, normalizeTradingRefreshInterval, normalizeWatchColumns } from "./config";
 import { fetchKLineData, fetchMultipleStocks, fetchStockComments as fetchThsStockComments, fetchStockNews as fetchSinaStockNews, fetchStockNewsArticle as fetchSinaStockNewsArticle, fetchTencentFiveDayMinuteData, fetchTencentMinuteData, searchStocks } from "./sina";
-import type { AiAnalysisConfig, AiAnalysisProcessLog, AiAnalysisResult, AppConfig, AppState, CamouflageDocument, KLinePoint, KLineScale, MottoConfig, Position, StockConfig, StockJournal, StockJournalNote, StockStatus, WatchFloatColumn, WatchFloatConfig, WatchFloatStyle } from "../shared/types";
+import { StrategyScriptManager } from "./strategyScripts";
+import type { AiAnalysisConfig, AiAnalysisProcessLog, AiAnalysisResult, AiDataScope, AiSessionPolicy, AiTerminalSessionInput, AiTerminalSessionLog, AiToolName, AiToolRequest, AiToolResult, AppConfig, AppState, CamouflageDocument, KLinePoint, KLineScale, MottoConfig, Position, StockConfig, StockJournal, StockJournalNote, StockStatus, StrategyRunLog, StrategyScript, StrategyScriptInput, StrategySignal, WatchFloatColumn, WatchFloatConfig, WatchFloatStyle } from "../shared/types";
 
 const INDEX_CODE = "sh000001";
 const OFF_HOURS_REFRESH_MS = 300000;
@@ -43,13 +45,22 @@ type StockNotesFile = {
 
 export class AppCore {
   private readonly configManager = new ConfigManager();
+  private readonly strategyScripts = new StrategyScriptManager();
   private readonly klineCache = new Map<string, KLineCacheEntry>();
+  private readonly aiTerminalSessions = new Map<string, CodexTerminalSession>();
+  private readonly aiDataGateway: AiDataGateway;
   private state: AppState;
   private timer?: NodeJS.Timeout;
 
   constructor(private readonly getWindows: () => BrowserWindow[]) {
     const config = this.configManager.loadOrDefault();
     this.state = createState(config);
+    this.aiDataGateway = new AiDataGateway({
+      getState: () => structuredClone(this.state),
+      fetchKLine: async (code, limit) => (await this.fetchKLine(code, 240)).slice(-limit),
+      fetchMinute: async (code, limit) => (await this.fetchMinuteData(code)).slice(-limit),
+      readStockJournal: (code) => this.readStockJournal(code)
+    });
   }
 
   start(): void {
@@ -58,6 +69,8 @@ export class AppCore {
 
   stop(): void {
     if (this.timer) clearTimeout(this.timer);
+    for (const session of this.aiTerminalSessions.values()) session.stop();
+    this.aiTerminalSessions.clear();
   }
 
   getState(): AppState {
@@ -380,9 +393,42 @@ export class AppCore {
     return log ? structuredClone(log) : undefined;
   }
 
+  listStrategyScripts(): StrategyScript[] {
+    return structuredClone(this.strategyScripts.listScripts());
+  }
+
+  saveStrategyScript(script: Partial<StrategyScriptInput> & { id?: string }): StrategyScript {
+    return structuredClone(this.strategyScripts.saveScript(script));
+  }
+
+  deleteStrategyScript(id: string): void {
+    this.strategyScripts.deleteScript(id);
+  }
+
+  async runStrategyScript(id: string, code: string): Promise<StrategySignal | undefined> {
+    const signal = await this.strategyScripts.runScript(id, code, this.state, {
+      fetchKLine: async (targetCode, limit) => (await this.fetchKLine(targetCode, 240)).slice(-limit),
+      fetchMinute: async (targetCode) => this.fetchMinuteData(targetCode)
+    });
+    this.broadcastStrategySignalsChanged();
+    return signal ? structuredClone(signal) : undefined;
+  }
+
+  listStrategySignals(): StrategySignal[] {
+    return structuredClone(this.strategyScripts.listSignals());
+  }
+
+  deleteStrategySignal(id: string): void {
+    this.strategyScripts.deleteSignal(id);
+    this.broadcastStrategySignalsChanged();
+  }
+
+  listStrategyRunLogs(): StrategyRunLog[] {
+    return structuredClone(this.strategyScripts.listRunLogs());
+  }
+
   async runAiAnalysis(code: string): Promise<AiAnalysisResult> {
     const config = this.state.config.ai_analysis;
-    if (!config.enabled) throw new Error("AI analysis is disabled.");
 
     const normalizedCode = code.toLowerCase();
     const stock = this.state.stocks.find((item) => item.config.code.toLowerCase() === normalizedCode);
@@ -431,11 +477,80 @@ export class AppCore {
     }
   }
 
+  startAiTerminalSession(input: AiTerminalSessionInput): AiTerminalSessionLog {
+    const config = this.state.config.ai_analysis;
+    const sessionId = input.sessionId.trim();
+    if (!sessionId) throw new Error("AI terminal session id is empty.");
+    if (this.aiTerminalSessions.has(sessionId)) throw new Error("AI terminal session already exists.");
+    const normalizedInput: AiTerminalSessionInput = {
+      ...input,
+      sessionId,
+      prompt: input.prompt.trim(),
+      code: input.code?.trim()
+    };
+    if (!normalizedInput.prompt) throw new Error("AI terminal prompt is empty.");
+    const session = startCodexTerminalSession(config, normalizedInput, app.getAppPath(), {
+      onUpdate: (log) => this.updateAiTerminalSession(log),
+      onToolCall: (request) => this.callAiTerminalTool(normalizedInput, request)
+    });
+    this.aiTerminalSessions.set(sessionId, session);
+    return structuredClone(session.log);
+  }
+
+  sendAiTerminalInput(sessionId: string, input: string): void {
+    const session = this.aiTerminalSessions.get(sessionId);
+    if (!session) throw new Error("AI terminal session does not exist.");
+    const value = input.trim();
+    if (!value) return;
+    session.write(value);
+  }
+
+  stopAiTerminalSession(sessionId: string): void {
+    const session = this.aiTerminalSessions.get(sessionId);
+    if (!session) return;
+    session.stop();
+    this.aiTerminalSessions.delete(sessionId);
+  }
+
+  async callAiDataTool(request: AiToolRequest): Promise<AiToolResult> {
+    return structuredClone(await this.aiDataGateway.call(request));
+  }
+
+  private async callAiTerminalTool(input: AiTerminalSessionInput, request: CodexTerminalToolRequest): Promise<AiToolResult> {
+    return this.callAiDataTool({
+      tool: request.tool,
+      params: request.params,
+      policy: this.createAiTerminalPolicy(input)
+    });
+  }
+
+  private createAiTerminalPolicy(input: AiTerminalSessionInput): AiSessionPolicy {
+    const config = this.state.config.ai_analysis;
+    const scopes = [...new Set(input.contextBundle?.includedScopes ?? [])];
+    return {
+      sessionId: input.sessionId,
+      code: input.code ?? input.contextBundle?.code ?? "",
+      allowedTools: allowedAiToolsForScopes(scopes),
+      allowedDataScopes: scopes,
+      allowCrossSymbolData: config.allow_cross_symbol_data,
+      requirePrivateDataConfirmation: !config.fully_trusted_read,
+      maxToolCalls: config.max_tool_calls,
+      expiresAt: Date.now() + config.session_timeout_ms
+    };
+  }
+
   private updateAiAnalysisProcess(log: AiAnalysisProcessLog): void {
     log.updatedAt = Date.now();
     writeAiAnalysisProcess(log);
     for (const win of this.getWindows()) {
       if (!win.isDestroyed()) win.webContents.send("ai-analysis-process", structuredClone(log));
+    }
+  }
+
+  private updateAiTerminalSession(log: AiTerminalSessionLog): void {
+    if (log.status === "stopped") this.aiTerminalSessions.delete(log.id);
+    for (const win of this.getWindows()) {
+      if (!win.isDestroyed()) win.webContents.send("ai-terminal-session", structuredClone(log));
     }
   }
 
@@ -526,6 +641,10 @@ export class AppCore {
       this.state.sh_index = marketData.get(INDEX_CODE) ?? this.state.sh_index;
       this.state.last_market_update = Date.now();
       this.broadcast();
+      this.strategyScripts.runAutoStrategies(this.state, {
+        fetchKLine: async (targetCode, limit) => (await this.fetchKLine(targetCode, 240)).slice(-limit),
+        fetchMinute: async (targetCode) => this.fetchMinuteData(targetCode)
+      }, () => this.broadcastStrategySignalsChanged());
     } catch (error) {
       console.error("[FinBox] Failed to refresh market data", error);
     }
@@ -548,6 +667,13 @@ export class AppCore {
     const state = this.getState();
     for (const win of this.getWindows()) {
       if (!win.isDestroyed()) win.webContents.send("state", state);
+    }
+  }
+
+  private broadcastStrategySignalsChanged(): void {
+    const signals = this.listStrategySignals();
+    for (const win of this.getWindows()) {
+      if (!win.isDestroyed()) win.webContents.send("strategy-signals-changed", signals);
     }
   }
 
@@ -1022,6 +1148,23 @@ function trimAiAnalysisProcessOutput(output: string): string {
 function formatCodexProgress(stream: "system" | "stdout" | "stderr", text: string): string {
   const prefix = stream === "system" ? "[system]" : stream === "stderr" ? "[stderr]" : "[stdout]";
   return `${prefix} ${text.endsWith("\n") ? text : `${text}\n`}`;
+}
+
+function allowedAiToolsForScopes(scopes: AiDataScope[]): AiToolName[] {
+  const scopeSet = new Set(scopes);
+  const tools = new Set<AiToolName>();
+  if (scopeSet.has("public_market_data") || scopeSet.has("derived_market_data")) {
+    tools.add("get_quote");
+    tools.add("get_kline");
+    tools.add("get_minute");
+  }
+  if (scopeSet.has("user_private_summary") || scopeSet.has("user_private_detail")) {
+    tools.add("get_position_summary");
+  }
+  if (scopeSet.has("user_strategy_data")) {
+    tools.add("get_trading_logic");
+  }
+  return [...tools];
 }
 
 function upsertKLinePoint(journal: StockJournal, point: KLinePoint): void {

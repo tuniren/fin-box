@@ -75,13 +75,11 @@ export type WatchFloatConfig = {
 };
 
 export type AiAnalysisConfig = {
-  enabled: boolean;
   codex_command: string;
   timeout_ms: number;
   include_notes: boolean;
   include_news: boolean;
   include_comments: boolean;
-  interactive_enabled: boolean;
   fully_trusted_read: boolean;
   allow_cross_symbol_data: boolean;
   session_timeout_ms: number;
@@ -162,6 +160,22 @@ export type AiToolCall = {
 
 export type ToolAuditLog = AiToolCall & {
   resultSummary?: string;
+};
+
+export type AiToolRequest = {
+  tool: AiToolName;
+  params: Record<string, JsonValue>;
+  policy: AiSessionPolicy;
+};
+
+export type AiToolResult = {
+  call: AiToolCall;
+  ok: boolean;
+  data?: JsonValue;
+  error?: {
+    code: string;
+    message: string;
+  };
 };
 
 export type AppConfig = {
@@ -354,6 +368,146 @@ export type AiAnalysisProcessLog = {
   resultId?: string;
 };
 
+export type AiTerminalSessionStatus = "starting" | "running" | "stopped" | "exited" | "error";
+
+export type AiTerminalSessionInput = {
+  sessionId: string;
+  prompt: string;
+  code?: string;
+  contextBundle?: ContextBundle;
+};
+
+export type AiTerminalSessionLog = {
+  id: string;
+  code?: string;
+  startedAt: number;
+  updatedAt: number;
+  status: AiTerminalSessionStatus;
+  command?: string;
+  output: string;
+  error?: string;
+  exitCode?: number;
+};
+
+export type StrategyScriptLanguage = "js" | "ts";
+
+export type StrategyScriptParam =
+  | { key: string; label: string; type: "number"; value: number; min?: number; max?: number; step?: number }
+  | { key: string; label: string; type: "string"; value: string }
+  | { key: string; label: string; type: "boolean"; value: boolean };
+
+export type StrategyTrigger =
+  | { type: "manual"; code: string }
+  | { type: "market_refresh"; code: string };
+
+export type StrategySignalType =
+  | "volume_up"
+  | "volume_down"
+  | "buy_watch"
+  | "buy_trigger"
+  | "sell_watch"
+  | "sell_trigger"
+  | "t_watch"
+  | "t_trigger"
+  | "risk_break"
+  | "repairing"
+  | "main_wave_candidate"
+  | "none";
+
+export type StrategyAction = "watch" | "small_buy" | "buy" | "hold" | "reduce" | "sell" | "ignore";
+
+export type StrategySignalSeverity = "info" | "notice" | "warning" | "critical";
+
+export type StrategySignal = {
+  id: string;
+  code: string;
+  scriptId: string;
+  scriptName: string;
+  generatedAt: number;
+  updatedAt: number;
+  triggerCount: number;
+  trigger: StrategyTrigger;
+  signal: StrategySignalType;
+  action: StrategyAction;
+  confidence: number;
+  severity: StrategySignalSeverity;
+  title: string;
+  reasons: string[];
+  levels?: {
+    support?: number;
+    resistance?: number;
+    buyLow?: number;
+    buyHigh?: number;
+    breakout?: number;
+    stopLoss?: number;
+    takeProfit?: number;
+    trailingActivation?: number;
+    trailingDrawdownPercent?: number;
+  };
+  suggestedShares?: number;
+  expiresAt?: number;
+};
+
+export type StrategyRunLog = {
+  id: string;
+  scriptId: string;
+  scriptName: string;
+  code: string;
+  trigger: StrategyTrigger;
+  startedAt: number;
+  finishedAt: number;
+  status: "success" | "error" | "skipped";
+  signalId?: string;
+  error?: string;
+};
+
+export type StrategyScript = {
+  id: string;
+  name: string;
+  enabled: boolean;
+  language: StrategyScriptLanguage;
+  code: string;
+  targetCode: string;
+  params: StrategyScriptParam[];
+  triggers: Array<StrategyTrigger["type"]>;
+  cooldownMs: number;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type StrategyScriptInput = Pick<StrategyScript, "name" | "enabled" | "language" | "code" | "targetCode" | "params" | "triggers" | "cooldownMs">;
+
+export type StrategyContext = {
+  now: string;
+  trigger: StrategyTrigger;
+  script: Pick<StrategyScript, "id" | "name" | "targetCode" | "params">;
+  params: Record<string, string | number | boolean>;
+  stock: StockStatus;
+  quote: {
+    current_price?: number;
+    change?: number;
+    change_percent?: number;
+    open?: number;
+    high?: number;
+    low?: number;
+    volume?: number;
+    amount?: number;
+    prev_close?: number;
+    quote_time?: string;
+  };
+  position: {
+    shares: number;
+    market_value?: number;
+    day_profit: number;
+    total_profit?: number;
+    return_rate_percent?: number;
+    lots: Position[];
+  };
+  indices: Record<string, MarketData | undefined>;
+  kline: KLinePoint[];
+  minute: MinutePoint[];
+};
+
 export type FinBoxApi = {
   getState: () => Promise<AppState>;
   forceRefresh: () => Promise<void>;
@@ -396,6 +550,16 @@ export type FinBoxApi = {
   getAiAnalysisHistory: (code: string) => Promise<AiAnalysisResult[]>;
   getAiAnalysisProcess: (code: string) => Promise<AiAnalysisProcessLog | undefined>;
   runAiAnalysis: (code: string) => Promise<AiAnalysisResult>;
+  startAiTerminalSession: (input: AiTerminalSessionInput) => Promise<AiTerminalSessionLog>;
+  sendAiTerminalInput: (sessionId: string, input: string) => Promise<void>;
+  stopAiTerminalSession: (sessionId: string) => Promise<void>;
+  listStrategyScripts: () => Promise<StrategyScript[]>;
+  saveStrategyScript: (script: Partial<StrategyScriptInput> & { id?: string }) => Promise<StrategyScript>;
+  deleteStrategyScript: (id: string) => Promise<void>;
+  runStrategyScript: (id: string, code: string) => Promise<StrategySignal | undefined>;
+  listStrategySignals: () => Promise<StrategySignal[]>;
+  deleteStrategySignal: (id: string) => Promise<void>;
+  listStrategyRunLogs: () => Promise<StrategyRunLog[]>;
   listNotes: () => Promise<NoteTreeItem[]>;
   readNote: (notePath: string) => Promise<NoteFile>;
   saveNote: (notePath: string, content: string) => Promise<void>;
@@ -419,6 +583,8 @@ export type FinBoxApi = {
   onUpdateStatus: (callback: (status: UpdateStatus) => void) => () => void;
   onRequestLogs: (callback: (logs: RequestLogItem[]) => void) => () => void;
   onAiAnalysisProcess: (callback: (log: AiAnalysisProcessLog) => void) => () => void;
+  onAiTerminalSession: (callback: (log: AiTerminalSessionLog) => void) => () => void;
+  onStrategySignalsChanged: (callback: (signals: StrategySignal[]) => void) => () => void;
   onCycleStock: (callback: () => void) => () => void;
   onToggleExpand: (callback: () => void) => () => void;
   onOpenWatchlistFloatSettings: (callback: () => void) => () => void;

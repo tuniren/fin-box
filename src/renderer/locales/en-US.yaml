@@ -70,9 +70,6 @@ detail:
   aiHistory: AI Analysis History
   aiProcess: AI Analysis Process
   aiRiskNotice: AI output is an auxiliary review only and is not investment advice.
-  aiDisabledTitle: AI analysis is disabled
-  aiDisabledHint: AI analysis is optional. Install and configure Codex CLI or a compatible plugin before enabling it.
-  openAiSettings: Open AI Analysis Settings
   tags: Tags
   noTags: No tags
   removeTag: Remove tag
@@ -130,14 +127,11 @@ settings:
   title: Settings
   general: General Settings
   marketRefresh: Market Refresh
-  aiAnalysis: AI Analysis
   mottoFloat: Motto Float
   watchlistFloat: Watchlist Float
   camouflageFloat: Camouflage Float
   generalDescription: Configure FinBox windows, appearance, and common behavior.
   marketRefreshDescription: Set the quote refresh interval used by the watch tree and watchlist float while markets are open.
-  aiAnalysisDescription: Enable manual Codex analysis from the stock detail page.
-  aiAnalysisGuide: AI analysis guide
   mottoDescription: Edit the motto float text and display style.
   watchlistDescription: Choose which symbols and columns appear in the watchlist float.
   camouflageDescription: Manage the camouflage float that looks like system monitor metrics.
@@ -146,14 +140,6 @@ settings:
   appearanceDescription: Choose the color theme used by the app.
   tradingRefreshInterval: Open-market refresh interval
   tradingRefreshIntervalHint: Applies during trading hours. Range 500-10000 ms.
-  enableAiAnalysis: Enable AI analysis
-  codexCommand: Codex command
-  codexCommandHint: Command executable only, for example codex or npx codex. FinBox appends safe non-interactive arguments.
-  aiTimeout: Analysis timeout
-  aiTimeoutHint: Unit ms. Range 10000-300000.
-  includeNotes: Include stock notes
-  includeNews: Include latest news
-  includeComments: Include discussions
   watchlistProfile: Profile
   profileName: Profile name
   saveProfile: Save Profile
@@ -200,7 +186,6 @@ stockNotes:
   unsaved: Unsaved
   saveShortcut: Press Ctrl+S to save
 aiTab:
-  defaultSubtitle: Empty chat by default. Choose authorized context before sending.
   chatInput: Chat input
   promptPlaceholder: Ask anything
   defaultSymbol: Symbols
@@ -209,22 +194,18 @@ aiTab:
   contextOptions: Context for this message
   contextCollapsedHint: Collapsed
   contextExpandedHint: Expanded
-  stage2Notice: Stage 2 only creates local chat records and an authorization summary. It does not call AI.
+  stage2Notice: Stage 3 starts a restricted AI terminal after the user sends a message. It does not read real data before send.
   send: Send
   emptyTitle: No chat sessions
   emptyHint: After you send a question, an independent session appears here. User messages, analysis summaries, and later tool results can be collapsed individually.
-  disabledTitle: AI analysis is disabled
-  disabledHint: Enable AI analysis to create chat sessions here. This page never sends data automatically.
-  openAiSettings: Open AI settings
   userMessage: User message
   authorizationSummary: Pre-send authorization summary
   targetSymbol: Target symbol
   selectedContexts: Selected contexts
   noContext: No context
   stage2Summary: Stage 2 only creates a local chat session and authorization summary. It does not call AI, read data, or send actual data.
+  stage3Summary: Stage 3 starts a restricted AI terminal. InitialContext contains only this authorization summary and does not read real data proactively.
   unspecified: Unspecified
-  collapseAll: Collapse all
-  expandAll: Expand all
   collapseBlock: Collapse block
   expandBlock: Expand block
   copyBlock: Copy block

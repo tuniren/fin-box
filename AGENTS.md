@@ -4,3 +4,4 @@
 - git commit 使用feat、fix、refactor等模板，msg使用中文，空一行写清楚本次改动的功能或修复的bug，新功能或bug按照list方式罗列清楚
 - git push使用rebase，允许 rebase 并 push
 - 发布一定要注意latest.yml的发布
+- 发布token使用ignore\github_token.txt

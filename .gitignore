@@ -3,3 +3,4 @@ dist
 dist-electron
 .npm-cache
 release
+ignore

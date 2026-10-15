@@ -1,4 +1,7 @@
-﻿import * as echarts from "echarts";
+﻿import * as echarts from "echarts/core";
+import { BarChart, LineChart } from "echarts/charts";
+import { DataZoomComponent, GridComponent, MarkLineComponent, TooltipComponent } from "echarts/components";
+import { CanvasRenderer } from "echarts/renderers";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent as ReactMouseEvent } from "react";
 import { X } from "lucide-react";
@@ -6,6 +9,7 @@ import type { KLinePoint, MinutePoint, StockStatus, Theme } from "../../shared/t
 import { formatMaybe, formatSigned } from "../utils";
 
 const api = window.finBox;
+echarts.use([BarChart, LineChart, DataZoomComponent, GridComponent, MarkLineComponent, TooltipComponent, CanvasRenderer]);
 const DAILY_SCALE = 240;
 const TRADING_MINUTES_PER_DAY = 240;
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
@@ -184,8 +188,8 @@ function MinuteChart({
       }
     };
 
-    const selectPoint = (params: MinuteChartSelectParam) => {
-      const index = resolveMinuteSelectIndex(params, timeLabelsRef.current);
+    const selectPoint = (params: unknown) => {
+      const index = resolveMinuteSelectIndex(params as MinuteChartSelectParam, timeLabelsRef.current);
       if (isFiniteNumber(index)) onSelectPointRef.current?.(index);
     };
 
@@ -540,8 +544,8 @@ function MinuteVolumeWidget({ points, selectedIndex, onSelectPoint }: { points: 
     const chart = echarts.init(chartRef.current, undefined, { renderer: "canvas" });
     instanceRef.current = chart;
 
-    const selectPoint = (params: MinuteChartSelectParam) => {
-      const index = resolveMinuteSelectIndex(params, timeLabelsRef.current);
+    const selectPoint = (params: unknown) => {
+      const index = resolveMinuteSelectIndex(params as MinuteChartSelectParam, timeLabelsRef.current);
       if (isFiniteNumber(index)) onSelectPointRef.current(index);
     };
 

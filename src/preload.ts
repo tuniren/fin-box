@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from "electron";
-import type { AiAnalysisConfig, AiAnalysisProcessLog, AppState, FinBoxApi, KLineScale, MottoConfig, RequestLogItem, UpdateStatus, WatchFloatColumn, WatchFloatConfig } from "./shared/types";
+import type { AiAnalysisConfig, AiAnalysisProcessLog, AiTerminalSessionInput, AiTerminalSessionLog, AppState, FinBoxApi, KLineScale, MottoConfig, RequestLogItem, StrategyScriptInput, StrategySignal, UpdateStatus, WatchFloatColumn, WatchFloatConfig } from "./shared/types";
 
 // Expose only the FinBox IPC surface to the renderer.
 // React can still manage windows and market state while contextIsolation stays on.
@@ -45,6 +45,16 @@ const api: FinBoxApi = {
   getAiAnalysisHistory: (code: string) => ipcRenderer.invoke("get-ai-analysis-history", code),
   getAiAnalysisProcess: (code: string) => ipcRenderer.invoke("get-ai-analysis-process", code),
   runAiAnalysis: (code: string) => ipcRenderer.invoke("run-ai-analysis", code),
+  startAiTerminalSession: (input: AiTerminalSessionInput) => ipcRenderer.invoke("start-ai-terminal-session", input),
+  sendAiTerminalInput: (sessionId: string, input: string) => ipcRenderer.invoke("send-ai-terminal-input", sessionId, input),
+  stopAiTerminalSession: (sessionId: string) => ipcRenderer.invoke("stop-ai-terminal-session", sessionId),
+  listStrategyScripts: () => ipcRenderer.invoke("list-strategy-scripts"),
+  saveStrategyScript: (script: Partial<StrategyScriptInput> & { id?: string }) => ipcRenderer.invoke("save-strategy-script", script),
+  deleteStrategyScript: (id: string) => ipcRenderer.invoke("delete-strategy-script", id),
+  runStrategyScript: (id: string, code: string) => ipcRenderer.invoke("run-strategy-script", id, code),
+  listStrategySignals: () => ipcRenderer.invoke("list-strategy-signals"),
+  deleteStrategySignal: (id: string) => ipcRenderer.invoke("delete-strategy-signal", id),
+  listStrategyRunLogs: () => ipcRenderer.invoke("list-strategy-run-logs"),
   listNotes: () => ipcRenderer.invoke("list-notes"),
   readNote: (notePath: string) => ipcRenderer.invoke("read-note", notePath),
   saveNote: (notePath: string, content: string) => ipcRenderer.invoke("save-note", notePath, content),
@@ -84,6 +94,16 @@ const api: FinBoxApi = {
     const listener = (_event: Electron.IpcRendererEvent, log: AiAnalysisProcessLog) => callback(log);
     ipcRenderer.on("ai-analysis-process", listener);
     return () => ipcRenderer.off("ai-analysis-process", listener);
+  },
+  onAiTerminalSession: (callback: (log: AiTerminalSessionLog) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, log: AiTerminalSessionLog) => callback(log);
+    ipcRenderer.on("ai-terminal-session", listener);
+    return () => ipcRenderer.off("ai-terminal-session", listener);
+  },
+  onStrategySignalsChanged: (callback: (signals: StrategySignal[]) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, signals: StrategySignal[]) => callback(signals);
+    ipcRenderer.on("strategy-signals-changed", listener);
+    return () => ipcRenderer.off("strategy-signals-changed", listener);
   },
   onCycleStock: (callback: () => void) => {
     const listener = () => callback();

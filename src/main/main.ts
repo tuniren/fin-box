@@ -4,7 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { AppCore } from "./core";
 import { clearRequestLogs, getRequestLogs, onRequestLogsChanged } from "./requestLog";
-import type { AiAnalysisConfig, AppConfig, KLinePoint, KLineScale, MottoConfig, NoteTreeItem, Position, StockJournalNote, UpdateStatus, WatchFloatColumn, WatchFloatConfig } from "../shared/types";
+import type { AiAnalysisConfig, AiTerminalSessionInput, AppConfig, KLinePoint, KLineScale, MottoConfig, NoteTreeItem, Position, StockJournalNote, StrategyScriptInput, UpdateStatus, WatchFloatColumn, WatchFloatConfig } from "../shared/types";
 
 process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = "true";
 
@@ -687,6 +687,16 @@ ipcMain.handle("fetch-stock-comments", (_event, code: string, page: number) => c
 ipcMain.handle("get-ai-analysis-history", (_event, code: string) => core.getAiAnalysisHistory(code));
 ipcMain.handle("get-ai-analysis-process", (_event, code: string) => core.getAiAnalysisProcess(code));
 ipcMain.handle("run-ai-analysis", (_event, code: string) => core.runAiAnalysis(code));
+ipcMain.handle("start-ai-terminal-session", (_event, input: AiTerminalSessionInput) => core.startAiTerminalSession(input));
+ipcMain.handle("send-ai-terminal-input", (_event, sessionId: string, input: string) => core.sendAiTerminalInput(sessionId, input));
+ipcMain.handle("stop-ai-terminal-session", (_event, sessionId: string) => core.stopAiTerminalSession(sessionId));
+ipcMain.handle("list-strategy-scripts", () => core.listStrategyScripts());
+ipcMain.handle("save-strategy-script", (_event, script: Partial<StrategyScriptInput> & { id?: string }) => core.saveStrategyScript(script));
+ipcMain.handle("delete-strategy-script", (_event, id: string) => core.deleteStrategyScript(id));
+ipcMain.handle("run-strategy-script", (_event, id: string, code: string) => core.runStrategyScript(id, code));
+ipcMain.handle("list-strategy-signals", () => core.listStrategySignals());
+ipcMain.handle("delete-strategy-signal", (_event, id: string) => core.deleteStrategySignal(id));
+ipcMain.handle("list-strategy-run-logs", () => core.listStrategyRunLogs());
 ipcMain.handle("list-notes", () => readNotesTree());
 ipcMain.handle("read-note", (_event, notePath: string) => {
   const absolutePath = resolveNotePath(notePath);

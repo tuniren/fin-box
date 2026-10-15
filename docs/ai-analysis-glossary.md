@@ -30,19 +30,19 @@ AI 面板默认显示的空聊天输入区。它位于 AI tab 下方，不自动
 
 ## ChatSessionCard
 
-界面中展示单个 AI 聊天会话的独立容器。它包含会话标题、状态、消息列表、工具调用日志入口和批量折叠控制。会话内容按时间正序展示，越早的内容越靠上。用户消息采用右侧气泡，AI 内容采用左侧内容块。
+界面中展示单个 AI 聊天会话的独立容器。它包含会话标题、状态、消息列表和工具调用日志入口。会话内容按时间正序展示，越早的内容越靠上。用户消息采用右侧气泡，AI 内容采用左侧内容块。会话头部不提供批量折叠按钮，避免重复控制占用空间。
 
 ## CollapsibleChatBlock
 
 聊天会话中的可折叠内容块。一次用户消息、一次 AI 回答、一次分析内容和一次工具调用结果都可以是独立内容块。
 
+## RestrictedAiTerminal
+
+AI 分析 tab 中挂载在具体聊天会话内的受限终端块。它只通过主进程托管的 AI 会话 IPC 接收输入、显示输出和停止当前子进程，不向渲染进程暴露通用 shell、任意文件系统访问或内部 IPC。
+
 ## CollapsedChatBlock
 
 处于折叠状态的聊天内容块。折叠只影响界面展示，不代表停止会话、删除上下文或清除工具调用日志。
-
-## CollapseAllChatBlocks
-
-当前会话的一键折叠操作。它批量收起会话中的用户消息、AI 回答、分析内容和工具调用结果。
 
 ## NonInteractiveAnalysisRun
 
@@ -66,11 +66,15 @@ AI 在会话中根据分析需要临时获取的数据。例如 AI 判断需要�
 
 ## AiDataGateway
 
-主进程侧提供给 AI 使用的受控数据访问层。它只暴露明确、有限、结构化的数据接口，不暴露通用文件系统、通用 shell 或内部 IPC。
+主进程侧提供给 AI 使用的受控数据访问层。它只暴露明确、有限、结构化的数据接口，不暴露通用文件系统、通用 shell 或内部 IPC。第一版实现负责工具白名单、会话策略、跨标的权限和数据范围校验；用户确认弹窗、永久审计日志管理和真实 AI 工具协议接入属于后续阶段。
 
 ## AiTool
 
 AI 可以调用的单个数据工具。例如 `get_quote`、`get_kline`、`get_minute`、`get_position_summary`、`get_trading_logic`。
+
+## FinBoxToolBlock
+
+AI 终端会话中的受控工具请求格式。AI 只能通过 info string 为 `finbox-tool` 的 fenced code block 请求数据，块内容是只包含 `tool` 和 `params` 的 JSON。主进程解析该块后生成 `AiToolRequest`，交给 `AiDataGateway` 校验和执行；自由文本、任意 IPC、任意文件读取和通用命令不属于该协议。
 
 ## AiToolCall
 
