@@ -29,10 +29,16 @@ if (!process.versions.electron) {
       const colors={name:'#333333',price:'#333333',change:'#333333',day_profit:'#333333'};
       const style={font_family:'Microsoft YaHei',font_size:12,text_color:'#333333',column_colors:colors,metric_colors:{change:{up:'#e00',down:'#090'},day_profit:{up:'#e00',down:'#090'}},background_color:'#ffffff',background_opacity:1,border_color:'#cccccc',show_border:true};
       let snapshot={config:{stocks:[stock.config],current_theme:'simple',themes:defaultThemes,hide_zero_shares:false,watch_float:{stock_codes:['sz002594'],columns:['name','price','change'],layout:'vertical',show_news:false,style}},stocks:[stock],sector_quotes:{'01801095':{id:'01801095',name:'乘用车',price:101,previous_close:100,change_percent:1,time:'20261103100000',fetched_at:1},'01801880':{id:'01801880',name:'汽车',price:201,previous_close:200,change_percent:.5,time:'20261103100000',fetched_at:1}},sector_minutes:{'01801095':{date:'20261103',points:[{time:'09:30',price:100},{time:'09:31',price:100.5},{time:'09:32',price:101}],fetched_at:1}}};
+      Object.assign(snapshot.config,{stock_groups:['watchlist'],stock_group_order:{},watch_tree_columns:['name','price','change'],motto:{text:'test',font_family:'Arial',font_size:14,color:'#fff'},trading_refresh_interval_ms:1000,window_close_behavior:'hide'});
+      snapshot.sh_index=stock;
       const listeners=new Set();
       window.test={opens:0,interests:[],sizes:[],snapshot:()=>snapshot};
       window.finBox={
         getState:async()=>snapshot,
+        getUpdateStatus:async()=>({state:'idle',currentVersion:'test'}),onUpdateStatus:()=>()=>{},
+        getRequestLogs:async()=>[],onRequestLogs:()=>()=>{},onOpenWatchlistFloatSettings:()=>()=>{},
+        getCamouflageDocument:async()=>({path:'test.cpp',content:'int main() {}'}),
+        listNotes:async()=>[],getStockJournal:async()=>({notes:[]}),
         openStockIndustry:async()=>{window.test.opens++},
         updateStockIndustry:async(code,patch)=>{Object.assign(industry,patch);snapshot={...snapshot};listeners.forEach(fn=>fn(snapshot));},
         updateWatchFloatConfig:async(patch)=>{snapshot={...snapshot,config:{...snapshot.config,watch_float:{...snapshot.config.watch_float,...patch}}};listeners.forEach(fn=>fn(snapshot));},
@@ -42,13 +48,14 @@ if (!process.versions.electron) {
         onCycleStock:()=>()=>{},openWatchlistFloatSettings:async()=>{}
       };
       // Require after installing the mock: modules bind window.finBox during evaluation.
+      const {MainWorkspace}=require('./src/renderer/views/MainWorkspace');
       const {IndustryPanel,SectorBadge}=require('./src/renderer/components/IndustryPanel');
       const {WatchlistFloatView,CamouflageFloatView}=require('./src/renderer/components/FloatingWindows');
       const {GroupedWatchlist}=require('./src/renderer/components/WatchTree');
       const {WatchFloatIndustrySettings}=require('./src/renderer/components/WatchFloatIndustrySettings');
       function Settings(){const [state,setState]=React.useState(snapshot);React.useEffect(()=>window.finBox.onState(setState),[]);return <main style={{padding:20,background:'#fff',height:'100vh'}}><WatchFloatIndustrySettings stocks={[...state.stocks,{config:{code:'sh600000',tags:[],positions:[]},market:{name:'浦发银行'}}]} config={state.config.watch_float} onConfigChange={window.finBox.updateWatchFloatConfig}/></main>}
       function Main(){const [state,setState]=React.useState(snapshot);React.useEffect(()=>window.finBox.onState(setState),[]);return <main style={{padding:20,color:'#333',background:'#fff',height:'100vh'}}><div>84.60 <SectorBadge state={state} stock={state.stocks[0]} theme={theme}/></div><IndustryPanel state={state} stock={state.stocks[0]} theme={theme}/><div style={{width:300,marginTop:12}}><GroupedWatchlist state={state} stocks={state.stocks} groupNames={['watchlist']} groupOrder={{}} theme={theme} onSelect={()=>{}} expandedKeys={['watch-root','watch-group:watchlist']} onExpandedKeysChange={()=>{}} readOnly/></div></main>}
-      const component=location.hash==='#settings'?<Settings/>:location.hash==='#watch'?<WatchlistFloatView/>:location.hash==='#float'?<CamouflageFloatView/>:<Main/>;
+      const component=location.hash==='#workspace'?<MainWorkspace/>:location.hash==='#settings'?<Settings/>:location.hash==='#watch'?<WatchlistFloatView/>:location.hash==='#float'?<CamouflageFloatView/>:<Main/>;
       createRoot(document.getElementById('root')).render(<I18nProvider>{component}</I18nProvider>);
     `;
     await build({ stdin: { contents: entry, resolveDir: root, loader: 'tsx' }, bundle: true, outfile: path.join(testDir, 'ui.js'), platform: 'browser', jsx: 'automatic',
@@ -125,6 +132,22 @@ if (!process.versions.electron) {
       }
       fs.writeFileSync(path.join(testDir, hash + '.png'), (await win.webContents.capturePage()).toPNG());
     }
+    await win.loadURL('about:blank');
+    win.setSize(1360,900);
+    await win.loadFile(path.join(testDir, 'index.html'), { hash: 'workspace' });
+    await until('document.querySelector(".workspace .watch-tree-group-title")');
+    await evaluate('document.querySelector(".watch-tree-group-title").closest(".ant-tree-treenode").querySelector(".ant-tree-switcher").click()');
+    await until('document.querySelector(".workspace .watch-tree-stock")');
+    assert.equal(await evaluate('Array.from(document.querySelectorAll("button")).some(b=>/AI|策略监控/.test(b.textContent+" "+b.title+" "+b.getAttribute("aria-label")))'), false);
+    await evaluate('document.querySelector(".watch-tree-stock").dispatchEvent(new MouseEvent("dblclick",{bubbles:true}))');
+    await until('document.querySelector(".stock-detail-view .industry-panel")');
+    await until('document.querySelector(".strategy-note-section textarea")');
+    assert.equal(await evaluate('/交易强度|THS DISCUSSIONS/.test(document.body.innerText)'), false);
+    assert.equal(await evaluate('document.querySelectorAll("[class*=stock-ai], [class*=strategy-monitor], [class*=intensity-], .comments-panel").length'), 0);
+    assert.equal(await evaluate('document.querySelectorAll(".stock-note-section textarea").length'), 2);
+    await new Promise(resolve => setTimeout(resolve, 150));
+    fs.writeFileSync(path.join(testDir, 'workspace.png'), (await win.webContents.capturePage()).toPNG());
+    console.log('PASS: 主界面和详情删除入口验证，保留行业板块、策略笔记与每日笔记');
     assert.deepEqual(errors, []);
     console.log('PASS: 行业选择、显示开关、分时、自选列表、两类浮窗、配置页行业选择与总开关；无真实网络请求。');
     console.log('UI screenshots: ' + testDir);

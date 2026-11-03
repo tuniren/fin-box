@@ -103,117 +103,13 @@ export type WatchFloatConfig = {
   profiles: Record<string, WatchFloatStyle>;
 };
 
-export type AiAnalysisConfig = {
-  codex_command: string;
-  timeout_ms: number;
-  include_notes: boolean;
-  include_news: boolean;
-  include_comments: boolean;
-  fully_trusted_read: boolean;
-  allow_cross_symbol_data: boolean;
-  session_timeout_ms: number;
-  max_tool_calls: number;
-};
-
-export type AiSessionMode = "non_interactive" | "interactive";
-
-export type AiSessionStatus = "created" | "running" | "waiting_confirmation" | "success" | "error" | "timeout" | "stopped";
-
-export type AiDataScope =
-  | "public_market_data"
-  | "derived_market_data"
-  | "user_private_summary"
-  | "user_private_detail"
-  | "user_strategy_data"
-  | "external_noise_data";
-
-export type AiToolName =
-  | "get_quote"
-  | "get_kline"
-  | "get_minute"
-  | "get_position_summary"
-  | "get_trading_logic";
-
-export type AiToolCallStatus = "pending" | "confirmed" | "rejected" | "success" | "error";
-
-export type JsonPrimitive = string | number | boolean | null;
-
-export type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
-
-export type ContextBundle = {
-  id: string;
-  sessionId: string;
-  code: string;
-  createdAt: number;
-  includedScopes: AiDataScope[];
-  data: Record<string, JsonValue>;
-};
-
-export type AiSessionPolicy = {
-  sessionId: string;
-  code: string;
-  allowedTools: AiToolName[];
-  allowedDataScopes: AiDataScope[];
-  allowCrossSymbolData: boolean;
-  requirePrivateDataConfirmation: boolean;
-  maxToolCalls: number;
-  expiresAt: number;
-};
-
-export type AiSession = {
-  id: string;
-  mode: AiSessionMode;
-  code: string;
-  status: AiSessionStatus;
-  createdAt: number;
-  updatedAt: number;
-  policy: AiSessionPolicy;
-  contextBundleId?: string;
-  error?: string;
-};
-
-export type AiToolCall = {
-  id: string;
-  sessionId: string;
-  tool: AiToolName;
-  requestedAt: number;
-  updatedAt: number;
-  status: AiToolCallStatus;
-  params: Record<string, JsonValue>;
-  dataScopes: AiDataScope[];
-  privateData: boolean;
-  requiresConfirmation: boolean;
-  confirmedAt?: number;
-  error?: string;
-};
-
-export type ToolAuditLog = AiToolCall & {
-  resultSummary?: string;
-};
-
-export type AiToolRequest = {
-  tool: AiToolName;
-  params: Record<string, JsonValue>;
-  policy: AiSessionPolicy;
-};
-
-export type AiToolResult = {
-  call: AiToolCall;
-  ok: boolean;
-  data?: JsonValue;
-  error?: {
-    code: string;
-    message: string;
-  };
-};
-
 export type AppConfig = {
   total_investment?: number;
   cash?: number;
   motto: MottoConfig;
   watch_float: WatchFloatConfig;
   watch_tree_columns: WatchFloatColumn[];
-  ai_analysis: AiAnalysisConfig;
+
   trading_refresh_interval_ms: number;
   window_close_behavior: "tray" | "close";
   hide_zero_shares: boolean;
@@ -307,23 +203,6 @@ export type StockNewsArticle = {
   html: string;
 };
 
-export type StockCommentItem = {
-  id: string;
-  user: string;
-  text: string;
-  url: string;
-  date?: string;
-  replyCount?: number;
-  retweetCount?: number;
-  likeCount?: number;
-};
-
-export type StockCommentPage = {
-  items: StockCommentItem[];
-  page: number;
-  hasMore: boolean;
-};
-
 export type NoteTreeItem = {
   name: string;
   path: string;
@@ -380,167 +259,6 @@ export type RequestLogItem = {
   error?: string;
 };
 
-export type AiAnalysisResult = {
-  id: string;
-  code: string;
-  generatedAt: number;
-  quoteTime?: string;
-  dataUpdatedAt?: number;
-  content: string;
-};
-
-export type AiAnalysisProcessLog = {
-  id: string;
-  code: string;
-  startedAt: number;
-  updatedAt: number;
-  status: "running" | "success" | "error" | "timeout";
-  command?: string;
-  output: string;
-  error?: string;
-  resultId?: string;
-};
-
-export type AiTerminalSessionStatus = "starting" | "running" | "stopped" | "exited" | "error";
-
-export type AiTerminalSessionInput = {
-  sessionId: string;
-  prompt: string;
-  code?: string;
-  contextBundle?: ContextBundle;
-};
-
-export type AiTerminalSessionLog = {
-  id: string;
-  code?: string;
-  startedAt: number;
-  updatedAt: number;
-  status: AiTerminalSessionStatus;
-  command?: string;
-  output: string;
-  error?: string;
-  exitCode?: number;
-};
-
-export type StrategyScriptLanguage = "js" | "ts";
-
-export type StrategyScriptParam =
-  | { key: string; label: string; type: "number"; value: number; min?: number; max?: number; step?: number }
-  | { key: string; label: string; type: "string"; value: string }
-  | { key: string; label: string; type: "boolean"; value: boolean };
-
-export type StrategyTrigger =
-  | { type: "manual"; code: string }
-  | { type: "market_refresh"; code: string };
-
-export type StrategySignalType =
-  | "volume_up"
-  | "volume_down"
-  | "buy_watch"
-  | "buy_trigger"
-  | "sell_watch"
-  | "sell_trigger"
-  | "t_watch"
-  | "t_trigger"
-  | "risk_break"
-  | "repairing"
-  | "main_wave_candidate"
-  | "none";
-
-export type StrategyAction = "watch" | "small_buy" | "buy" | "hold" | "reduce" | "sell" | "ignore";
-
-export type StrategySignalSeverity = "info" | "notice" | "warning" | "critical";
-
-export type StrategySignal = {
-  id: string;
-  code: string;
-  scriptId: string;
-  scriptName: string;
-  generatedAt: number;
-  updatedAt: number;
-  triggerCount: number;
-  trigger: StrategyTrigger;
-  signal: StrategySignalType;
-  action: StrategyAction;
-  confidence: number;
-  severity: StrategySignalSeverity;
-  title: string;
-  reasons: string[];
-  levels?: {
-    support?: number;
-    resistance?: number;
-    buyLow?: number;
-    buyHigh?: number;
-    breakout?: number;
-    stopLoss?: number;
-    takeProfit?: number;
-    trailingActivation?: number;
-    trailingDrawdownPercent?: number;
-  };
-  suggestedShares?: number;
-  expiresAt?: number;
-};
-
-export type StrategyRunLog = {
-  id: string;
-  scriptId: string;
-  scriptName: string;
-  code: string;
-  trigger: StrategyTrigger;
-  startedAt: number;
-  finishedAt: number;
-  status: "success" | "error" | "skipped";
-  signalId?: string;
-  error?: string;
-};
-
-export type StrategyScript = {
-  id: string;
-  name: string;
-  enabled: boolean;
-  language: StrategyScriptLanguage;
-  code: string;
-  targetCode: string;
-  params: StrategyScriptParam[];
-  triggers: Array<StrategyTrigger["type"]>;
-  cooldownMs: number;
-  createdAt: number;
-  updatedAt: number;
-};
-
-export type StrategyScriptInput = Pick<StrategyScript, "name" | "enabled" | "language" | "code" | "targetCode" | "params" | "triggers" | "cooldownMs">;
-
-export type StrategyContext = {
-  now: string;
-  trigger: StrategyTrigger;
-  script: Pick<StrategyScript, "id" | "name" | "targetCode" | "params">;
-  params: Record<string, string | number | boolean>;
-  stock: StockStatus;
-  quote: {
-    current_price?: number;
-    change?: number;
-    change_percent?: number;
-    open?: number;
-    high?: number;
-    low?: number;
-    volume?: number;
-    amount?: number;
-    prev_close?: number;
-    quote_time?: string;
-  };
-  position: {
-    shares: number;
-    market_value?: number;
-    day_profit: number;
-    total_profit?: number;
-    return_rate_percent?: number;
-    lots: Position[];
-  };
-  indices: Record<string, MarketData | undefined>;
-  kline: KLinePoint[];
-  minute: MinutePoint[];
-};
-
 export type FinBoxApi = {
   openStockIndustry: (code: string) => Promise<void>;
   updateStockIndustry: (code: string, patch: IndustryPatch) => Promise<void>;
@@ -563,7 +281,7 @@ export type FinBoxApi = {
   updateMotto: (motto: MottoConfig) => Promise<void>;
   updateWatchFloatConfig: (config: WatchFloatConfig) => Promise<void>;
   updateWatchTreeColumns: (columns: WatchFloatColumn[]) => Promise<void>;
-  updateAiAnalysisConfig: (config: AiAnalysisConfig) => Promise<void>;
+
   updateTradingRefreshInterval: (intervalMs: number) => Promise<void>;
   updateWindowCloseBehavior: (behavior: AppConfig["window_close_behavior"]) => Promise<void>;
   updateTheme: (themeName: string) => Promise<void>;
@@ -582,20 +300,7 @@ export type FinBoxApi = {
   fetchStockNews: (code: string, page: number, keyword?: string) => Promise<StockNewsPage>;
   fetchStockNewsArticle: (url: string) => Promise<StockNewsArticle>;
   openExternalUrl: (url: string) => Promise<void>;
-  fetchStockComments: (code: string, page: number) => Promise<StockCommentPage>;
-  getAiAnalysisHistory: (code: string) => Promise<AiAnalysisResult[]>;
-  getAiAnalysisProcess: (code: string) => Promise<AiAnalysisProcessLog | undefined>;
-  runAiAnalysis: (code: string) => Promise<AiAnalysisResult>;
-  startAiTerminalSession: (input: AiTerminalSessionInput) => Promise<AiTerminalSessionLog>;
-  sendAiTerminalInput: (sessionId: string, input: string) => Promise<void>;
-  stopAiTerminalSession: (sessionId: string) => Promise<void>;
-  listStrategyScripts: () => Promise<StrategyScript[]>;
-  saveStrategyScript: (script: Partial<StrategyScriptInput> & { id?: string }) => Promise<StrategyScript>;
-  deleteStrategyScript: (id: string) => Promise<void>;
-  runStrategyScript: (id: string, code: string) => Promise<StrategySignal | undefined>;
-  listStrategySignals: () => Promise<StrategySignal[]>;
-  deleteStrategySignal: (id: string) => Promise<void>;
-  listStrategyRunLogs: () => Promise<StrategyRunLog[]>;
+
   listNotes: () => Promise<NoteTreeItem[]>;
   readNote: (notePath: string) => Promise<NoteFile>;
   saveNote: (notePath: string, content: string) => Promise<void>;
@@ -618,9 +323,7 @@ export type FinBoxApi = {
   onState: (callback: (state: AppState) => void) => () => void;
   onUpdateStatus: (callback: (status: UpdateStatus) => void) => () => void;
   onRequestLogs: (callback: (logs: RequestLogItem[]) => void) => () => void;
-  onAiAnalysisProcess: (callback: (log: AiAnalysisProcessLog) => void) => () => void;
-  onAiTerminalSession: (callback: (log: AiTerminalSessionLog) => void) => () => void;
-  onStrategySignalsChanged: (callback: (signals: StrategySignal[]) => void) => () => void;
+
   onCycleStock: (callback: () => void) => () => void;
   onToggleExpand: (callback: () => void) => () => void;
   onOpenWatchlistFloatSettings: (callback: () => void) => () => void;

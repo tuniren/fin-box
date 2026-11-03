@@ -65,11 +65,6 @@ detail:
   returnRate: 收益率
   quoteTime: 行情时间
   updated: 更新时间
-  aiAnalysis: AI分析
-  aiAnalyzing: 分析中...
-  aiHistory: AI分析历史
-  aiProcess: AI分析过程
-  aiRiskNotice: AI输出仅用于辅助复盘，不构成投资建议。
   tags: 标签
   noTags: 暂无标签
   removeTag: 删除标签
@@ -83,9 +78,6 @@ detail:
   removePosition: 删除持仓
   unsavedPositionChanges: 持仓修改未保存
   savePositions: 保存持仓
-  discussions: 同花顺讨论
-  loadDiscussionsHint: 点击加载同花顺讨论
-  noComments: 暂无评论
 update:
   title: 软件更新
   check: 检查更新
@@ -192,51 +184,6 @@ news:
   latestLoaded: 已更新最新资讯
   latestUpToDate: 已是最新资讯
   noMore: 没有更多资讯
-aiTab:
-  chatInput: 聊天输入
-  promptPlaceholder: 询问任何问题
-  defaultSymbol: 标的
-  noSymbol: 未选择标的
-  confirmContextOnSend: 发送时仍需确认上下文
-  contextOptions: 本次可携带信息
-  contextCollapsedHint: 已折叠
-  contextExpandedHint: 已展开
-  stage2Notice: 阶段 3 会在用户发送后启动受限 AI 终端；发送前不会读取真实数据。
-  send: 发送
-  emptyTitle: 暂无聊天会话
-  emptyHint: 输入问题并发送后，会在这里生成独立会话。用户消息、分析摘要和后续工具结果都将支持单独折叠。
-  userMessage: 用户消息
-  authorizationSummary: 发送前授权摘要
-  targetSymbol: 目标标的
-  selectedContexts: 上下文选择
-  noContext: 未携带上下文
-  stage2Summary: 阶段 2 仅创建本地聊天会话和授权摘要，不调用 AI，不读取或发送任何实际数据。
-  stage3Summary: 阶段 3 将启动受限 AI 终端；InitialContext 只包含本次授权摘要，不主动读取真实数据。
-  unspecified: 未指定
-  collapseBlock: 折叠内容块
-  expandBlock: 展开内容块
-  copyBlock: 复制内容块
-aiContext:
-  quote: 当前行情
-  dailyKline: 日 K
-  minute: 分时
-  positionSummary: 持仓摘要
-  positionDetail: 分账户明细
-  profit: 成本盈亏
-  notes: 个股笔记
-  tradingLogic: 交易逻辑库
-  news: 资讯
-  comments: 讨论
-aiScope:
-  marketData: 市场数据
-  privateData: 私有数据
-  tradingLogic: 交易逻辑
-  noiseData: 噪声数据
-aiBlock:
-  message: 消息
-  answer: 回答
-  analysis: 分析
-  toolResult: 工具结果
 portfolio:
   title: 持仓管理
   description: 统一查询、排序和维护所有股票的持仓数据；包含 0 股股票。
@@ -288,15 +235,12 @@ error:
   loadNewsFailed: 加载7X24资讯失败。
   invalidNumbers: 请输入有效数字。
   saveAccountFailed: 保存账户配置失败。
-  loadCommentsFailed: 加载评论失败。
   tagEditorUnavailable: 标签编辑功能不可用，请重启应用。
   saveTagsFailed: 保存标签失败。
   positionEditorUnavailable: 持仓编辑功能不可用，请重启应用。
   savePositionsFailed: 保存持仓失败。
   aliasEditorUnavailable: 别名编辑功能不可用，请重启应用。
   saveAliasFailed: 保存别名失败。
-  aiAnalysisUnavailable: AI分析 IPC 不可用，请重启应用。
-  aiAnalysisFailed: AI分析失败。
 sector:
   watchFloatShow: 自选浮窗显示行业板块
   watchFloatHint: 为每只浮窗股票选择要展示的行业；选择与个股详情共享。没有可选行业时，请先打开该股票详情。

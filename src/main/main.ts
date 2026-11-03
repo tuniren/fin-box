@@ -4,7 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { AppCore } from "./core";
 import { clearRequestLogs, getRequestLogs, onRequestLogsChanged } from "./requestLog";
-import type { AiAnalysisConfig, AiTerminalSessionInput, AppConfig, KLinePoint, KLineScale, MottoConfig, NoteTreeItem, Position, StockJournalNote, StrategyScriptInput, UpdateStatus, WatchFloatColumn, WatchFloatConfig } from "../shared/types";
+import type { AppConfig, KLinePoint, KLineScale, MottoConfig, NoteTreeItem, Position, StockJournalNote, UpdateStatus, WatchFloatColumn, WatchFloatConfig } from "../shared/types";
 
 process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = "true";
 
@@ -672,7 +672,7 @@ ipcMain.handle("update-account-config", (_event, patch: Pick<AppConfig, "total_i
 ipcMain.handle("update-motto", (_event, motto: MottoConfig) => core.updateMotto(motto));
 ipcMain.handle("update-watch-float-config", (_event, config: WatchFloatConfig) => core.updateWatchFloatConfig(config));
 ipcMain.handle("update-watch-tree-columns", (_event, columns: WatchFloatColumn[]) => core.updateWatchTreeColumns(columns));
-ipcMain.handle("update-ai-analysis-config", (_event, config: AiAnalysisConfig) => core.updateAiAnalysisConfig(config));
+
 ipcMain.handle("update-trading-refresh-interval", (_event, intervalMs: number) => core.updateTradingRefreshInterval(intervalMs));
 ipcMain.handle("update-window-close-behavior", (_event, behavior: AppConfig["window_close_behavior"]) => core.updateWindowCloseBehavior(behavior));
 ipcMain.handle("update-theme", (_event, themeName: string) => core.updateTheme(themeName));
@@ -695,20 +695,7 @@ ipcMain.handle("open-external-url", (_event, url: string) => {
   if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") throw new Error("Unsupported URL.");
   return shell.openExternal(parsedUrl.toString());
 });
-ipcMain.handle("fetch-stock-comments", (_event, code: string, page: number) => core.fetchStockComments(code, page));
-ipcMain.handle("get-ai-analysis-history", (_event, code: string) => core.getAiAnalysisHistory(code));
-ipcMain.handle("get-ai-analysis-process", (_event, code: string) => core.getAiAnalysisProcess(code));
-ipcMain.handle("run-ai-analysis", (_event, code: string) => core.runAiAnalysis(code));
-ipcMain.handle("start-ai-terminal-session", (_event, input: AiTerminalSessionInput) => core.startAiTerminalSession(input));
-ipcMain.handle("send-ai-terminal-input", (_event, sessionId: string, input: string) => core.sendAiTerminalInput(sessionId, input));
-ipcMain.handle("stop-ai-terminal-session", (_event, sessionId: string) => core.stopAiTerminalSession(sessionId));
-ipcMain.handle("list-strategy-scripts", () => core.listStrategyScripts());
-ipcMain.handle("save-strategy-script", (_event, script: Partial<StrategyScriptInput> & { id?: string }) => core.saveStrategyScript(script));
-ipcMain.handle("delete-strategy-script", (_event, id: string) => core.deleteStrategyScript(id));
-ipcMain.handle("run-strategy-script", (_event, id: string, code: string) => core.runStrategyScript(id, code));
-ipcMain.handle("list-strategy-signals", () => core.listStrategySignals());
-ipcMain.handle("delete-strategy-signal", (_event, id: string) => core.deleteStrategySignal(id));
-ipcMain.handle("list-strategy-run-logs", () => core.listStrategyRunLogs());
+
 ipcMain.handle("list-notes", () => readNotesTree());
 ipcMain.handle("read-note", (_event, notePath: string) => {
   const absolutePath = resolveNotePath(notePath);

@@ -1,14 +1,11 @@
-﻿import { useEffect, useMemo, useRef, useState } from "react";
-import { Button, Checkbox, Input, Popover, Select, Tag as AntTag, Tree } from "antd";
 import type { TreeDataNode } from "antd";
+import { Tag as AntTag, Input, Tree } from "antd";
 import {
-  Activity,
   BookOpen,
   BriefcaseBusiness,
   Check,
   ChevronLeft,
   ChevronRight,
-  CircleHelp,
   Edit3,
   Files,
   FileText,
@@ -16,7 +13,6 @@ import {
   FolderOpen,
   GripVertical,
   Maximize2,
-  MessageSquare,
   Minus,
   MoreHorizontal,
   Network,
@@ -26,13 +22,14 @@ import {
   Plus,
   RefreshCw,
   Save,
-  Square,
   Settings,
+  Square,
   Tag,
   Trash2,
   X
 } from "lucide-react";
-import type { CSSProperties, DragEvent as ReactDragEvent, FormEvent, Key, KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent, ReactNode, UIEvent as ReactUIEvent, WheelEvent as ReactWheelEvent } from "react";
+import type { CSSProperties, FormEvent, Key, DragEvent as ReactDragEvent, KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent, ReactNode, UIEvent as ReactUIEvent, WheelEvent as ReactWheelEvent } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   dayProfit,
   displayName,
@@ -44,18 +41,18 @@ import {
   totalShares
 } from "../../shared/finance";
 import { currentTheme, profitColor } from "../../shared/theme";
-import type { AiDataScope, AiTerminalSessionLog, AppConfig, AppState, CamouflageDocument, ContextBundle, MottoConfig, NoteTreeItem, Position, RequestLogItem, StockCommentItem, StockCommentPage, StockJournal, StockNewsItem, StockNewsPage, StockSearchResult, StockStatus, StrategyRunLog, StrategyScript, StrategyScriptInput, StrategyScriptParam, StrategySignal, Theme, UpdateStatus, WatchFloatColumn, WatchFloatConfig } from "../../shared/types";
+import type { AppConfig, AppState, CamouflageDocument, MottoConfig, NoteTreeItem, Position, RequestLogItem, StockJournal, StockNewsItem, StockSearchResult, StockStatus, Theme, UpdateStatus, WatchFloatColumn, WatchFloatConfig } from "../../shared/types";
+import { IndustryPanel, SectorBadge } from "../components/IndustryPanel";
 import { KLineView } from "../components/KLineView";
 import { MarketStatusBar } from "../components/MarketStatusBar";
 import { MinutePanel } from "../components/MinutePanel";
-import { IndustryPanel, SectorBadge } from "../components/IndustryPanel";
-import { WatchFloatIndustrySettings } from "../components/WatchFloatIndustrySettings";
 import { SearchPane } from "../components/SearchPane";
-import { TradingIntensityPanel } from "../components/TradingIntensityPanel";
+import { WatchFloatIndustrySettings } from "../components/WatchFloatIndustrySettings";
+
+import type { WatchTreeSelection } from "../components/WatchTree";
 import { DEFAULT_WATCH_TREE_EXPANDED_KEYS, GroupedWatchlist, mergeWatchGroups, normalizeWatchGroupName } from "../components/WatchTree";
-import type { WatchTreeSelection } from "../components/WatchTree";
-import { formatMaybe, formatSigned, stockPercent } from "../utils";
 import { useI18n, type TranslationKey } from "../i18n";
+import { formatMaybe, formatSigned, stockPercent } from "../utils";
 
 const api = window.finBox;
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
@@ -77,93 +74,7 @@ const watchFloatMetricColorOptions: Array<{ value: "change" | "day_profit"; labe
   { value: "change", label: "涨幅" },
   { value: "day_profit", label: "今日收益" }
 ];
-const aiContextOptions: Array<{ value: AiContextKey; labelKey: TranslationKey; scopeKey: TranslationKey }> = [
-  { value: "quote", labelKey: "aiContext.quote", scopeKey: "aiScope.marketData" },
-  { value: "daily_kline", labelKey: "aiContext.dailyKline", scopeKey: "aiScope.marketData" },
-  { value: "minute", labelKey: "aiContext.minute", scopeKey: "aiScope.marketData" },
-  { value: "position_summary", labelKey: "aiContext.positionSummary", scopeKey: "aiScope.privateData" },
-  { value: "position_detail", labelKey: "aiContext.positionDetail", scopeKey: "aiScope.privateData" },
-  { value: "profit", labelKey: "aiContext.profit", scopeKey: "aiScope.privateData" },
-  { value: "notes", labelKey: "aiContext.notes", scopeKey: "aiScope.privateData" },
-  { value: "trading_logic", labelKey: "aiContext.tradingLogic", scopeKey: "aiScope.tradingLogic" },
-  { value: "news", labelKey: "aiContext.news", scopeKey: "aiScope.noiseData" },
-  { value: "comments", labelKey: "aiContext.comments", scopeKey: "aiScope.noiseData" }
-];
-const defaultAiContextSelection: AiContextSelection = {
-  quote: true,
-  position_summary: false,
-  position_detail: false,
-  profit: false,
-  notes: false,
-  trading_logic: false,
-  daily_kline: false,
-  minute: false,
-  news: false,
-  comments: false
-};
-const createMockAiSessions = (locale: string, t: (key: TranslationKey) => string): AiChatSession[] => {
-  const now = Date.now();
-  const zh = locale === "zh-CN";
-  return [
-    {
-      id: "ai-chat-mock-1",
-      title: zh ? "查看是否适合继续持有" : "Review current holding thesis",
-      code: zh ? "未选择标的" : "No symbols selected",
-      createdAt: now - 600000,
-      updatedAt: now - 560000,
-      blocks: [
-        {
-          id: "ai-chat-mock-1-user",
-          kind: "user",
-          title: t("aiTab.userMessage"),
-          content: zh ? "帮我检查一下目前的持仓逻辑，重点看风险点。" : "Help me review the current holding logic, focusing on risks.",
-          collapsed: false
-        },
-        {
-          id: "ai-chat-mock-1-analysis",
-          kind: "analysis",
-          title: t("aiTab.authorizationSummary"),
-          content: zh
-            ? "目标标的: 未选择标的\n已选上下文: 当前行情 (市场数据), 持仓摘要 (私有数据)\n阶段 2 mock: 仅用于调试聊天样式，不调用 AI，不读取实际数据。"
-            : "Target symbols: No symbols selected\nSelected contexts: Current quote (Market data), Position summary (Private data)\nStage 2 mock: Used only for chat styling. It does not call AI or read real data.",
-          collapsed: false
-        },
-        {
-          id: "ai-chat-mock-1-assistant",
-          kind: "assistant",
-          title: zh ? "样式预览回答" : "Mock answer",
-          content: zh
-            ? "当前阶段先确认交互结构：用户消息靠右，分析和回答靠左；上下文授权通过底部悬浮按钮打开弹窗。\n\n后续接入真实会话时，这里会展示 AI 的连续回答。"
-            : "This stage verifies the interaction structure first: user messages align right, analysis and answers align left, and context authorization opens from the floating composer button.\n\nAfter real sessions are wired in, AI responses will appear here.",
-          collapsed: false
-        }
-      ]
-    },
-    {
-      id: "ai-chat-mock-2",
-      title: zh ? "需要查看 K 线再判断" : "Need K-line before judging",
-      code: zh ? "示例会话" : "Mock session",
-      createdAt: now - 300000,
-      updatedAt: now - 240000,
-      blocks: [
-        {
-          id: "ai-chat-mock-2-user",
-          kind: "user",
-          title: t("aiTab.userMessage"),
-          content: zh ? "如果需要 K 线，你应该先说明原因再请求读取。" : "If K-line data is needed, explain why before requesting it.",
-          collapsed: false
-        },
-        {
-          id: "ai-chat-mock-2-tool",
-          kind: "tool",
-          title: zh ? "工具结果样式预览" : "Tool result preview",
-          content: "tool: get_kline\nstatus: mock\nrange: daily\nreason: verify trend and volume structure",
-          collapsed: false
-        }
-      ]
-    }
-  ];
-};
+
 const validNewsItems = (items: StockNewsItem[] | undefined) => (
   Array.isArray(items) ? items.filter((item) => item && typeof item === "object") : []
 );
@@ -179,8 +90,8 @@ const mergeNewsItems = (current: StockNewsItem[], incoming: StockNewsItem[], dir
   const merged = direction === "prepend" ? [...freshItems, ...current] : [...current, ...freshItems];
   return trimNewsItems(merged, direction);
 };
-type ActivityView = "watchlist" | "portfolio" | "strategy" | "news" | "requests" | "notes" | "help" | "settings";
-type ActiveView = "camouflage" | "details" | "chart" | "note" | "news" | "requests" | "help" | "settings" | "request-log" | "ai-analysis" | "portfolio" | "strategy";
+type ActivityView = "watchlist" | "portfolio" | "news" | "requests" | "notes" | "help" | "settings";
+type ActiveView = "camouflage" | "details" | "chart" | "note" | "news" | "requests" | "help" | "settings" | "request-log" | "portfolio";
 type StockView = "details" | "chart";
 type DetailTab = { code: string };
 type DetailTabContextMenu = { code: string; x: number; y: number };
@@ -196,149 +107,7 @@ type WatchPromptState = {
   tag?: string;
   stockCode?: string;
 };
-type AiContextKey = "quote" | "position_summary" | "position_detail" | "profit" | "notes" | "trading_logic" | "daily_kline" | "minute" | "news" | "comments";
-type AiContextSelection = Record<AiContextKey, boolean>;
-type AiChatBlockKind = "user" | "assistant" | "analysis" | "tool" | "terminal";
-type AiChatBlock = {
-  id: string;
-  kind: AiChatBlockKind;
-  title: string;
-  content: string;
-  collapsed: boolean;
-};
-type AiChatSession = {
-  id: string;
-  title: string;
-  code?: string;
-  createdAt: number;
-  updatedAt: number;
-  blocks: AiChatBlock[];
-};
-const aiChatStyles = {
-  page: {
-    display: "grid",
-    gridTemplateRows: "minmax(0, 1fr)",
-    minHeight: 0,
-    overflow: "hidden",
-    background: "#ffffff"
-  },
-  contextPopover: {
-    display: "grid",
-    gap: 14,
-    width: 640,
-    maxWidth: "calc(100vw - 32px)"
-  },
-  chatPane: {
-    display: "grid",
-    gridTemplateRows: "minmax(0, 1fr)",
-    minWidth: 0,
-    minHeight: 0,
-    overflow: "hidden",
-    position: "relative",
-    background: "#ffffff"
-  },
-  shell: {
-    display: "grid",
-    gridTemplateRows: "minmax(0, 1fr)",
-    minHeight: 0,
-    margin: 0,
-    border: 0,
-    background: "#ffffff"
-  },
-  scroll: {
-    minHeight: 0,
-    overflow: "auto",
-    background: "#ffffff"
-  },
-  thread: {
-    display: "grid",
-    gap: 12,
-    width: "100%",
-    minWidth: 0,
-    margin: 0,
-    padding: "12px 14px 220px"
-  },
-  session: {
-    display: "grid",
-    gap: 8,
-    minWidth: 0
-  },
-  sessionHeader: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 10,
-    minWidth: 0,
-    color: "#6b7280",
-    fontSize: 12
-  },
-  sessionTitle: {
-    display: "grid",
-    gap: 2,
-    minWidth: 0
-  },
-  sessionActions: {
-    display: "flex",
-    alignItems: "center",
-    gap: 6,
-    flex: "0 0 auto"
-  },
-  composerWrap: {
-    position: "absolute",
-    right: 0,
-    bottom: 0,
-    left: 0,
-    zIndex: 4,
-    padding: "8px 12px 10px",
-    background: "linear-gradient(to bottom, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0.96) 20%, #ffffff 100%)",
-    pointerEvents: "none"
-  },
-  composer: {
-    display: "grid",
-    gap: 8,
-    width: "100%",
-    margin: 0,
-    padding: "8px 10px",
-    border: "1px solid #dedede",
-    borderRadius: 24,
-    background: "#ffffff",
-    boxShadow: "0 8px 24px rgba(0, 0, 0, 0.08)",
-    pointerEvents: "auto"
-  },
-  composerInputRow: {
-    display: "grid",
-    gridTemplateColumns: "38px minmax(0, 1fr) 38px",
-    gap: 8,
-    alignItems: "end"
-  },
-  iconButton: {
-    display: "inline-grid",
-    placeItems: "center",
-    width: 32,
-    height: 32,
-    border: 0,
-    borderRadius: 16,
-    background: "transparent",
-    color: "#4b5563",
-    cursor: "pointer"
-  },
-  sendButton: {
-    display: "inline-grid",
-    placeItems: "center",
-    width: 38,
-    height: 38,
-    border: 0,
-    borderRadius: 19,
-    background: "#111827",
-    color: "#ffffff",
-    cursor: "pointer"
-  },
-  disabledSendButton: {
-    background: "#d9d9d9",
-    color: "#ffffff",
-    cursor: "not-allowed"
-  }
-} satisfies Record<string, CSSProperties>;
+
 const defaultMotto: MottoConfig = {
   text: "\u51b7\u9759\uff0c\u8010\u5fc3\uff0c\u53ea\u505a\u770b\u5f97\u61c2\u7684\u51b3\u5b9a\u3002",
   font_family: "Microsoft YaHei",
@@ -352,15 +121,6 @@ const settingsNavItems: Array<{ value: SettingsView; labelKey: `settings.${"gene
   { value: "watch-float", labelKey: "settings.watchlistFloat" },
   { value: "camouflage-float", labelKey: "settings.camouflageFloat" }
 ];
-
-function activityViewTitle(view: ActivityView) {
-  if (view === "portfolio") return "Portfolio";
-  if (view === "strategy") return "策略监控";
-  if (view === "news") return "7X24";
-  if (view === "requests") return "请求日志";
-  if (view === "settings") return "设置";
-  return "使用说明";
-}
 function MenuCheckItem({ checked, radio = false, onClick, children }: { checked: boolean; radio?: boolean; onClick: () => void; children: ReactNode }) {
   return (
     <button className="menu-check-option" role={radio ? "menuitemradio" : "menuitemcheckbox"} aria-checked={checked} onClick={onClick}>
@@ -571,11 +331,6 @@ function parseLocalDate(value: string) {
   return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
 }
 
-function monthStart(value: string) {
-  const date = parseLocalDate(value);
-  return new Date(date.getFullYear(), date.getMonth(), 1);
-}
-
 export function MainWorkspace() {
   const { locale, setLocale, t } = useI18n();
   const state = useAppState();
@@ -595,11 +350,7 @@ export function MainWorkspace() {
   const [detailTabs, setDetailTabs] = useState<DetailTab[]>([]);
   const [activeDetailCode, setActiveDetailCode] = useState<string>();
   const [detailTabContextMenu, setDetailTabContextMenu] = useState<DetailTabContextMenu>();
-  const [aiAnalysisOpen, setAiAnalysisOpen] = useState(false);
-  const [aiContextCodes, setAiContextCodes] = useState<string[]>([]);
-  const [aiPromptDraft, setAiPromptDraft] = useState("");
-  const [aiContextSelection, setAiContextSelection] = useState<AiContextSelection>(defaultAiContextSelection);
-  const [aiSessions, setAiSessions] = useState<AiChatSession[]>(() => createMockAiSessions(locale, t));
+
   const [explorerVisible, setExplorerVisible] = useState(true);
   const [editorVisible, setEditorVisible] = useState(true);
   const [sideVisible, setSideVisible] = useState(true);
@@ -660,7 +411,7 @@ export function MainWorkspace() {
       setOpenStockViews(new Set());
       setDetailTabs([]);
       setActiveDetailCode(undefined);
-      setActiveView((view) => (view === "details" || view === "chart" ? (aiAnalysisOpen ? "ai-analysis" : "camouflage") : view));
+      setActiveView((view) => (view === "details" || view === "chart" ? ("camouflage") : view));
       return;
     }
     if (!selectedCode || !visibleStocks.some((stock) => stock.config.code === selectedCode)) {
@@ -669,7 +420,7 @@ export function MainWorkspace() {
     const knownCodes = new Set(visibleStocks.map((stock) => stock.config.code.toLowerCase()));
     setDetailTabs((tabs) => tabs.filter((tab) => knownCodes.has(tab.code.toLowerCase())));
     setActiveDetailCode((code) => code && knownCodes.has(code.toLowerCase()) ? code : undefined);
-  }, [selectedCode, visibleStocks, aiAnalysisOpen]);
+  }, [selectedCode, visibleStocks]);
 
   useEffect(() => {
     let cancelled = false;
@@ -723,24 +474,6 @@ export function MainWorkspace() {
       unsubscribe();
     };
   }, []);
-
-  useEffect(() => api.onAiTerminalSession((log) => {
-    setAiSessions((sessions) => sessions.map((session) => (
-      session.id === log.id
-        ? {
-            ...session,
-            updatedAt: log.updatedAt,
-            blocks: session.blocks.map((block) => block.id === `${log.id}-terminal`
-              ? {
-                  ...block,
-                  title: `AI 终端 · ${terminalStatusLabel(log.status)}`,
-                  content: formatAiTerminalLog(log)
-                }
-              : block)
-          }
-        : session
-    )));
-  }), []);
 
   useEffect(() => {
     if (!selectedRequestLogId) return;
@@ -925,22 +658,6 @@ export function MainWorkspace() {
     setEditorVisible(true);
   };
 
-  const openAiAnalysisTab = (_code?: string) => {
-    setAiAnalysisOpen(true);
-    setActiveView("ai-analysis");
-    setEditorVisible(true);
-  };
-
-  const closeAiAnalysisTab = () => {
-    setAiAnalysisOpen(false);
-    setActiveView((current) => {
-      if (current !== "ai-analysis") return current;
-      if (detailsOpen) return "details";
-      if (chartOpen) return "chart";
-      return "camouflage";
-    });
-  };
-
   const openDetailTab = (code: string) => {
     const stock = visibleStocks.find((item) => item.config.code.toLowerCase() === code.toLowerCase());
     if (!stock) return;
@@ -964,7 +681,7 @@ export function MainWorkspace() {
     setActiveView((current) => {
       if (current !== view) return current;
       if (detailsOpen) return "details";
-      if (aiAnalysisOpen) return "ai-analysis";
+
       return "camouflage";
     });
   };
@@ -977,7 +694,7 @@ export function MainWorkspace() {
       if (activeDetailCode?.toLowerCase() === normalizedCode) {
         const fallback = next[Math.max(0, Math.min(index, next.length - 1))];
         setActiveDetailCode(fallback?.code);
-        setActiveView(fallback ? "details" : chartOpen ? "chart" : aiAnalysisOpen ? "ai-analysis" : "camouflage");
+        setActiveView(fallback ? "details" : chartOpen ? "chart" : "camouflage");
       }
       return next;
     });
@@ -1010,7 +727,7 @@ export function MainWorkspace() {
   const closeAllDetailTabs = () => {
     setDetailTabs([]);
     setActiveDetailCode(undefined);
-    setActiveView(chartOpen ? "chart" : aiAnalysisOpen ? "ai-analysis" : "camouflage");
+    setActiveView(chartOpen ? "chart" : "camouflage");
   };
 
   const openDetailTabContextMenu = (code: string, event: ReactMouseEvent<HTMLButtonElement>) => {
@@ -1414,116 +1131,6 @@ export function MainWorkspace() {
     setActiveView("requests");
   };
 
-  const updateAiContextSelection = (key: AiContextKey, checked: boolean) => {
-    setAiContextSelection((selection) => ({ ...selection, [key]: checked }));
-  };
-
-  const submitAiChatPrompt = (event: FormEvent) => {
-    event.preventDefault();
-    const prompt = aiPromptDraft.trim();
-    if (!prompt) return;
-    const selectedStocks = aiContextCodes
-      .map((code) => visibleStocks.find((item) => item.config.code.toLowerCase() === code.toLowerCase()))
-      .filter((item): item is StockStatus => Boolean(item));
-    const selectedContexts = aiContextOptions.filter((option) => aiContextSelection[option.value]);
-    const now = Date.now();
-    const sessionId = `ai-chat-${now}`;
-    const contextText = selectedContexts.length
-      ? selectedContexts.map((option) => `${t(option.labelKey)} (${t(option.scopeKey)})`).join(", ")
-      : t("aiTab.noContext");
-    const session: AiChatSession = {
-      id: sessionId,
-      title: prompt.length > 24 ? `${prompt.slice(0, 24)}...` : prompt,
-      code: selectedStocks.map((stock) => stock.config.code).join(", ") || undefined,
-      createdAt: now,
-      updatedAt: now,
-      blocks: [
-        {
-          id: `${sessionId}-user`,
-          kind: "user",
-          title: t("aiTab.userMessage"),
-          content: prompt,
-          collapsed: false
-        },
-        {
-          id: `${sessionId}-analysis`,
-          kind: "analysis",
-          title: t("aiTab.authorizationSummary"),
-          content: [
-            `${t("aiTab.targetSymbol")}: ${selectedStocks.length ? selectedStocks.map((stock) => `${displayName(stock)} ${stock.config.code}`).join(", ") : t("aiTab.noSymbol")}`,
-            `${t("aiTab.selectedContexts")}: ${contextText}`,
-            t("aiTab.stage3Summary")
-          ].join("\n"),
-          collapsed: false
-        },
-        {
-          id: `${sessionId}-terminal`,
-          kind: "terminal",
-          title: "AI 终端 · 启动中",
-          content: "正在启动受限 AI 终端会话...",
-          collapsed: false
-        }
-      ]
-    };
-    setAiSessions((items) => [...items, session]);
-    setAiPromptDraft("");
-    setAiAnalysisOpen(true);
-    setActiveView("ai-analysis");
-    const contextBundle: ContextBundle = {
-      id: `${sessionId}-context`,
-      sessionId,
-      code: selectedStocks[0]?.config.code ?? "",
-      createdAt: now,
-      includedScopes: selectedContexts.map((option) => aiContextDataScope(option.value)),
-      data: {}
-    };
-    void api.startAiTerminalSession({
-      sessionId,
-      prompt,
-      code: selectedStocks[0]?.config.code,
-      contextBundle
-    }).catch((error) => {
-      const message = error instanceof Error ? error.message : String(error);
-      setAiSessions((items) => items.map((item) => item.id === sessionId
-        ? {
-            ...item,
-            blocks: item.blocks.map((block) => block.id === `${sessionId}-terminal`
-              ? { ...block, title: "AI 终端 · 启动失败", content: message }
-              : block)
-          }
-        : item));
-    });
-  };
-
-  const sendAiTerminalInput = (sessionId: string, value: string) => {
-    void api.sendAiTerminalInput(sessionId, value).catch((error) => {
-      const message = error instanceof Error ? error.message : String(error);
-      setAiSessions((items) => items.map((item) => item.id === sessionId
-        ? {
-            ...item,
-            blocks: item.blocks.map((block) => block.id === `${sessionId}-terminal`
-              ? { ...block, content: `${block.content}\n\n发送失败: ${message}` }
-              : block)
-          }
-        : item));
-    });
-  };
-
-  const stopAiTerminalInput = (sessionId: string) => {
-    void api.stopAiTerminalSession(sessionId);
-  };
-
-  const toggleAiChatBlock = (sessionId: string, blockId: string) => {
-    setAiSessions((sessions) => sessions.map((session) => (
-      session.id === sessionId
-        ? {
-            ...session,
-            blocks: session.blocks.map((block) => block.id === blockId ? { ...block, collapsed: !block.collapsed } : block)
-          }
-        : session
-    )));
-  };
-
   const saveStrategyNote = async () => {
     if (!detailStockCode) return;
     setJournalSaving(true);
@@ -1575,7 +1182,7 @@ export function MainWorkspace() {
     }
 
     setExplorerVisible(true);
-    if (activeView === "news" || activeView === "requests" || activeView === "note" || activeView === "help" || activeView === "settings" || activeView === "request-log" || activeView === "portfolio" || activeView === "strategy" || activeView === "ai-analysis") {
+    if (activeView === "news" || activeView === "requests" || activeView === "note" || activeView === "help" || activeView === "settings" || activeView === "request-log" || activeView === "portfolio") {
       setActiveView(detailsOpen ? "details" : chartOpen ? "chart" : "camouflage");
     }
   };
@@ -1688,8 +1295,6 @@ export function MainWorkspace() {
     ? "transformer.cpp"
     : activeView === "portfolio"
     ? t("portfolio.title")
-    : activeView === "strategy"
-      ? "策略监控"
     : activeView === "news"
       ? "7X24"
       : activeView === "requests"
@@ -1700,9 +1305,7 @@ export function MainWorkspace() {
             ? settingsViewLabel(settingsView, t)
             : activeView === "request-log"
               ? "请求报文"
-              : activeView === "ai-analysis"
-                ? t("detail.aiAnalysis")
-                : activeDetailStock
+              : activeDetailStock
                   ? activeDetailStock.config.code
                   : selectedStock
                     ? selectedStock.config.code
@@ -1803,12 +1406,12 @@ export function MainWorkspace() {
           <div className="activity-top">
             <button className={`activity-item ${activityView === "watchlist" ? "active" : ""}`} onClick={() => toggleActivityPane("watchlist")} aria-label="Explorer"><Files size={24} /></button>
             <button className={`activity-item ${activityView === "portfolio" ? "active" : ""}`} onClick={() => toggleActivityPane("portfolio")} aria-label={t("portfolio.title")} title={t("portfolio.title")}><BriefcaseBusiness size={23} /></button>
-            <button className={`activity-item ${activityView === "strategy" ? "active" : ""}`} onClick={() => toggleActivityPane("strategy")} aria-label="策略监控" title="策略监控"><Activity size={23} /></button>
+
             <button className={`activity-item ${activityView === "news" ? "active" : ""}`} onClick={() => toggleActivityPane("news")} aria-label="7x24"><Newspaper size={23} /></button>
             <button className={`activity-item ${activityView === "requests" ? "active" : ""}`} onClick={() => toggleActivityPane("requests")} aria-label="请求日志" title="请求日志">
               <Network size={23} />
             </button>
-            <button className={`activity-item ${activeView === "ai-analysis" ? "active" : ""}`} onClick={() => openAiAnalysisTab()} aria-label={t("detail.aiAnalysis")} title={t("detail.aiAnalysis")}><MessageSquare size={23} /></button>
+
             <button className={`activity-item ${activityView === "help" ? "active" : ""}`} onClick={() => toggleActivityPane("help")} aria-label="使用说明" title="使用说明"><BookOpen size={23} /></button>
           </div>
           <div className="activity-bottom">
@@ -1926,27 +1529,14 @@ export function MainWorkspace() {
                 </button>
               </div>
             )}
-            {aiAnalysisOpen && (
-              <button className={`editor-tab ${activeView === "ai-analysis" ? "active" : ""}`} onClick={() => setActiveView("ai-analysis")}>
-                <MessageSquare size={14} />
-                {t("detail.aiAnalysis")}
-                <span className="tab-close" onClick={(event) => { event.stopPropagation(); closeAiAnalysisTab(); }} role="button" aria-label="Close AI analysis tab" title="Close AI analysis tab">
-                  <X size={14} />
-                </span>
-              </button>
-            )}
+
             {activeView === "portfolio" && (
               <button className="editor-tab active">
                 <FileText size={14} />
                 {t("portfolio.title")}
               </button>
             )}
-            {activeView === "strategy" && (
-              <button className="editor-tab active">
-                <Activity size={14} />
-                策略监控
-              </button>
-            )}
+
             {activeView === "news" && (
               <button className="editor-tab active">
                 <Newspaper size={14} />
@@ -2007,8 +1597,6 @@ export function MainWorkspace() {
                 theme={theme}
                 onOpenDetails={(stock) => openDetailTab(stock.config.code)}
               />
-            ) : activeView === "strategy" ? (
-              <StrategyMonitorView stocks={visibleStocks} />
             ) : activeView === "news" ? (
               renderMarketNewsPage()
             ) : activeView === "requests" ? (
@@ -2019,23 +1607,8 @@ export function MainWorkspace() {
               renderSettingsPage()
             ) : activeView === "request-log" && selectedRequestLog ? (
               <RequestLogDetail item={selectedRequestLog} />
-            ) : activeView === "ai-analysis" ? (
-              <AiAnalysisTab
-                stocks={visibleStocks}
-                contextCodes={aiContextCodes}
-                promptDraft={aiPromptDraft}
-                contextSelection={aiContextSelection}
-                sessions={aiSessions}
-                onContextCodesChange={setAiContextCodes}
-                onPromptChange={setAiPromptDraft}
-                onContextSelectionChange={updateAiContextSelection}
-                onSubmit={submitAiChatPrompt}
-                onToggleBlock={toggleAiChatBlock}
-                onTerminalInput={sendAiTerminalInput}
-                onStopTerminal={stopAiTerminalInput}
-              />
             ) : activeDetailStock && activeView === "details" ? (
-              <StockDetail state={state} stock={activeDetailStock} theme={theme} onOpenChart={() => openStockView("chart")} onOpenAiAnalysis={() => openAiAnalysisTab(activeDetailStock.config.code)} />
+              <StockDetail state={state} stock={activeDetailStock} theme={theme} onOpenChart={() => openStockView("chart")}  />
             ) : selectedStock && activeView === "chart" ? (
               <KLineView code={selectedStock.config.code} name={displayName(selectedStock)} />
             ) : (
@@ -2142,15 +1715,6 @@ export function MainWorkspace() {
         </div>
       )}
     </main>
-  );
-}
-
-function HelpOutline() {
-  return (
-    <nav className="help-outline" aria-label="使用说明目录">
-      <strong>FinBox 使用说明</strong>
-      <span>快速开始</span><span>自选股票</span><span>行情详情</span><span>K线与分时</span><span>资讯与浮窗</span><span>界面与设置</span>
-    </nav>
   );
 }
 
@@ -2323,146 +1887,6 @@ function StockNoteCalendarView({ value, notedDates, onChange }: { value: string;
   );
 }
 
-function StockNotesPanel({
-  stock,
-  journal,
-  loading,
-  saving,
-  error,
-  strategyDraft,
-  savedStrategy,
-  dailyDate,
-  dailyDraft,
-  savedDaily,
-  onStrategyChange,
-  onDailyDateChange,
-  onDailyChange,
-  onSaveStrategy,
-  onSaveDaily
-}: {
-  stock?: StockStatus;
-  journal?: StockJournal;
-  loading: boolean;
-  saving: boolean;
-  error: string;
-  strategyDraft: string;
-  savedStrategy: string;
-  dailyDate: string;
-  dailyDraft: string;
-  savedDaily: string;
-  onStrategyChange: (value: string) => void;
-  onDailyDateChange: (value: string) => void;
-  onDailyChange: (value: string) => void;
-  onSaveStrategy: () => void;
-  onSaveDaily: () => void;
-}) {
-  const { t } = useI18n();
-  const notedDates = useMemo(() => new Set((journal?.notes ?? []).map((note) => note.date).filter((date): date is string => Boolean(date))), [journal]);
-  const strategyDirty = strategyDraft.trim() !== savedStrategy.trim();
-  const dailyDirty = dailyDraft.trim() !== savedDaily.trim();
-
-  if (!stock) {
-    return (
-      <div className="stock-notes-empty">
-        <strong>股票笔记</strong>
-        <span>打开某只股票的详情页后，在这里记录策略和每日复盘。</span>
-      </div>
-    );
-  }
-
-  return (
-    <div className="stock-notes-panel">
-      <header className="stock-notes-header">
-        <div>
-          <strong>{displayName(stock)}</strong>
-          <span>{stock.config.code}</span>
-        </div>
-        {loading && <small>加载中...</small>}
-      </header>
-
-      {error && <div className="save-error stock-notes-error">{error}</div>}
-
-      <section className="stock-note-section strategy-note-section">
-        <div className="stock-note-title">
-          <span>策略笔记</span>
-          <button className="tool-button compact-text" onClick={onSaveStrategy} disabled={saving || !strategyDirty}>
-            <Save size={13} />
-            保存
-          </button>
-        </div>
-        <textarea
-          value={strategyDraft}
-          onChange={(event) => onStrategyChange(event.target.value)}
-          placeholder="记录这只股票的操作策略、买卖条件、仓位计划。"
-        />
-      </section>
-
-      <section className="stock-note-section daily-note-section">
-        <div className="stock-note-title">
-          <span>每日笔记</span>
-          <button className="tool-button compact-text" onClick={onSaveDaily} disabled={saving || !dailyDirty}>
-            <Save size={13} />
-            保存
-          </button>
-        </div>
-        <StockNoteCalendar value={dailyDate} notedDates={notedDates} onChange={onDailyDateChange} />
-        <textarea
-          value={dailyDraft}
-          onChange={(event) => onDailyChange(event.target.value)}
-          placeholder={`${dailyDate} 的观察、盘中变化、复盘结论。`}
-        />
-      </section>
-    </div>
-  );
-}
-
-function StockNoteCalendar({ value, notedDates, onChange }: { value: string; notedDates: Set<string>; onChange: (value: string) => void }) {
-  const [viewMonth, setViewMonth] = useState(() => monthStart(value));
-
-  useEffect(() => {
-    setViewMonth(monthStart(value));
-  }, [value]);
-
-  const year = viewMonth.getFullYear();
-  const month = viewMonth.getMonth();
-  const firstDay = new Date(year, month, 1).getDay();
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const cells = Array.from({ length: firstDay + daysInMonth }, (_, index) => (index < firstDay ? 0 : index - firstDay + 1));
-  const changeMonth = (offset: number) => setViewMonth((current) => new Date(current.getFullYear(), current.getMonth() + offset, 1));
-
-  return (
-    <div className="stock-note-calendar">
-      <div className="stock-note-calendar-head">
-        <button className="icon-tool compact" onClick={() => changeMonth(-1)} aria-label="上个月" title="上个月">
-          <ChevronLeft size={14} />
-        </button>
-        <strong>{year}-{`${month + 1}`.padStart(2, "0")}</strong>
-        <button className="icon-tool compact" onClick={() => changeMonth(1)} aria-label="下个月" title="下个月">
-          <ChevronRight size={14} />
-        </button>
-      </div>
-      <div className="stock-note-weekdays">
-        <span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span>
-      </div>
-      <div className="stock-note-days">
-        {cells.map((day, index) => {
-          if (!day) return <span className="stock-note-day empty" key={`empty-${index}`} />;
-          const date = formatLocalDate(new Date(year, month, day));
-          return (
-            <button
-              className={`stock-note-day ${date === value ? "active" : ""} ${notedDates.has(date) ? "has-note" : ""}`}
-              key={date}
-              onClick={() => onChange(date)}
-            >
-              <span>{day}</span>
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
 function HelpDocument() {
   return (
     <article className="help-document">
@@ -2471,7 +1895,7 @@ function HelpDocument() {
       <h2>一、快速开始</h2><p>通过顶部“文件”菜单添加股票或刷新行情。左侧活动栏可切换自选股票、7X24 资讯和使用说明。</p>
       <h2>二、自选股票与分组</h2><p>在左侧自选区域新建分组，并使用“添加股票”将股票加入指定分组。股票可以拖动到其他分组；按住 Ctrl、Alt 或 Shift 拖动时会复制到目标分组。双击股票可打开详情页。</p>
       <h2>三、股票详情与持仓</h2><p>详情页展示最新价、涨跌幅、市值、今日盈亏和累计盈亏。可编辑股票别名、标签及不同账户的持仓数量和成本，修改后请点击保存。</p>
-      <h2>四、K线、分时与交易强度</h2><p>在“视图”菜单或详情页打开图表。详情页的“分时”按钮用于查看盘中走势；“交易强度”可展开查看当前成交量、估算成交量和历史排名。</p>
+      <h2>四、K线与分时</h2><p>在“视图”菜单或详情页打开图表。详情页的“分时”按钮用于查看盘中走势。</p>
       <h2>五、7X24 资讯</h2><p>点击左侧报纸图标查看实时市场资讯，可翻页或刷新。数据加载失败时会在资讯面板内显示错误，不影响其他功能。</p>
       <h2>六、浮窗功能</h2><p>通过“窗口”菜单打开伪装浮窗、自选浮窗或座右铭浮窗。伪装浮窗快捷键为 Ctrl+Alt+9，自选浮窗快捷键为 Ctrl+Alt+0。</p>
       <h2>七、界面显示</h2><p>“视图”菜单中的勾选项控制资源管理器、编辑区、侧边栏和状态栏是否显示。勾选表示展示，取消勾选表示隐藏。</p>
@@ -2654,425 +2078,16 @@ function formatRequestLogTime(value: number) {
   return new Date(value).toLocaleTimeString("zh-CN", { hour12: false });
 }
 
-function NotesPanel({
-  items,
-  selectedPath,
-  loading,
-  error,
-  onSelect,
-  onNewFile,
-  onNewFolder,
-  onRename,
-  onDelete
-}: {
-  items: NoteTreeItem[];
-  selectedPath: string;
-  loading: boolean;
-  error: string;
-  onSelect: (item: NoteTreeItem) => void;
-  onNewFile: (parentPath: string) => void;
-  onNewFolder: (parentPath: string) => void;
-  onRename: (item: NoteTreeItem) => void;
-  onDelete: (item: NoteTreeItem) => void;
-}) {
-  if (loading && items.length === 0) return <div className="empty-state">Loading notes...</div>;
-  if (!loading && items.length === 0) return <div className="empty-state">No notes</div>;
-
-  return (
-    <div className="notes-tree">
-      {error && <div className="save-error notes-error">{error}</div>}
-      {items.map((item) => (
-        <NoteTreeRow
-          item={item}
-          selectedPath={selectedPath}
-          level={0}
-          onSelect={onSelect}
-          onNewFile={onNewFile}
-          onNewFolder={onNewFolder}
-          onRename={onRename}
-          onDelete={onDelete}
-          key={item.path}
-        />
-      ))}
-    </div>
-  );
-}
-
-function NoteTreeRow({
-  item,
-  selectedPath,
-  level,
-  onSelect,
-  onNewFile,
-  onNewFolder,
-  onRename,
-  onDelete
-}: {
-  item: NoteTreeItem;
-  selectedPath: string;
-  level: number;
-  onSelect: (item: NoteTreeItem) => void;
-  onNewFile: (parentPath: string) => void;
-  onNewFolder: (parentPath: string) => void;
-  onRename: (item: NoteTreeItem) => void;
-  onDelete: (item: NoteTreeItem) => void;
-}) {
-  const isDirectory = item.type === "directory";
-  return (
-    <div className="note-tree-branch">
-      <div className={`note-tree-row ${selectedPath === item.path ? "active" : ""}`} style={{ paddingLeft: 8 + level * 14 }}>
-        <button className="note-tree-main" onClick={() => isDirectory ? undefined : onSelect(item)}>
-          {isDirectory ? <Folder size={14} /> : <FileText size={14} />}
-          <span>{item.name}</span>
-        </button>
-        <div className="note-tree-actions">
-          {isDirectory && (
-            <>
-              <button onClick={() => onNewFile(item.path)} title="New file" aria-label="New file"><FileText size={12} /></button>
-              <button onClick={() => onNewFolder(item.path)} title="New folder" aria-label="New folder"><Folder size={12} /></button>
-            </>
-          )}
-          <button onClick={() => onRename(item)} title="Rename" aria-label="Rename"><Edit3 size={12} /></button>
-          <button onClick={() => onDelete(item)} title="Delete" aria-label="Delete"><Trash2 size={12} /></button>
-        </div>
-      </div>
-      {item.children?.map((child) => (
-        <NoteTreeRow
-          item={child}
-          selectedPath={selectedPath}
-          level={level + 1}
-          onSelect={onSelect}
-          onNewFile={onNewFile}
-          onNewFolder={onNewFolder}
-          onRename={onRename}
-          onDelete={onDelete}
-          key={child.path}
-        />
-      ))}
-    </div>
-  );
-}
-
-function AiContextPopoverContent({
-  stocks,
-  contextCodes,
-  contextSelection,
-  onContextCodesChange,
-  onContextSelectionChange
-}: {
-  stocks: StockStatus[];
-  contextCodes: string[];
-  contextSelection: AiContextSelection;
-  onContextCodesChange: (codes: string[]) => void;
-  onContextSelectionChange: (key: AiContextKey, checked: boolean) => void;
-}) {
-  const { t } = useI18n();
-  const selectedStocks = contextCodes
-    .map((code) => stocks.find((stock) => stock.config.code.toLowerCase() === code.toLowerCase()))
-    .filter((stock): stock is StockStatus => Boolean(stock));
-  return (
-    <div style={aiChatStyles.contextPopover}>
-      <div>
-        <strong>{t("aiTab.contextOptions")}</strong>
-        <div className="muted">{t("aiTab.confirmContextOnSend")}</div>
-      </div>
-      <label className="settings-field compact">
-        <span>{t("aiTab.defaultSymbol")}</span>
-        <Select
-          mode="multiple"
-          allowClear
-          value={contextCodes}
-          placeholder={t("aiTab.noSymbol")}
-          onChange={onContextCodesChange}
-          options={stocks.map((stock) => ({ value: stock.config.code, label: `${displayName(stock)} ${stock.config.code}` }))}
-        />
-        <small>{selectedStocks.length ? selectedStocks.map((stock) => `${displayName(stock)} ${stock.config.code}`).join(", ") : t("aiTab.noSymbol")}</small>
-      </label>
-      <div style={{ display: "grid", gap: 8, minWidth: 0 }}>
-        <span className="watch-float-settings-label">{t("aiTab.contextOptions")}</span>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 8 }}>
-          {aiContextOptions.map((option) => (
-            <Checkbox
-              checked={contextSelection[option.value]}
-              onChange={(event) => onContextSelectionChange(option.value, event.target.checked)}
-              key={option.value}
-            >
-              <span>{t(option.labelKey)}</span>
-              <small style={{ display: "block", color: "#6b7280" }}>{t(option.scopeKey)}</small>
-            </Checkbox>
-          ))}
-        </div>
-      </div>
-      <span className="muted">{t("aiTab.stage2Notice")}</span>
-    </div>
-  );
-}
-
-function AiAnalysisTab({
-  stocks,
-  contextCodes,
-  promptDraft,
-  contextSelection,
-  sessions,
-  onContextCodesChange,
-  onPromptChange,
-  onContextSelectionChange,
-  onSubmit,
-  onToggleBlock,
-  onTerminalInput,
-  onStopTerminal
-}: {
-  stocks: StockStatus[];
-  contextCodes: string[];
-  promptDraft: string;
-  contextSelection: AiContextSelection;
-  sessions: AiChatSession[];
-  onContextCodesChange: (codes: string[]) => void;
-  onPromptChange: (value: string) => void;
-  onContextSelectionChange: (key: AiContextKey, checked: boolean) => void;
-  onSubmit: (event: FormEvent) => void;
-  onToggleBlock: (sessionId: string, blockId: string) => void;
-  onTerminalInput: (sessionId: string, value: string) => void;
-  onStopTerminal: (sessionId: string) => void;
-}) {
-  const { locale, t } = useI18n();
-  const [contextOpen, setContextOpen] = useState(false);
-  const sendButtonStyle = !promptDraft.trim()
-    ? { ...aiChatStyles.sendButton, ...aiChatStyles.disabledSendButton }
-    : aiChatStyles.sendButton;
-  const submitOnEnter = (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) return;
-    event.preventDefault();
-    if (promptDraft.trim()) event.currentTarget.form?.requestSubmit();
-  };
-
-  return (
-    <div style={{ display: "grid", height: "100%", minHeight: 0, overflow: "hidden", background: "#ffffff" }}>
-      <div style={aiChatStyles.shell}>
-        <div style={aiChatStyles.page}>
-          <div style={aiChatStyles.chatPane}>
-            <div style={aiChatStyles.scroll}>
-              <div style={aiChatStyles.thread}>
-                {sessions.length === 0 ? (
-                  <div className="stock-notes-empty">
-                    <strong>{t("aiTab.emptyTitle")}</strong>
-                    <span>{t("aiTab.emptyHint")}</span>
-                  </div>
-                ) : sessions.map((session) => (
-                  <article style={aiChatStyles.session} key={session.id}>
-                    <header style={aiChatStyles.sessionHeader}>
-                      <div style={aiChatStyles.sessionTitle}>
-                        <strong>{session.title}</strong>
-                        <span>{session.code ?? t("aiTab.unspecified")} / {new Date(session.updatedAt).toLocaleString(locale, { hour12: false })}</span>
-                      </div>
-                    </header>
-                    <div style={{ display: "grid", gap: 10, minWidth: 0 }}>
-                      {session.blocks.map((block) => (
-                        <AiChatBlockView
-                          block={block}
-                          onToggle={() => onToggleBlock(session.id, block.id)}
-                          onTerminalInput={(value) => onTerminalInput(session.id, value)}
-                          onStopTerminal={() => onStopTerminal(session.id)}
-                          key={block.id}
-                        />
-                      ))}
-                    </div>
-                  </article>
-                ))}
-              </div>
-            </div>
-            <form onSubmit={onSubmit} style={aiChatStyles.composerWrap}>
-              <div style={aiChatStyles.composer}>
-                <div style={aiChatStyles.composerInputRow}>
-                  <Popover
-                    trigger="click"
-                    placement="topLeft"
-                    open={contextOpen}
-                    onOpenChange={setContextOpen}
-                    content={(
-                      <AiContextPopoverContent
-                        stocks={stocks}
-                        contextCodes={contextCodes}
-                        contextSelection={contextSelection}
-                        onContextCodesChange={onContextCodesChange}
-                        onContextSelectionChange={onContextSelectionChange}
-                      />
-                    )}
-                  >
-                    <Button
-                      shape="circle"
-                      aria-label={t("aiTab.contextOptions")}
-                      title={t("aiTab.contextOptions")}
-                      icon={<FileText size={17} />}
-                    />
-                  </Popover>
-                  <Input.TextArea
-                    value={promptDraft}
-                    onChange={(event) => onPromptChange(event.target.value)}
-                    onKeyDown={submitOnEnter}
-                    aria-label={t("aiTab.chatInput")}
-                    placeholder={t("aiTab.promptPlaceholder")}
-                    autoSize={{ minRows: 1, maxRows: 5 }}
-                    variant="borderless"
-                    style={{ lineHeight: 1.5, padding: "8px 0", color: "#111827" }}
-                  />
-                  <Button
-                    type="primary"
-                    shape="circle"
-                    htmlType="submit"
-                    disabled={!promptDraft.trim()}
-                    aria-label={t("aiTab.send")}
-                    title={t("aiTab.send")}
-                    icon={<MessageSquare size={17} />}
-                    style={sendButtonStyle}
-                  />
-                </div>
-              </div>
-            </form>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function AiChatBlockView({
-  block,
-  onToggle,
-  onTerminalInput,
-  onStopTerminal
-}: {
-  block: AiChatBlock;
-  onToggle: () => void;
-  onTerminalInput: (value: string) => void;
-  onStopTerminal: () => void;
-}) {
-  const { t } = useI18n();
-  const [terminalDraft, setTerminalDraft] = useState("");
-  const isUser = block.kind === "user";
-  const copyContent = (event: ReactMouseEvent<HTMLButtonElement>) => {
-    event.stopPropagation();
-    void navigator.clipboard?.writeText(block.content);
-  };
-  const submitTerminalInput = (event: FormEvent) => {
-    event.preventDefault();
-    const value = terminalDraft.trim();
-    if (!value) return;
-    onTerminalInput(value);
-    setTerminalDraft("");
-  };
-  if (isUser) {
-    return (
-      <section style={{ display: "grid", justifyItems: "end", gap: 4, minWidth: 0 }}>
-        <button
-          type="button"
-          onClick={onToggle}
-          style={{ maxWidth: "88%", border: 0, borderRadius: 14, padding: "8px 12px", background: "#f3f4f6", color: "#111827", lineHeight: 1.5, textAlign: "left", whiteSpace: "pre-wrap", wordBreak: "break-word", cursor: "pointer" }}
-          aria-label={block.collapsed ? t("aiTab.expandBlock") : t("aiTab.collapseBlock")}
-          title={block.collapsed ? t("aiTab.expandBlock") : t("aiTab.collapseBlock")}
-        >
-          {block.collapsed ? block.title : block.content}
-        </button>
-      </section>
-    );
-  }
-  return (
-    <section style={{ display: "grid", justifyItems: "stretch", gap: 6, minWidth: 0 }}>
-      <div style={{ display: "grid", gap: 6, width: "100%", minWidth: 0 }}>
-        <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, minWidth: 0 }}>
-          <button
-            type="button"
-            onClick={onToggle}
-            style={{ display: "inline-flex", alignItems: "center", gap: 8, minWidth: 0, border: 0, background: "transparent", color: "#111827", fontWeight: 600, cursor: "pointer", padding: 0 }}
-            aria-label={block.collapsed ? t("aiTab.expandBlock") : t("aiTab.collapseBlock")}
-            title={block.collapsed ? t("aiTab.expandBlock") : t("aiTab.collapseBlock")}
-          >
-            <ChevronRight className={block.collapsed ? "" : "reverse-icon"} size={14} />
-            <span>{block.title}</span>
-            <small style={{ color: "#6b7280", fontWeight: 400 }}>{t(aiChatBlockKindLabelKey(block.kind))}</small>
-          </button>
-          <button
-            type="button"
-            onClick={copyContent}
-            style={aiChatStyles.iconButton}
-            aria-label={t("aiTab.copyBlock")}
-            title={t("aiTab.copyBlock")}
-          >
-            <Files size={16} />
-          </button>
-        </header>
-        {!block.collapsed && (
-          block.kind === "terminal" ? (
-            <div style={{ display: "grid", gap: 8, minWidth: 0 }}>
-              <pre style={{ minWidth: 0, maxHeight: 420, margin: 0, overflow: "auto", padding: "10px 12px", borderRadius: 8, background: "#111827", color: "#f9fafb", fontFamily: "Consolas, monospace", fontSize: 12, lineHeight: 1.55, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{block.content}</pre>
-              <form onSubmit={submitTerminalInput} style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto auto", gap: 8 }}>
-                <Input
-                  value={terminalDraft}
-                  onChange={(event) => setTerminalDraft(event.target.value)}
-                  placeholder="输入后发送到 AI 终端"
-                />
-                <Button htmlType="submit" disabled={!terminalDraft.trim()} icon={<MessageSquare size={14} />}>发送</Button>
-                <Button danger onClick={onStopTerminal} icon={<Square size={14} />}>停止</Button>
-              </form>
-            </div>
-          ) : (
-            <pre style={{ minWidth: 0, margin: 0, overflow: "auto", padding: "10px 12px", borderRadius: 8, background: "#f4f4f4", color: "#111827", fontFamily: block.kind === "tool" ? "Consolas, monospace" : "\"Microsoft YaHei\", Arial, sans-serif", fontSize: 13, lineHeight: 1.55, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{block.content}</pre>
-          )
-        )}
-      </div>
-    </section>
-  );
-}
-
-function aiChatBlockKindLabelKey(kind: AiChatBlockKind): TranslationKey {
-  if (kind === "user") return "aiBlock.message";
-  if (kind === "assistant") return "aiBlock.answer";
-  if (kind === "tool" || kind === "terminal") return "aiBlock.toolResult";
-  return "aiBlock.analysis";
-}
-
-function aiContextDataScope(key: AiContextKey): AiDataScope {
-  if (key === "position_summary") return "user_private_summary";
-  if (key === "position_detail" || key === "profit" || key === "notes") return "user_private_detail";
-  if (key === "trading_logic") return "user_strategy_data";
-  if (key === "news" || key === "comments") return "external_noise_data";
-  return "public_market_data";
-}
-
-function formatAiTerminalLog(log: AiTerminalSessionLog): string {
-  return [
-    `status: ${log.status}`,
-    log.code ? `symbol: ${log.code}` : "",
-    log.exitCode !== undefined ? `exit_code: ${log.exitCode}` : "",
-    log.error ? `error: ${log.error}` : "",
-    "",
-    log.output
-  ].filter(Boolean).join("\n");
-}
-
-function terminalStatusLabel(status: AiTerminalSessionLog["status"]) {
-  const labels: Record<AiTerminalSessionLog["status"], string> = {
-    starting: "启动中",
-    running: "运行中",
-    stopped: "已停止",
-    exited: "已完成",
-    error: "错误"
-  };
-  return labels[status];
-}
-
 function StockDetail({
   state,
   stock,
   theme,
-  onOpenChart,
-  onOpenAiAnalysis
+  onOpenChart
 }: {
   state: AppState;
   stock?: StockStatus;
   theme: Theme;
   onOpenChart: () => void;
-  onOpenAiAnalysis: () => void;
 }) {
   const { locale, t } = useI18n();
   const [draft, setDraft] = useState<Position[]>([]);
@@ -3088,11 +2103,7 @@ function StockDetail({
   const [saveError, setSaveError] = useState("");
   const [aliasError, setAliasError] = useState("");
   const [tagError, setTagError] = useState("");
-  const [commentsOpen, setCommentsOpen] = useState(false);
-  const [commentsPage, setCommentsPage] = useState(1);
-  const [comments, setComments] = useState<StockCommentPage>();
-  const [commentsLoading, setCommentsLoading] = useState(false);
-  const [commentsError, setCommentsError] = useState("");
+
   const [minuteOpen, setMinuteOpen] = useState(false);
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
 
@@ -3107,36 +2118,9 @@ function StockDetail({
     setSaveError("");
     setAliasError("");
     setTagError("");
-    setCommentsOpen(false);
-    setCommentsPage(1);
-    setComments(undefined);
-    setCommentsLoading(false);
-    setCommentsError("");
+
     setMinuteOpen(false);
   }, [stock?.config.code]);
-
-  useEffect(() => {
-    let cancelled = false;
-    if (!stock || !commentsOpen) return;
-
-    setCommentsLoading(true);
-    setCommentsError("");
-    void api.fetchStockComments(stock.config.code, commentsPage)
-      .then((page) => {
-        if (!cancelled) setComments(page);
-      })
-      .catch((error) => {
-        if (!cancelled) setCommentsError(error instanceof Error ? error.message : t("error.loadCommentsFailed"));
-      })
-      .finally(() => {
-        if (!cancelled) setCommentsLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [stock?.config.code, commentsOpen, commentsPage]);
-
 
   if (!stock) return <div className="empty-state">{t("detail.selectSymbol")}</div>;
 
@@ -3238,10 +2222,7 @@ function StockDetail({
       setAliasSaving(false);
     }
   };
-  const openComments = () => {
-    setCommentsOpen(true);
-    setCommentsPage(1);
-  };
+
   const toggleSection = (section: string) => {
     setCollapsedSections((items) => ({ ...items, [section]: !items[section] }));
   };
@@ -3285,10 +2266,7 @@ function StockDetail({
             <Maximize2 size={15} />
             {t("menu.chart")}
           </button>
-          <button className="tool-button" onClick={onOpenAiAnalysis} title={t("detail.aiAnalysis")} aria-label={t("detail.aiAnalysis")}>
-            <MessageSquare size={14} />
-            {t("detail.aiAnalysis")}
-          </button>
+
         </div>
       </div>
       {aliasError && <div className="save-error alias-error">{aliasError}</div>}
@@ -3313,9 +2291,7 @@ function StockDetail({
         </div>
       </DetailCurtainSection>
       <IndustryPanel state={state} stock={stock} theme={theme} />
-      <DetailCurtainSection title="交易强度" collapsed={collapsedSections.intensity} onToggle={() => toggleSection("intensity")}>
-        <TradingIntensityPanel stock={stock} theme={theme} />
-      </DetailCurtainSection>
+
       {minuteOpen && (
         <DetailCurtainSection title={t("detail.minute")} collapsed={collapsedSections.minute} onToggle={() => toggleSection("minute")}>
           <MinutePanel stock={stock} theme={theme} onClose={() => setMinuteOpen(false)} />
@@ -3418,44 +2394,7 @@ function StockDetail({
         </div>
       </section>
       </DetailCurtainSection>
-      <DetailCurtainSection title={t("detail.discussions")} collapsed={collapsedSections.comments} onToggle={() => toggleSection("comments")}>
-      <section className="comments-panel">
-        <div className="news-title">
-          <span>{t("detail.discussions")}</span>
-          {!commentsOpen ? (
-            <button className="tool-button" onClick={openComments}>
-              <MessageSquare size={14} />
-              {t("common.load")}
-            </button>
-          ) : (
-            <div className="news-actions">
-              <button className="icon-tool compact" onClick={() => setCommentsPage((page) => Math.max(1, page - 1))} disabled={commentsPage <= 1 || commentsLoading} title={t("common.previousPage")} aria-label={t("common.previousPage")}>
-                <ChevronRight className="reverse-icon" size={14} />
-              </button>
-              <span>{commentsPage}</span>
-              <button className="icon-tool compact" onClick={() => setCommentsPage((page) => page + 1)} disabled={commentsLoading || comments?.hasMore === false} title={t("common.nextPage")} aria-label={t("common.nextPage")}>
-                <ChevronRight size={14} />
-              </button>
-            </div>
-          )}
-        </div>
-        {!commentsOpen ? (
-          <div className="news-placeholder">{t("detail.loadDiscussionsHint")}</div>
-        ) : (
-          <div className="comments-list">
-            {commentsLoading && <div className="news-state">{t("common.loading")}</div>}
-            {commentsError && <div className="save-error comments-error">{commentsError}</div>}
-            {!commentsLoading && !commentsError && comments?.items.length === 0 && <div className="news-state">{t("detail.noComments")}</div>}
-            {comments?.items.map((item) => (
-              <a className="comment-row" href={item.url} target="_blank" rel="noreferrer" key={item.id}>
-                <span>{item.text}</span>
-                <small>{formatCommentMeta(item)}</small>
-              </a>
-            ))}
-          </div>
-        )}
-      </section>
-      </DetailCurtainSection>
+
     </div>
   );
 }
@@ -4171,402 +3110,6 @@ function SettingsPage({
   );
 }
 
-function StrategyMonitorView({ stocks }: { stocks: StockStatus[] }) {
-  const [scripts, setScripts] = useState<StrategyScript[]>([]);
-  const [signals, setSignals] = useState<StrategySignal[]>([]);
-  const [logs, setLogs] = useState<StrategyRunLog[]>([]);
-  const [selectedScriptId, setSelectedScriptId] = useState("");
-  const [draft, setDraft] = useState<StrategyScriptInput>(() => emptyStrategyScriptDraft(stocks[0]?.config.code));
-  const [paramsText, setParamsText] = useState("[]");
-  const [loading, setLoading] = useState(true);
-  const [running, setRunning] = useState(false);
-  const [error, setError] = useState("");
-  const selectedScript = scripts.find((script) => script.id === selectedScriptId);
-
-  const reload = async () => {
-    const [nextScripts, nextSignals, nextLogs] = await Promise.all([
-      api.listStrategyScripts(),
-      api.listStrategySignals(),
-      api.listStrategyRunLogs()
-    ]);
-    setScripts(nextScripts);
-    setSignals(nextSignals);
-    setLogs(nextLogs);
-    setSelectedScriptId((id) => id || nextScripts[0]?.id || "");
-  };
-
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setError("");
-    void reload()
-      .catch((reason) => {
-        if (!cancelled) setError(reason instanceof Error ? reason.message : "策略数据加载失败。");
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    const unsubscribe = api.onStrategySignalsChanged((nextSignals) => {
-      setSignals(nextSignals);
-      void api.listStrategyRunLogs().then(setLogs).catch(() => undefined);
-    });
-    return () => {
-      cancelled = true;
-      unsubscribe();
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!selectedScript) {
-      const next = emptyStrategyScriptDraft(stocks[0]?.config.code);
-      setDraft(next);
-      setParamsText(JSON.stringify(next.params, null, 2));
-      return;
-    }
-    setDraft({
-      name: selectedScript.name,
-      enabled: selectedScript.enabled,
-      language: selectedScript.language,
-      code: selectedScript.code,
-      targetCode: selectedScript.targetCode,
-      params: selectedScript.params,
-      triggers: selectedScript.triggers,
-      cooldownMs: selectedScript.cooldownMs
-    });
-    setParamsText(JSON.stringify(selectedScript.params, null, 2));
-  }, [selectedScript?.id, stocks]);
-
-  const saveScript = async () => {
-    setError("");
-    try {
-      const params = parseStrategyParams(paramsText);
-      const saved = await api.saveStrategyScript({
-        id: selectedScriptId || undefined,
-        ...draft,
-        params
-      });
-      await reload();
-      setSelectedScriptId(saved.id);
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "策略保存失败。");
-    }
-  };
-
-  const createScript = async () => {
-    setError("");
-    try {
-      const saved = await api.saveStrategyScript(emptyStrategyScriptDraft(stocks[0]?.config.code));
-      await reload();
-      setSelectedScriptId(saved.id);
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "策略创建失败。");
-    }
-  };
-
-  const deleteScript = async () => {
-    if (!selectedScriptId) return;
-    setError("");
-    try {
-      await api.deleteStrategyScript(selectedScriptId);
-      await reload();
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "策略删除失败。");
-    }
-  };
-
-  const runScript = async () => {
-    if (!selectedScriptId || !draft.targetCode) return;
-    setRunning(true);
-    setError("");
-    try {
-      await api.runStrategyScript(selectedScriptId, draft.targetCode);
-      await reload();
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "策略运行失败。");
-      void api.listStrategyRunLogs().then(setLogs).catch(() => undefined);
-    } finally {
-      setRunning(false);
-    }
-  };
-
-  const deleteSignal = async (id: string) => {
-    setError("");
-    try {
-      await api.deleteStrategySignal(id);
-      await reload();
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "提示删除失败。");
-    }
-  };
-
-  const updateTrigger = (trigger: "manual" | "market_refresh", checked: boolean) => {
-    setDraft((current) => {
-      const triggers = new Set(current.triggers);
-      if (checked) triggers.add(trigger);
-      else triggers.delete(trigger);
-      const next = [...triggers];
-      return { ...current, triggers: next.length ? next : ["manual"] };
-    });
-  };
-
-  return (
-    <SinglePageShell
-      title="策略监控"
-      description="用本地 TS/JS 脚本监控单只股票的行情变化，并永久记录带触发时间的策略提示。脚本只读数据，不自动下单。"
-      actions={(
-        <>
-          <button className="tool-button" onClick={() => void createScript()}>
-            <Plus size={14} />
-            新建脚本
-          </button>
-          <button className="tool-button accent" onClick={() => void saveScript()}>
-            <Save size={14} />
-            保存脚本
-          </button>
-          <button className="tool-button" disabled={!selectedScriptId || running} onClick={() => void runScript()}>
-            <Activity size={14} />
-            {running ? "运行中" : "手动运行"}
-          </button>
-        </>
-      )}
-    >
-      <div className="strategy-monitor-view">
-        <aside className="strategy-script-list">
-          <div className="strategy-panel-title">
-            <strong>脚本</strong>
-            {loading && <small>加载中</small>}
-          </div>
-          {scripts.map((script) => (
-            <button
-              className={`strategy-script-item ${script.id === selectedScriptId ? "active" : ""}`}
-              onClick={() => setSelectedScriptId(script.id)}
-              key={script.id}
-            >
-              <span>{script.name}</span>
-              <small>{script.targetCode} · {script.language.toUpperCase()} · {script.enabled ? "启用" : "禁用"}</small>
-            </button>
-          ))}
-          {!scripts.length && <div className="empty-state compact">暂无策略脚本</div>}
-        </aside>
-
-        <section className="strategy-editor">
-          {error && <div className="inline-error">{error}</div>}
-          <div className="strategy-form-grid">
-            <label className="settings-field compact">
-              <span>脚本名称</span>
-              <input value={draft.name} onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} />
-            </label>
-            <label className="settings-field compact">
-              <span>适用股票</span>
-              <select value={draft.targetCode} onChange={(event) => setDraft((current) => ({ ...current, targetCode: event.target.value }))}>
-                {stocks.map((stock) => (
-                  <option value={stock.config.code} key={stock.config.code}>{displayName(stock)} · {stock.config.code}</option>
-                ))}
-                {!stocks.some((stock) => stock.config.code === draft.targetCode) && <option value={draft.targetCode}>{draft.targetCode}</option>}
-              </select>
-            </label>
-            <label className="settings-field compact">
-              <span>语言</span>
-              <select value={draft.language} onChange={(event) => setDraft((current) => ({ ...current, language: event.target.value === "ts" ? "ts" : "js" }))}>
-                <option value="js">JS</option>
-                <option value="ts">TS</option>
-              </select>
-            </label>
-            <label className="settings-field compact">
-              <span>冷却时间(ms)</span>
-              <input type="number" min={10000} step={1000} value={draft.cooldownMs} onChange={(event) => setDraft((current) => ({ ...current, cooldownMs: Number(event.target.value) || 60000 }))} />
-            </label>
-          </div>
-          <div className="strategy-checks">
-            <Checkbox checked={draft.enabled} onChange={(event) => setDraft((current) => ({ ...current, enabled: event.target.checked }))}>启用脚本</Checkbox>
-            <Checkbox checked={draft.triggers.includes("manual")} onChange={(event) => updateTrigger("manual", event.target.checked)}>允许手动运行</Checkbox>
-            <Checkbox checked={draft.triggers.includes("market_refresh")} onChange={(event) => updateTrigger("market_refresh", event.target.checked)}>行情刷新触发</Checkbox>
-          </div>
-          <label className="strategy-code-field">
-            <span>脚本代码</span>
-            <textarea value={draft.code} spellCheck={false} onChange={(event) => setDraft((current) => ({ ...current, code: event.target.value }))} />
-          </label>
-          <label className="strategy-param-field">
-            <span>参数 JSON</span>
-            <textarea value={paramsText} spellCheck={false} onChange={(event) => setParamsText(event.target.value)} />
-          </label>
-          <div className="strategy-editor-actions">
-            <button className="tool-button danger" disabled={!selectedScriptId} onClick={() => void deleteScript()}>
-              <Trash2 size={14} />
-              删除脚本
-            </button>
-          </div>
-        </section>
-
-        <section className="strategy-signal-panel">
-          <div className="strategy-panel-title">
-            <strong>永久提示</strong>
-            <small>{signals.length} 条</small>
-          </div>
-          <div className="strategy-signal-list">
-            {signals.map((signal) => (
-              <article className={`strategy-signal-card ${signal.severity}`} key={signal.id}>
-                <header>
-                  <div>
-                    <strong>{signal.title}</strong>
-                    <span>{signal.code} · {signal.scriptName}</span>
-                  </div>
-                  <button className="icon-tool compact" onClick={() => void deleteSignal(signal.id)} aria-label="删除提示">
-                    <Trash2 size={13} />
-                  </button>
-                </header>
-                <div className="strategy-signal-meta">
-                  <span>{formatStrategyTime(signal.generatedAt)}</span>
-                  <span>{strategySignalLabel(signal.signal)}</span>
-                  <span>{strategyActionLabel(signal.action)}</span>
-                  <span>置信度 {Math.round(signal.confidence * 100)}%</span>
-                  <span>触发 {signal.triggerCount} 次</span>
-                </div>
-                {signal.reasons.length > 0 && (
-                  <ul>
-                    {signal.reasons.map((reason) => <li key={reason}>{reason}</li>)}
-                  </ul>
-                )}
-                {signal.levels && <small className="strategy-levels">{formatStrategyLevels(signal.levels)}</small>}
-              </article>
-            ))}
-            {!signals.length && <div className="empty-state compact">暂无策略提示。手动运行脚本或启用行情刷新触发后会在这里记录。</div>}
-          </div>
-        </section>
-
-        <section className="strategy-log-panel">
-          <div className="strategy-panel-title">
-            <strong>运行日志</strong>
-            <small>{logs.length} 条</small>
-          </div>
-          <div className="strategy-log-list">
-            {logs.slice(0, 80).map((log) => (
-              <div className={`strategy-log-row ${log.status}`} key={log.id}>
-                <span>{formatStrategyTime(log.finishedAt)}</span>
-                <span>{log.scriptName}</span>
-                <span>{log.code}</span>
-                <span>{log.trigger.type}</span>
-                <span>{log.status}</span>
-                {log.error && <span title={log.error}>{log.error}</span>}
-              </div>
-            ))}
-            {!logs.length && <div className="empty-state compact">暂无运行日志</div>}
-          </div>
-        </section>
-      </div>
-    </SinglePageShell>
-  );
-}
-
-function emptyStrategyScriptDraft(code = "sz002594"): StrategyScriptInput {
-  return {
-    name: "自定义策略",
-    enabled: false,
-    language: "js",
-    targetCode: code,
-    params: [
-      { key: "breakout", label: "突破确认价", type: "number", value: 0, step: 0.01 },
-      { key: "risk", label: "风险线", type: "number", value: 0, step: 0.01 }
-    ],
-    triggers: ["manual"],
-    cooldownMs: 60000,
-    code: `module.exports.analyze = function analyze(ctx) {
-  const price = Number(ctx.quote.current_price || 0);
-  const breakout = Number(ctx.params.breakout || 0);
-  const risk = Number(ctx.params.risk || 0);
-
-  if (risk > 0 && price > 0 && price < risk) {
-    return {
-      signal: "risk_break",
-      action: "reduce",
-      confidence: 0.75,
-      severity: "warning",
-      title: "跌破风险线",
-      reasons: ["当前价格低于策略参数中的风险线"],
-      levels: { stopLoss: risk }
-    };
-  }
-
-  if (breakout > 0 && price >= breakout) {
-    return {
-      signal: "buy_watch",
-      action: "watch",
-      confidence: 0.6,
-      severity: "notice",
-      title: "接近突破观察",
-      reasons: ["当前价格达到策略参数中的突破确认价"],
-      levels: { breakout }
-    };
-  }
-
-  return { signal: "none", action: "ignore", confidence: 0, severity: "info", title: "未触发", reasons: [] };
-};`
-  };
-}
-
-function parseStrategyParams(value: string): StrategyScriptParam[] {
-  const parsed = JSON.parse(value) as unknown;
-  if (!Array.isArray(parsed)) throw new Error("参数 JSON 必须是数组。");
-  return parsed.map((item) => {
-    if (!item || typeof item !== "object" || Array.isArray(item)) throw new Error("每个参数必须是对象。");
-    const param = item as Partial<StrategyScriptParam>;
-    if (!param.key || typeof param.key !== "string") throw new Error("参数缺少 key。");
-    if (param.type === "boolean") return { key: param.key, label: param.label || param.key, type: "boolean" as const, value: Boolean(param.value) };
-    if (param.type === "string") return { key: param.key, label: param.label || param.key, type: "string" as const, value: String(param.value ?? "") };
-    return {
-      key: param.key,
-      label: param.label || param.key,
-      type: "number" as const,
-      value: Number(param.value) || 0,
-      min: typeof (param as { min?: unknown }).min === "number" ? (param as { min: number }).min : undefined,
-      max: typeof (param as { max?: unknown }).max === "number" ? (param as { max: number }).max : undefined,
-      step: typeof (param as { step?: unknown }).step === "number" ? (param as { step: number }).step : undefined
-    };
-  });
-}
-
-function formatStrategyTime(value: number): string {
-  return new Date(value).toLocaleString();
-}
-
-function strategySignalLabel(signal: StrategySignal["signal"]): string {
-  const labels: Record<StrategySignal["signal"], string> = {
-    volume_up: "放量上涨",
-    volume_down: "放量下跌",
-    buy_watch: "买入观察",
-    buy_trigger: "买入触发",
-    sell_watch: "卖出观察",
-    sell_trigger: "卖出触发",
-    t_watch: "做T观察",
-    t_trigger: "做T触发",
-    risk_break: "风险破位",
-    repairing: "趋势修复",
-    main_wave_candidate: "主升候选",
-    none: "无信号"
-  };
-  return labels[signal];
-}
-
-function strategyActionLabel(action: StrategySignal["action"]): string {
-  const labels: Record<StrategySignal["action"], string> = {
-    watch: "观察",
-    small_buy: "小买",
-    buy: "买入",
-    hold: "持有",
-    reduce: "减仓",
-    sell: "卖出",
-    ignore: "忽略"
-  };
-  return labels[action];
-}
-
-function formatStrategyLevels(levels: NonNullable<StrategySignal["levels"]>): string {
-  return Object.entries(levels)
-    .filter(([, value]) => typeof value === "number")
-    .map(([key, value]) => `${key}: ${Number(value).toFixed(2)}`)
-    .join(" · ");
-}
-
 type PortfolioSortKey = "market_value" | "holding_ratio" | "position_ratio" | "day_profit" | "total_profit" | "change" | "name";
 type PortfolioSortDirection = "desc" | "asc";
 
@@ -4939,14 +3482,5 @@ function formatThemeName(themeName: string) {
 
 function normalizeTags(tags: string[]) {
   return [...new Set(tags.map((tag) => tag.trim()).filter(Boolean))].sort((left, right) => left.localeCompare(right));
-}
-
-function formatCommentMeta(item: StockCommentItem): string {
-  const counts = [
-    item.replyCount !== undefined ? `reply ${item.replyCount}` : "",
-    item.retweetCount !== undefined ? `share ${item.retweetCount}` : "",
-    item.likeCount !== undefined ? `like ${item.likeCount}` : ""
-  ].filter(Boolean);
-  return [item.user, item.date, counts.join(" ")].filter(Boolean).join(" ");
 }
 

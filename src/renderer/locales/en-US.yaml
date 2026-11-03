@@ -65,11 +65,6 @@ detail:
   returnRate: Return
   quoteTime: Quote Time
   updated: Updated
-  aiAnalysis: AI Analysis
-  aiAnalyzing: Analyzing...
-  aiHistory: AI Analysis History
-  aiProcess: AI Analysis Process
-  aiRiskNotice: AI output is an auxiliary review only and is not investment advice.
   tags: Tags
   noTags: No tags
   removeTag: Remove tag
@@ -83,9 +78,6 @@ detail:
   removePosition: Remove position
   unsavedPositionChanges: Unsaved position changes
   savePositions: Save Positions
-  discussions: THS Discussions
-  loadDiscussionsHint: Click Load to fetch THS discussions
-  noComments: No comments
 update:
   title: Software Update
   check: Check for Updates
@@ -185,51 +177,6 @@ stockNotes:
   resizePanels: Resize note sections
   unsaved: Unsaved
   saveShortcut: Press Ctrl+S to save
-aiTab:
-  chatInput: Chat input
-  promptPlaceholder: Ask anything
-  defaultSymbol: Symbols
-  noSymbol: No symbols selected
-  confirmContextOnSend: Context still requires confirmation when sending.
-  contextOptions: Context for this message
-  contextCollapsedHint: Collapsed
-  contextExpandedHint: Expanded
-  stage2Notice: Stage 3 starts a restricted AI terminal after the user sends a message. It does not read real data before send.
-  send: Send
-  emptyTitle: No chat sessions
-  emptyHint: After you send a question, an independent session appears here. User messages, analysis summaries, and later tool results can be collapsed individually.
-  userMessage: User message
-  authorizationSummary: Pre-send authorization summary
-  targetSymbol: Target symbol
-  selectedContexts: Selected contexts
-  noContext: No context
-  stage2Summary: Stage 2 only creates a local chat session and authorization summary. It does not call AI, read data, or send actual data.
-  stage3Summary: Stage 3 starts a restricted AI terminal. InitialContext contains only this authorization summary and does not read real data proactively.
-  unspecified: Unspecified
-  collapseBlock: Collapse block
-  expandBlock: Expand block
-  copyBlock: Copy block
-aiContext:
-  quote: Current quote
-  dailyKline: Daily K-line
-  minute: Minute data
-  positionSummary: Position summary
-  positionDetail: Account-level positions
-  profit: Cost and P/L
-  notes: Stock notes
-  tradingLogic: Trading logic library
-  news: News
-  comments: Discussions
-aiScope:
-  marketData: Market data
-  privateData: Private data
-  tradingLogic: Trading logic
-  noiseData: Noise data
-aiBlock:
-  message: Message
-  answer: Answer
-  analysis: Analysis
-  toolResult: Tool result
 news:
   noNews: No news
   pullLatest: Scroll up for latest news
@@ -288,15 +235,12 @@ error:
   loadNewsFailed: Failed to load 7x24 news.
   invalidNumbers: Enter valid numbers.
   saveAccountFailed: Failed to save account config.
-  loadCommentsFailed: Failed to load comments.
   tagEditorUnavailable: Tag editor IPC is not available. Restart the app.
   saveTagsFailed: Failed to save tags.
   positionEditorUnavailable: Position editor IPC is not available. Restart the app.
   savePositionsFailed: Failed to save positions.
   aliasEditorUnavailable: Alias editor IPC is not available. Restart the app.
   saveAliasFailed: Failed to save alias.
-  aiAnalysisUnavailable: AI analysis IPC is not available. Restart the app.
-  aiAnalysisFailed: AI analysis failed.
 sector:
   watchFloatShow: Show industry sectors in the watchlist float
   watchFloatHint: Choose an industry for each float stock; selection is shared with stock details. If no industries are available, open the stock details first.

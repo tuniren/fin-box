@@ -1,5 +1,5 @@
 import iconv from "iconv-lite";
-import type { FiveDayMinutePoint, KLinePoint, KLineScale, MarketData, MinutePoint, StockCommentItem, StockCommentPage, StockNewsArticle, StockNewsItem, StockNewsPage, StockSearchResult } from "../shared/types";
+import type { FiveDayMinutePoint, KLinePoint, KLineScale, MarketData, MinutePoint, StockNewsArticle, StockNewsItem, StockNewsPage, StockSearchResult } from "../shared/types";
 import { loggedFetch } from "./requestLog";
 
 const referer = "https://finance.sina.com.cn/";
@@ -139,46 +139,6 @@ export async function fetchStockNews(code: string, page: number, keyword?: strin
     page: currentPage,
     hasMore: matches.length > end || lastSourcePageCount >= thsNewsPageSize
   };
-}
-
-export async function fetchStockComments(code: string, page: number): Promise<StockCommentPage> {
-  const currentPage = Math.max(1, Math.floor(page) || 1);
-  const comments = await fetchThsDiscussionPage(code, currentPage);
-  if (comments.length > 0) {
-    return {
-      items: comments,
-      page: currentPage,
-      hasMore: comments.length >= thsNewsPageSize
-    };
-  }
-
-  const newsPage = await fetchStockNews(code, page);
-  return {
-    items: newsPage.items.map((item) => thsNewsToComment(item)),
-    page: newsPage.page,
-    hasMore: newsPage.hasMore
-  };
-}
-
-async function fetchThsDiscussionPage(code: string, page: number): Promise<StockCommentItem[]> {
-  const simpleCode = code.replace(/\D/g, "");
-  if (!/^\d{6}$/.test(simpleCode)) return [];
-
-  const url = page <= 1
-    ? `https://guba.10jqka.com.cn/${simpleCode}/`
-    : `https://guba.10jqka.com.cn/${simpleCode}/index_${page}.html`;
-  const response = await loggedFetch(url, {
-    headers: {
-      Referer: `https://guba.10jqka.com.cn/${simpleCode}/`,
-      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
-      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
-    }
-  }, "THS Discussion");
-  if (!response.ok) return [];
-
-  const bytes = Buffer.from(await response.arrayBuffer());
-  const html = decodeHtmlResponse(bytes, response.headers.get("content-type"));
-  return parseThsDiscussion(html, simpleCode, page);
 }
 
 async function fetchThsRealtimeNewsPage(page: number): Promise<StockNewsItem[]> {
@@ -442,111 +402,6 @@ function parseThsRealtimeNews(payload: ThsRealtimeNewsResponse): StockNewsItem[]
     });
   });
   return items;
-}
-
-function thsNewsToComment(item: StockNewsItem): StockCommentItem {
-  const text = normalizeText(stripTags(item.html ?? item.title));
-  return {
-    id: item.id,
-    user: item.source || "THS",
-    text: text || item.title,
-    url: item.url,
-    date: item.date
-  };
-}
-
-function parseThsDiscussion(html: string, simpleCode: string, page: number): StockCommentItem[] {
-  const items: StockCommentItem[] = [];
-  const seen = new Set<string>();
-  const rowPattern = /<(li|tr)\b[^>]*>[\s\S]*?<\/\1>/gi;
-  let match: RegExpExecArray | null;
-
-  while ((match = rowPattern.exec(html)) !== null && items.length < thsNewsPageSize) {
-    const item = parseThsDiscussionRow(match[0], simpleCode, page, items.length);
-    if (!item || seen.has(item.url)) continue;
-    seen.add(item.url);
-    items.push(item);
-  }
-
-  if (items.length > 0) return items;
-  return parseThsDiscussionLinks(html, simpleCode, page);
-}
-
-function parseThsDiscussionRow(rowHtml: string, simpleCode: string, page: number, index: number): StockCommentItem | undefined {
-  const link = pickThsDiscussionLink(rowHtml, simpleCode);
-  if (!link) return undefined;
-
-  const title = normalizeText(stripTags(link.html));
-  if (!title || /^(post|title|author|reply|read|time)$/i.test(title)) return undefined;
-
-  const rowText = normalizeText(stripTags(rowHtml));
-  const counts = parseThsDiscussionCounts(rowText);
-  return {
-    id: `${simpleCode}-${page}-${index}-${link.url}`,
-    user: pickThsDiscussionUser(rowHtml) ?? "THS User",
-    text: title,
-    url: link.url,
-    date: pickThsDiscussionDate(rowText),
-    replyCount: counts.replyCount
-  };
-}
-
-function parseThsDiscussionLinks(html: string, simpleCode: string, page: number): StockCommentItem[] {
-  const items: StockCommentItem[] = [];
-  const seen = new Set<string>();
-  const linkPattern = /<a\b[^>]*href=(['"])([^'"]+)\1[^>]*>([\s\S]*?)<\/a>/gi;
-  let match: RegExpExecArray | null;
-
-  while ((match = linkPattern.exec(html)) !== null && items.length < thsNewsPageSize) {
-    const url = normalizeThsDiscussionUrl(match[2], simpleCode);
-    const text = normalizeText(stripTags(match[3]));
-    if (!url || !text || seen.has(url)) continue;
-    seen.add(url);
-    items.push({
-      id: `${simpleCode}-${page}-${items.length}-${url}`,
-      user: "THS User",
-      text,
-      url
-    });
-  }
-
-  return items;
-}
-
-function pickThsDiscussionLink(rowHtml: string, simpleCode: string): { url: string; html: string } | undefined {
-  const linkPattern = /<a\b[^>]*href=(['"])([^'"]+)\1[^>]*>([\s\S]*?)<\/a>/gi;
-  let match: RegExpExecArray | null;
-  while ((match = linkPattern.exec(rowHtml)) !== null) {
-    const url = normalizeThsDiscussionUrl(match[2], simpleCode);
-    const text = normalizeText(stripTags(match[3]));
-    if (url && text) return { url, html: match[3] };
-  }
-  return undefined;
-}
-
-function normalizeThsDiscussionUrl(value: string | undefined, simpleCode: string): string | undefined {
-  if (!value || /^javascript:/i.test(value) || value === "#") return undefined;
-  if (/^\/\//.test(value)) return `https:${value}`;
-  if (/^https?:\/\//i.test(value)) return /guba\.10jqka\.com\.cn/i.test(value) ? value : undefined;
-  if (value.startsWith("/")) return `https://guba.10jqka.com.cn${value}`;
-  return `https://guba.10jqka.com.cn/${simpleCode}/${value}`;
-}
-
-function pickThsDiscussionUser(rowHtml: string): string | undefined {
-  const userMatch = rowHtml.match(/<(?:a|span|td)\b[^>]*(?:class|data-field)=(['"])[^'"]*(?:author|user|name|writer)[^'"]*\1[^>]*>([\s\S]*?)<\/(?:a|span|td)>/i);
-  const user = userMatch ? normalizeText(stripTags(userMatch[2])) : undefined;
-  return user || undefined;
-}
-
-function pickThsDiscussionDate(rowText: string): string | undefined {
-  return rowText.match(/\d{4}[-/]\d{1,2}[-/]\d{1,2}\s*\d{1,2}:\d{2}(?::\d{2})?/)?.[0]
-    ?? rowText.match(/\d{1,2}[-/]\d{1,2}\s*\d{1,2}:\d{2}/)?.[0]
-    ?? rowText.match(/\d{1,2}:\d{2}/)?.[0];
-}
-
-function parseThsDiscussionCounts(rowText: string): { replyCount?: number; readCount?: number } {
-  const replyCount = numberOrUndefined(rowText.match(/(?:reply|comment)\s*:?\s*(\d+)/i)?.[1]);
-  return { replyCount };
 }
 
 function stockNewsTerms(code: string, keyword: string | undefined): string[] {

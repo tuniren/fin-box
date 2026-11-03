@@ -80,9 +80,6 @@
   background: #007acc;
 }
 
-@media (max-width: 1280px) {
-}
-
 @media (max-width: 1040px) {
   .codex-panel {
     display: none;

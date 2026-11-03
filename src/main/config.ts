@@ -4,7 +4,7 @@ import path from "node:path";
 import * as yaml from "js-yaml";
 import { defaultThemes } from "../shared/theme";
 import { normalizeIndustry } from "../shared/sector";
-import type { AiAnalysisConfig, AppConfig, MottoConfig, StockConfig, WatchFloatColumn, WatchFloatConfig, WatchFloatStyle } from "../shared/types";
+import type { AppConfig, MottoConfig, StockConfig, WatchFloatColumn, WatchFloatConfig, WatchFloatStyle } from "../shared/types";
 
 export const DEFAULT_TRADING_REFRESH_INTERVAL_MS = 1000;
 export const MIN_TRADING_REFRESH_INTERVAL_MS = 500;
@@ -81,18 +81,6 @@ const builtInWatchFloatProfiles: Record<string, WatchFloatStyle> = {
   }
 };
 
-const defaultAiAnalysis: AiAnalysisConfig = {
-  codex_command: "codex",
-  timeout_ms: 60000,
-  include_notes: true,
-  include_news: false,
-  include_comments: false,
-  fully_trusted_read: false,
-  allow_cross_symbol_data: true,
-  session_timeout_ms: 1800000,
-  max_tool_calls: 20
-};
-
 export class ConfigManager {
   private readonly configPath: string;
   private lastModified = 0;
@@ -130,7 +118,7 @@ export class ConfigManager {
         profiles: builtInWatchFloatProfiles
       },
       watch_tree_columns: ["name", "change"],
-      ai_analysis: defaultAiAnalysis,
+
       trading_refresh_interval_ms: DEFAULT_TRADING_REFRESH_INTERVAL_MS,
       window_close_behavior: "close",
       hide_zero_shares: false,
@@ -194,7 +182,7 @@ export class ConfigManager {
         motto: normalizeMotto(config.motto),
         watch_float: normalizeWatchFloat(config.watch_float, stocks),
         watch_tree_columns: normalizeWatchColumns(config.watch_tree_columns),
-        ai_analysis: normalizeAiAnalysis(config.ai_analysis),
+
         trading_refresh_interval_ms: normalizeTradingRefreshInterval(config.trading_refresh_interval_ms),
         window_close_behavior: config.window_close_behavior === "close" ? "close" : "tray",
         hide_zero_shares: config.hide_zero_shares ?? false,
@@ -218,32 +206,6 @@ export class ConfigManager {
       this.lastModified = 0;
     }
   }
-}
-
-export function normalizeAiAnalysis(value: unknown): AiAnalysisConfig {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return defaultAiAnalysis;
-  const config = value as Partial<AiAnalysisConfig>;
-  const command = typeof config.codex_command === "string" && config.codex_command.trim()
-    ? config.codex_command.trim()
-    : defaultAiAnalysis.codex_command;
-  const timeout = Number(config.timeout_ms);
-  const sessionTimeout = Number(config.session_timeout_ms);
-  const maxToolCalls = Number(config.max_tool_calls);
-  return {
-    codex_command: command,
-    timeout_ms: Number.isFinite(timeout) ? Math.min(Math.max(Math.round(timeout), 10000), 300000) : defaultAiAnalysis.timeout_ms,
-    include_notes: config.include_notes ?? defaultAiAnalysis.include_notes,
-    include_news: Boolean(config.include_news),
-    include_comments: Boolean(config.include_comments),
-    fully_trusted_read: Boolean(config.fully_trusted_read),
-    allow_cross_symbol_data: config.allow_cross_symbol_data ?? defaultAiAnalysis.allow_cross_symbol_data,
-    session_timeout_ms: Number.isFinite(sessionTimeout)
-      ? Math.min(Math.max(Math.round(sessionTimeout), 60000), 7200000)
-      : defaultAiAnalysis.session_timeout_ms,
-    max_tool_calls: Number.isFinite(maxToolCalls)
-      ? Math.min(Math.max(Math.round(maxToolCalls), 1), 200)
-      : defaultAiAnalysis.max_tool_calls
-  };
 }
 
 const watchFloatColumns: WatchFloatColumn[] = ["name", "price", "change", "day_profit"];
