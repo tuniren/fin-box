@@ -7,8 +7,9 @@ import { Folder, Plus } from "lucide-react";
 import { dayProfit, displayName, effectivePrice } from "../../shared/finance";
 import { profitColor } from "../../shared/theme";
 import { WATCH_FLOAT_COLUMN } from "../../shared/types";
-import type { StockStatus, Theme, WatchFloatColumn } from "../../shared/types";
+import type { AppState, StockStatus, Theme, WatchFloatColumn } from "../../shared/types";
 import { formatMaybe, formatSigned, stockPercent } from "../utils";
+import { SectorBadge } from "./IndustryPanel";
 
 const WATCH_ROOT_KEY = "watch-root";
 
@@ -26,6 +27,7 @@ export type WatchTreeSelection = { type: "group"; tag: string } | { type: "stock
 export const DEFAULT_WATCH_TREE_EXPANDED_KEYS = [WATCH_ROOT_KEY];
 
 export function GroupedWatchlist({
+  state,
   stocks,
   groupNames,
   groupOrder,
@@ -44,6 +46,7 @@ export function GroupedWatchlist({
   columns = [WATCH_FLOAT_COLUMN.Name, WATCH_FLOAT_COLUMN.Price, WATCH_FLOAT_COLUMN.Change],
   readOnly = false
 }: {
+  state?: AppState;
   stocks: StockStatus[];
   groupNames: string[];
   groupOrder: Record<string, string[]>;
@@ -182,6 +185,7 @@ export function GroupedWatchlist({
     if (node.nodeType === "stock" && node.stock && node.sourceTag) {
       return (
         <WatchStockTitle
+          state={state}
           stock={node.stock}
           selected={node.stock.config.code === selectedCode}
           theme={theme}
@@ -284,6 +288,7 @@ function WatchGroupTitle({ tag, onSelect, onAddStockToGroup }: { tag: string; on
 }
 
 function WatchStockTitle({
+  state,
   stock,
   selected,
   theme,
@@ -291,6 +296,7 @@ function WatchStockTitle({
   onSelect,
   onOpenDetails
 }: {
+  state?: AppState;
   stock: StockStatus;
   selected: boolean;
   theme: Theme;
@@ -299,18 +305,23 @@ function WatchStockTitle({
   onOpenDetails?: () => void;
 }) {
   const safeColumns: WatchFloatColumn[] = columns.length ? columns : [WATCH_FLOAT_COLUMN.Name, WATCH_FLOAT_COLUMN.Change];
+  const sectorColumn = state && stock.config.industry?.show_near_price
+    ? (safeColumns.includes("change") ? "change" : safeColumns.includes("price") ? "price" : safeColumns[0]) : undefined;
   return (
     <div
-      className={`watch-tree-stock ${selected ? "active" : ""}`}
-      style={{ "--watch-tree-stock-columns": watchTreeGridColumns(safeColumns) } as CSSProperties}
+      className={`watch-tree-stock ${selected ? "active" : ""} ${state && stock.config.industry?.show_near_price ? "with-industry" : ""}`}
+      style={{ "--watch-tree-stock-columns": watchTreeGridColumns(safeColumns, sectorColumn) } as CSSProperties}
       role="button"
       tabIndex={0}
       onClick={onSelect}
       onDoubleClick={onOpenDetails}
     >
-      {safeColumns.map((column) => (
-        <WatchStockCell column={column} stock={stock} theme={theme} key={column} />
-      ))}
+      {safeColumns.map((column) => column === sectorColumn && state ? (
+        <span className="watch-tree-sector-cell" key={column}>
+          <WatchStockCell column={column} stock={stock} theme={theme} />
+          <SectorBadge state={state} stock={stock} theme={theme} />
+        </span>
+      ) : <WatchStockCell column={column} stock={stock} theme={theme} key={column} />)}
     </div>
   );
 }
@@ -322,14 +333,14 @@ function WatchStockCell({ column, stock, theme }: { column: WatchFloatColumn; st
   return <SignedMetric className="watch-tree-cell change" value={stockPercent(stock)} digits={2} theme={theme} />;
 }
 
-function watchTreeGridColumns(columns: WatchFloatColumn[]): string {
+function watchTreeGridColumns(columns: WatchFloatColumn[], sectorColumn?: WatchFloatColumn): string {
   const widths: Record<WatchFloatColumn, string> = {
     [WATCH_FLOAT_COLUMN.Name]: "76px",
     [WATCH_FLOAT_COLUMN.Price]: "50px",
     [WATCH_FLOAT_COLUMN.Change]: "42px",
     [WATCH_FLOAT_COLUMN.DayProfit]: "54px"
   };
-  return columns.map((column) => widths[column]).join(" ");
+  return columns.map((column) => column === sectorColumn ? "max-content" : widths[column]).join(" ");
 }
 
 function groupStocksByTag(stocks: StockStatus[], groupNames: string[], groupOrder: Record<string, string[]>) {

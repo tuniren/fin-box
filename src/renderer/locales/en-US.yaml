@@ -297,3 +297,25 @@ error:
   saveAliasFailed: Failed to save alias.
   aiAnalysisUnavailable: AI analysis IPC is not available. Restart the app.
   aiAnalysisFailed: AI analysis failed.
+sector:
+  watchFloatShow: Show industry sectors in the watchlist float
+  watchFloatHint: Choose an industry for each float stock; selection is shared with stock details. If no industries are available, open the stock details first.
+  openDetailFirst: Open stock details to load industries first
+  title: Industry
+  select: Select industry
+  quoteTime: Sector quote time
+  cached: Cached data, awaiting update
+  openTrend: Sector intraday
+  closeTrend: Hide chart
+  nearPrice: Show next to stock price
+  inFloat: Show in floating windows
+  unsupported: Industry sectors currently support A shares only
+  noIndustry: No industry membership data
+  refreshHint: Quotes follow the global stock refresh; membership updates on the first detail opening each day
+  membershipUpdated: Membership updated
+  membershipFailed: Today's membership update failed; keeping previous data until the first detail opening tomorrow
+  chartDate: Chart date
+  updated: Local update time
+  change: Change
+  index: Index value
+  noPoints: No intraday data

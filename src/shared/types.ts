@@ -23,7 +23,35 @@ export type StockConfig = {
   alias?: string;
   tags: string[];
   positions: Position[];
+  industry?: StockIndustryConfig;
 };
+
+export type IndustrySector = { id: string; name: string; level: number };
+export type StockIndustryConfig = {
+  sectors: IndustrySector[];
+  selected_id?: string;
+  attempted_on?: string;
+  updated_on?: string;
+  show_near_price: boolean;
+  show_in_float: boolean;
+};
+export type SectorQuote = {
+  id: string;
+  name: string;
+  price: number;
+  previous_close: number;
+  change_percent: number;
+  time: string;
+  fetched_at: number;
+};
+export type SectorMinute = {
+  date: string;
+  points: { time: string; price: number }[];
+  fetched_at: number;
+  quote?: SectorQuote;
+};
+export type SectorInterest = { codes: string[]; chart_codes: string[] };
+export type IndustryPatch = Partial<Pick<StockIndustryConfig, "selected_id" | "show_near_price" | "show_in_float">>;
 
 export type MottoConfig = {
   text: string;
@@ -67,6 +95,7 @@ export type WatchFloatConfig = {
   columns: WatchFloatColumn[];
   layout: WatchFloatLayout;
   show_news: boolean;
+  show_industry: boolean;
   horizontal_stock_ratio: number;
   horizontal_news_ratio: number;
   style: WatchFloatStyle;
@@ -319,6 +348,10 @@ export type AppState = {
   sh_index?: MarketData;
   last_market_update?: number;
   next_market_refresh?: number;
+  sector_quotes?: Record<string, SectorQuote>;
+  sector_minutes?: Record<string, SectorMinute>;
+  sector_errors?: Record<string, string>;
+  industry_errors?: Record<string, string>;
 };
 
 export type UpdateStatus = {
@@ -509,6 +542,9 @@ export type StrategyContext = {
 };
 
 export type FinBoxApi = {
+  openStockIndustry: (code: string) => Promise<void>;
+  updateStockIndustry: (code: string, patch: IndustryPatch) => Promise<void>;
+  setSectorInterest: (key: string, interest: SectorInterest) => Promise<void>;
   getState: () => Promise<AppState>;
   forceRefresh: () => Promise<void>;
   getUpdateStatus: () => Promise<UpdateStatus>;

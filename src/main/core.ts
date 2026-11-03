@@ -8,6 +8,9 @@ import { runCodexAnalysis, startCodexTerminalSession, type CodexTerminalSession,
 import { ConfigManager, normalizeAiAnalysis, normalizeTradingRefreshInterval, normalizeWatchColumns } from "./config";
 import { fetchKLineData, fetchMultipleStocks, fetchStockComments as fetchThsStockComments, fetchStockNews as fetchSinaStockNews, fetchStockNewsArticle as fetchSinaStockNewsArticle, fetchTencentFiveDayMinuteData, fetchTencentMinuteData, searchStocks } from "./sina";
 import { StrategyScriptManager } from "./strategyScripts";
+import { IndustryMembershipService, SectorMarketService } from "./sectors";
+import { normalizeIndustry, selectedIndustry } from "../shared/sector";
+import type { IndustryPatch, SectorInterest } from "../shared/types";
 import type { AiAnalysisConfig, AiAnalysisProcessLog, AiAnalysisResult, AiDataScope, AiSessionPolicy, AiTerminalSessionInput, AiTerminalSessionLog, AiToolName, AiToolRequest, AiToolResult, AppConfig, AppState, CamouflageDocument, KLinePoint, KLineScale, MottoConfig, Position, StockConfig, StockJournal, StockJournalNote, StockStatus, StrategyRunLog, StrategyScript, StrategyScriptInput, StrategySignal, WatchFloatColumn, WatchFloatConfig, WatchFloatStyle } from "../shared/types";
 
 const INDEX_CODE = "sh000001";
@@ -51,6 +54,13 @@ export class AppCore {
   private readonly aiDataGateway: AiDataGateway;
   private state: AppState;
   private timer?: NodeJS.Timeout;
+  private readonly sectorInterests = new Map<string, SectorInterest>();
+  private sectorRefreshTimer?: NodeJS.Timeout;
+  private readonly sectorMarket = new SectorMarketService(() => this.broadcast());
+  private readonly industryMembership = new IndustryMembershipService(
+    () => this.configManager.loadOrDefault(),
+    (config) => { this.configManager.save(config); this.applyConfig(config); }
+  );
 
   constructor(private readonly getWindows: () => BrowserWindow[]) {
     const config = this.configManager.loadOrDefault();
@@ -69,12 +79,83 @@ export class AppCore {
 
   stop(): void {
     if (this.timer) clearTimeout(this.timer);
+    if (this.sectorRefreshTimer) clearTimeout(this.sectorRefreshTimer);
     for (const session of this.aiTerminalSessions.values()) session.stop();
     this.aiTerminalSessions.clear();
   }
 
   getState(): AppState {
-    return structuredClone(this.state);
+    return structuredClone({ ...this.state, sector_quotes: this.sectorMarket.quotes,
+      sector_minutes: this.sectorMarket.minutes, sector_errors: this.sectorMarket.errors,
+      industry_errors: this.industryMembership.errors });
+  }
+
+  async openStockIndustry(code: string): Promise<void> {
+    await this.industryMembership.open(code);
+    this.broadcast();
+    this.queueSectorRefresh();
+  }
+
+  updateStockIndustry(code: string, patch: IndustryPatch): void {
+    const config = this.configManager.loadOrDefault();
+    const stock = config.stocks.find((item) => item.code.toLowerCase() === code.toLowerCase());
+    if (!stock || !patch || typeof patch !== "object") return;
+    const industry = normalizeIndustry(stock.industry) ?? { sectors: [], show_near_price: false, show_in_float: false };
+    if (typeof patch.selected_id === "string") {
+      if (!industry.sectors.some((sector) => sector.id === patch.selected_id)) throw new Error("该股票不属于所选行业");
+      industry.selected_id = patch.selected_id;
+    }
+    if (typeof patch.show_near_price === "boolean") industry.show_near_price = patch.show_near_price;
+    if (typeof patch.show_in_float === "boolean") industry.show_in_float = patch.show_in_float;
+    stock.industry = industry;
+    this.configManager.save(config);
+    this.applyConfig(config);
+    this.queueSectorRefresh();
+  }
+
+  setSectorInterest(owner: number, key: string, interest: SectorInterest): void {
+    if (typeof key !== "string" || key.length > 100) return;
+    const known = new Set(this.state.config.stocks.map((stock) => stock.code.toLowerCase()));
+    const clean = (value: unknown) => Array.isArray(value)
+      ? [...new Set(value.filter((code): code is string => typeof code === "string").map((code) => code.toLowerCase()).filter((code) => known.has(code)))] : [];
+    const normalized = { codes: clean(interest?.codes), chart_codes: clean(interest?.chart_codes) };
+    const id = `${owner}:${key}`;
+    if (!normalized.codes.length && !normalized.chart_codes.length) this.sectorInterests.delete(id);
+    else this.sectorInterests.set(id, normalized);
+    this.queueSectorRefresh();
+  }
+
+  private queueSectorRefresh(): void {
+    if (this.sectorRefreshTimer) return;
+    // Coalesce initial subscriptions from multiple rows/windows into a single batch.
+    this.sectorRefreshTimer = setTimeout(() => {
+      this.sectorRefreshTimer = undefined;
+      void this.refreshSectors();
+    }, 25);
+  }
+
+  clearSectorInterests(owner: number): void {
+    for (const key of this.sectorInterests.keys()) if (key.startsWith(`${owner}:`)) this.sectorInterests.delete(key);
+  }
+
+  private async refreshSectors(): Promise<void> {
+    const codes = new Set<string>(), charts = new Set<string>();
+    const visibleOwners = new Set(this.getWindows().filter((win) => !win.isDestroyed() && win.isVisible() && !win.isMinimized()).map((win) => win.webContents.id));
+    for (const [ownerKey, interest] of this.sectorInterests) {
+      if (!visibleOwners.has(Number(ownerKey.split(":")[0]))) continue;
+      interest.codes.forEach((code) => codes.add(code));
+      interest.chart_codes.forEach((code) => { charts.add(code); codes.add(code); });
+    }
+    const ids = new Set<string>(), chartIds = new Set<string>();
+    for (const stock of this.state.config.stocks) {
+      const id = selectedIndustry(stock)?.id;
+      if (!id) continue;
+      const code = stock.code.toLowerCase();
+      if (codes.has(code)) ids.add(id);
+      if (charts.has(code)) chartIds.add(id);
+    }
+    await this.sectorMarket.refresh([...ids], [...chartIds], dataRefreshIntervalMs(
+      this.state.config.stocks.some((stock) => /^hk\d{5}$/i.test(stock.code)), this.state.config.trading_refresh_interval_ms));
   }
 
   async forceRefresh(): Promise<void> {
@@ -161,6 +242,7 @@ export class AppCore {
       columns: nextColumns.length ? nextColumns : ["name", "change"],
       layout: watchFloat.layout === "horizontal" ? "horizontal" : "vertical",
       show_news: Boolean(watchFloat.show_news),
+      show_industry: watchFloat.show_industry !== false,
       horizontal_stock_ratio: normalizeWatchFloatRatio(watchFloat.horizontal_stock_ratio, config.watch_float.horizontal_stock_ratio ?? 3),
       horizontal_news_ratio: normalizeWatchFloatRatio(watchFloat.horizontal_news_ratio, config.watch_float.horizontal_news_ratio ?? 2),
       style: normalizeWatchFloatStyle(watchFloat.style, config.watch_float.style),
@@ -630,6 +712,8 @@ export class AppCore {
   private async refresh(force: boolean): Promise<void> {
     const config = force ? this.configManager.forceReload() : this.configManager.reloadIfChanged();
     if (config) this.applyConfig(config);
+    // Independent of the stock request: a slow industry endpoint cannot delay the stock refresh.
+    void this.refreshSectors();
 
     const codes = [...this.state.config.stocks.map((stock) => stock.code), INDEX_CODE];
     try {

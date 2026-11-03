@@ -48,6 +48,8 @@ import type { AiDataScope, AiTerminalSessionLog, AppConfig, AppState, Camouflage
 import { KLineView } from "../components/KLineView";
 import { MarketStatusBar } from "../components/MarketStatusBar";
 import { MinutePanel } from "../components/MinutePanel";
+import { IndustryPanel, SectorBadge } from "../components/IndustryPanel";
+import { WatchFloatIndustrySettings } from "../components/WatchFloatIndustrySettings";
 import { SearchPane } from "../components/SearchPane";
 import { TradingIntensityPanel } from "../components/TradingIntensityPanel";
 import { DEFAULT_WATCH_TREE_EXPANDED_KEYS, GroupedWatchlist, mergeWatchGroups, normalizeWatchGroupName } from "../components/WatchTree";
@@ -1073,6 +1075,7 @@ export function MainWorkspace() {
       columns: patch.columns ?? state.config.watch_float.columns,
       layout: patch.layout ?? state.config.watch_float.layout,
       show_news: patch.show_news ?? state.config.watch_float.show_news,
+      show_industry: patch.show_industry ?? state.config.watch_float.show_industry,
       horizontal_stock_ratio: patch.horizontal_stock_ratio ?? state.config.watch_float.horizontal_stock_ratio,
       horizontal_news_ratio: patch.horizontal_news_ratio ?? state.config.watch_float.horizontal_news_ratio,
       style: patch.style ?? state.config.watch_float.style,
@@ -1856,6 +1859,7 @@ export function MainWorkspace() {
             </div>
           </div>
           <GroupedWatchlist
+            state={state}
             stocks={visibleStocks}
             groupNames={state.config.stock_groups}
             groupOrder={state.config.stock_group_order}
@@ -3292,7 +3296,7 @@ function StockDetail({
         <div className="detail-table" aria-label={t("detail.quoteTable")}>
           <DetailItem label={t("detail.lastPrice")} value={formatMaybe(price, 2)} color={profitColor(theme, percent ?? 0)} strong />
           <DetailItem label={t("detail.change")} value={formatOptionalSigned(priceChange, 2)} color={priceChange === undefined ? undefined : profitColor(theme, priceChange)} />
-          <DetailItem label={t("detail.changePercent")} value={formatOptionalSigned(percent, 2, "%")} color={percent === undefined ? undefined : profitColor(theme, percent)} />
+          <DetailItem label={t("detail.changePercent")} value={<>{formatOptionalSigned(percent, 2, "%")}<SectorBadge state={state} stock={stock} theme={theme} /></>} color={percent === undefined ? undefined : profitColor(theme, percent)} />
           <DetailItem label={t("detail.open")} value={formatMaybe(stock.market?.open, 2)} />
           <DetailItem label={t("detail.high")} value={formatMaybe(stock.market?.high, 2)} />
           <DetailItem label={t("detail.low")} value={formatMaybe(stock.market?.low, 2)} />
@@ -3308,6 +3312,7 @@ function StockDetail({
           <DetailItem label={t("detail.updated")} value={state.last_market_update ? new Date(state.last_market_update).toLocaleTimeString(locale) : "--"} />
         </div>
       </DetailCurtainSection>
+      <IndustryPanel state={state} stock={stock} theme={theme} />
       <DetailCurtainSection title="交易强度" collapsed={collapsedSections.intensity} onToggle={() => toggleSection("intensity")}>
         <TradingIntensityPanel stock={stock} theme={theme} />
       </DetailCurtainSection>
@@ -3875,6 +3880,7 @@ function SettingsPage({
                 </div>
               </div>
             </div>
+            <WatchFloatIndustrySettings stocks={selectedWatchFloatStocks} config={state.config.watch_float} onConfigChange={onWatchFloatConfigChange} />
             <div className="watch-float-settings-block">
               <span className="watch-float-settings-label">{t("settings.watchlistColumns")}</span>
               <div className="watch-float-column-options">
@@ -4869,7 +4875,7 @@ function portfolioSortValue(stock: StockStatus, sortKey: PortfolioSortKey, total
   return undefined;
 }
 
-function DetailItem({ label, value, color, strong = false }: { label: string; value: string; color?: string; strong?: boolean }) {
+function DetailItem({ label, value, color, strong = false }: { label: string; value: ReactNode; color?: string; strong?: boolean }) {
   return (
     <div className="detail-item">
       <span>{label}</span>

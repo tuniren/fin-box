@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import * as yaml from "js-yaml";
 import { defaultThemes } from "../shared/theme";
+import { normalizeIndustry } from "../shared/sector";
 import type { AiAnalysisConfig, AppConfig, MottoConfig, StockConfig, WatchFloatColumn, WatchFloatConfig, WatchFloatStyle } from "../shared/types";
 
 export const DEFAULT_TRADING_REFRESH_INTERVAL_MS = 1000;
@@ -121,6 +122,7 @@ export class ConfigManager {
         columns: ["name", "change"],
         layout: "vertical",
         show_news: false,
+        show_industry: true,
         horizontal_stock_ratio: 3,
         horizontal_news_ratio: 2,
         style: defaultWatchFloatStyle,
@@ -183,7 +185,8 @@ export class ConfigManager {
         code: stock.code,
         alias: stock.alias,
         tags: normalizeTags(stock.tags),
-        positions: stock.positions ?? []
+        positions: stock.positions ?? [],
+        industry: normalizeIndustry(stock.industry)
       }));
       const normalized: AppConfig = {
         total_investment: config.total_investment,
@@ -259,6 +262,7 @@ function normalizeWatchFloat(value: unknown, stocks: StockConfig[]): WatchFloatC
       columns: ["name", "change"],
       layout: "vertical",
       show_news: false,
+      show_industry: true,
       horizontal_stock_ratio: 3,
       horizontal_news_ratio: 2,
       style: defaultWatchFloatStyle,
@@ -280,6 +284,7 @@ function normalizeWatchFloat(value: unknown, stocks: StockConfig[]): WatchFloatC
     columns,
     layout: normalizeWatchFloatLayout(config.layout ?? legacyStyle?.layout),
     show_news: Boolean(config.show_news),
+    show_industry: config.show_industry !== false,
     horizontal_stock_ratio: normalizeWatchFloatRatio(config.horizontal_stock_ratio, 3),
     horizontal_news_ratio: normalizeWatchFloatRatio(config.horizontal_news_ratio, 2),
     style: normalizeWatchFloatStyle(config.style),

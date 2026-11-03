@@ -297,3 +297,25 @@ error:
   saveAliasFailed: 保存别名失败。
   aiAnalysisUnavailable: AI分析 IPC 不可用，请重启应用。
   aiAnalysisFailed: AI分析失败。
+sector:
+  watchFloatShow: 自选浮窗显示行业板块
+  watchFloatHint: 为每只浮窗股票选择要展示的行业；选择与个股详情共享。没有可选行业时，请先打开该股票详情。
+  openDetailFirst: 请先打开个股详情获取行业
+  title: 行业板块
+  select: 选择行业板块
+  quoteTime: 板块行情时间
+  cached: 缓存数据，等待更新
+  openTrend: 板块分时
+  closeTrend: 收起分时
+  nearPrice: 在股价附近展示
+  inFloat: 在浮动窗口展示
+  unsupported: 行业板块暂仅支持 A 股
+  noIndustry: 暂无行业归属数据
+  refreshHint: 板块行情跟随全局股价刷新；归属在每日首次打开详情时更新
+  membershipUpdated: 归属更新日期
+  membershipFailed: 今日归属更新未成功，保留原数据；次日首次打开详情时再次查询
+  chartDate: 分时日期
+  updated: 本地更新时间
+  change: 涨跌幅
+  index: 指数点位
+  noPoints: 暂无分时数据

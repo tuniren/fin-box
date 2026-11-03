@@ -639,6 +639,18 @@ app.on("will-quit", () => {
 });
 
 ipcMain.handle("get-state", () => core.getState());
+ipcMain.handle("open-stock-industry", (_event, code: string) => core.openStockIndustry(code));
+ipcMain.handle("update-stock-industry", (_event, code, patch) => core.updateStockIndustry(code, patch));
+const sectorInterestOwners = new Set<number>();
+ipcMain.handle("set-sector-interest", (event, key, interest) => {
+  const owner = event.sender.id;
+  if (!sectorInterestOwners.has(owner)) {
+    sectorInterestOwners.add(owner);
+    event.sender.once("destroyed", () => { core.clearSectorInterests(owner); sectorInterestOwners.delete(owner); });
+    event.sender.once("render-process-gone", () => core.clearSectorInterests(owner));
+  }
+  core.setSectorInterest(owner, key, interest);
+});
 ipcMain.handle("force-refresh", () => core.forceRefresh());
 ipcMain.handle("get-update-status", () => updateStatus);
 ipcMain.handle("get-request-logs", () => getRequestLogs());

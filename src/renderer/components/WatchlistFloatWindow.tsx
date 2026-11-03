@@ -7,6 +7,7 @@ import type { AppState, StockNewsItem, StockStatus, Theme, WatchFloatColumn, Wat
 import { useI18n } from "../i18n";
 import { formatMaybe, formatSigned, stockPercent, themeStyle } from "../utils";
 import { useFloatAppState, useVisibleStocks } from "./FloatingWindows";
+import { SectorBadge } from "./IndustryPanel";
 
 const api = window.finBox;
 const watchFloatWindowGutter = 4;
@@ -96,6 +97,7 @@ export function WatchlistFloatView() {
           </div>
         ) : state ? (
           <WatchFloatContent
+            state={state}
             stocks={floatStocks}
             selectedCode={selectedCode}
             theme={currentTheme(state.config)}
@@ -110,11 +112,13 @@ export function WatchlistFloatView() {
 }
 
 function WatchFloatContent({
+  state,
   stocks,
   selectedCode,
   theme,
   config
 }: {
+  state: AppState;
   stocks: StockStatus[];
   selectedCode?: string;
   theme: Theme;
@@ -123,6 +127,7 @@ function WatchFloatContent({
   return (
     <div className={`watch-float-content ${config.layout} ${config.show_news ? "with-news" : ""}`}>
       <WatchFloatStockList
+        state={state}
         stocks={stocks}
         selectedCode={selectedCode}
         theme={theme}
@@ -136,6 +141,7 @@ function WatchFloatContent({
 }
 
 function WatchFloatStockList({
+  state,
   stocks,
   selectedCode,
   theme,
@@ -143,6 +149,7 @@ function WatchFloatStockList({
   layout,
   style
 }: {
+  state: AppState;
   stocks: StockStatus[];
   selectedCode?: string;
   theme: Theme;
@@ -151,6 +158,8 @@ function WatchFloatStockList({
   style: WatchFloatStyle;
 }) {
   const safeColumns: WatchFloatColumn[] = columns.length ? columns : ["name", "change"];
+  const sectorColumn = state.config.watch_float.show_industry !== false
+    ? (safeColumns.includes("change") ? "change" : safeColumns.includes("price") ? "price" : safeColumns[0]) : undefined;
   const listStyle = layout === "horizontal"
     ? ({ "--watch-float-columns": watchFloatHorizontalGridColumns(safeColumns) } as CSSProperties)
     : ({
@@ -165,7 +174,7 @@ function WatchFloatStockList({
         {stocks.map((stock) => (
           <div className="watch-float-row horizontal" key={stock.config.code}>
             {safeColumns.map((column) => (
-              <WatchFloatCell column={column} stock={stock} theme={theme} styleConfig={style} key={`${stock.config.code}:${column}`} />
+              <WatchFloatCell column={column} stock={stock} theme={theme} styleConfig={style} state={state} showSector={column === sectorColumn} key={`${stock.config.code}:${column}`} />
             ))}
           </div>
         ))}
@@ -180,7 +189,7 @@ function WatchFloatStockList({
       aria-hidden={suffix === "copy"}
     >
       {safeColumns.map((column) => (
-        <WatchFloatCell column={column} stock={stock} theme={theme} styleConfig={style} key={column} />
+        <WatchFloatCell column={column} stock={stock} theme={theme} styleConfig={style} state={state} showSector={column === sectorColumn} key={column} />
       ))}
     </div>
   ));
@@ -290,12 +299,14 @@ function WatchFloatNewsItem({ layout }: { layout: WatchFloatConfig["layout"] }) 
   );
 }
 
-function WatchFloatCell({ column, stock, theme, styleConfig }: { column: WatchFloatColumn; stock: StockStatus; theme: Theme; styleConfig: WatchFloatStyle }) {
+function WatchFloatCell({ column, stock, theme, styleConfig, state, showSector }: { column: WatchFloatColumn; stock: StockStatus; theme: Theme; styleConfig: WatchFloatStyle; state: AppState; showSector: boolean }) {
   const color = styleConfig.column_colors[column];
-  if (column === "name") return <span className="watch-float-cell stock-name" style={{ color }}>{displayName(stock)}</span>;
-  if (column === "price") return <span className="watch-float-cell stock-price" style={{ color }}>{formatMaybe(effectivePrice(stock.market), 2)}</span>;
-  if (column === "day_profit") return <span className="watch-float-cell"><SignedMetric value={dayProfit(stock)} digits={0} theme={theme} colors={styleConfig.metric_colors.day_profit} /></span>;
-  return <span className="watch-float-cell"><SignedMetric value={stockPercent(stock)} digits={2} theme={theme} colors={styleConfig.metric_colors.change} /></span>;
+  const value = column === "name" ? displayName(stock) : column === "price" ? formatMaybe(effectivePrice(stock.market), 2)
+    : column === "day_profit" ? <SignedMetric value={dayProfit(stock)} digits={0} theme={theme} colors={styleConfig.metric_colors.day_profit} />
+    : <SignedMetric value={stockPercent(stock)} digits={2} theme={theme} colors={styleConfig.metric_colors.change} />;
+  return <span className={`watch-float-cell ${column === "name" ? "stock-name" : column === "price" ? "stock-price" : ""} ${showSector && stock.config.industry?.show_in_float ? "with-sector" : ""}`} style={{ color }}>
+    <span>{value}</span>{showSector && <SectorBadge state={state} stock={stock} theme={theme} mode="float" colors={styleConfig.metric_colors.change} />}
+  </span>;
 }
 
 function watchFloatGridColumns(columns: WatchFloatColumn[]): string {
@@ -405,6 +416,11 @@ function verticalBorder(element: HTMLElement | null): number {
 }
 
 function measureElementTextWidth(element: HTMLElement): number {
+  if (element.classList.contains("with-sector")) {
+    const children = [...element.children];
+    const gap = Number.parseFloat(window.getComputedStyle(element).columnGap) || 0;
+    return children.reduce((sum, child) => sum + measureElementTextWidth(child as HTMLElement), 0) + Math.max(0, children.length - 1) * gap;
+  }
   const style = window.getComputedStyle(element);
   const canvas = textMeasureCanvas ?? document.createElement("canvas");
   textMeasureCanvas = canvas;

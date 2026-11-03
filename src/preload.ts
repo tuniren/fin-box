@@ -4,6 +4,9 @@ import type { AiAnalysisConfig, AiAnalysisProcessLog, AiTerminalSessionInput, Ai
 // Expose only the FinBox IPC surface to the renderer.
 // React can still manage windows and market state while contextIsolation stays on.
 const api: FinBoxApi = {
+  openStockIndustry: (code) => ipcRenderer.invoke("open-stock-industry", code),
+  updateStockIndustry: (code, patch) => ipcRenderer.invoke("update-stock-industry", code, patch),
+  setSectorInterest: (key, interest) => ipcRenderer.invoke("set-sector-interest", key, interest),
   getState: () => ipcRenderer.invoke("get-state"),
   forceRefresh: () => ipcRenderer.invoke("force-refresh"),
   getUpdateStatus: () => ipcRenderer.invoke("get-update-status"),

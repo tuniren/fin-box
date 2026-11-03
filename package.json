@@ -18,7 +18,9 @@
     "release": "npm run build && electron-builder --publish always",
     "release:github": "python scripts/release.py",
     "start": "electron .",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:sectors": "node scripts/test-sectors.cjs",
+    "test:sectors:ui": "node scripts/test-sector-ui.cjs"
   },
   "build": {
     "appId": "com.finbox.desktop",

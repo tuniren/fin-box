@@ -3,6 +3,7 @@ import { dayProfit, effectivePrice, totalShares } from "../../shared/finance";
 import { currentTheme, profitColor } from "../../shared/theme";
 import type { AppState, StockStatus } from "../../shared/types";
 import { formatSigned } from "../utils";
+import { SectorBadge } from "./IndustryPanel";
 
 type TickerSummaryProps = {
   state: AppState;
@@ -42,7 +43,10 @@ export function TickerSummary({ state, stock, compactRefreshBars = false }: Tick
           </span>
           <span className="float-widget-metric">
             <span>NET</span>
-            <SignedIconMetric value={priceChangePercent} digits={2} suffix=" Mb/s" color={floatDirectionColor(priceChangePercent)} />
+            <span className="float-widget-metric-values">
+              <SignedIconMetric value={priceChangePercent} digits={2} suffix=" Mb/s" color={floatDirectionColor(priceChangePercent)} />
+              <SectorBadge state={state} stock={stock} theme={theme} mode="float" />
+            </span>
           </span>
         </span>
         <span className="float-widget-profit">
@@ -56,6 +60,7 @@ export function TickerSummary({ state, stock, compactRefreshBars = false }: Tick
     <>
       <span>{price === undefined ? "--" : price.toFixed(2)}</span>
       <span style={{ color: profitColor(theme, priceChangePercent) }}> {formatMoodValue(priceChangePercent, 2, false)}</span>
+      <SectorBadge state={state} stock={stock} theme={theme} />
       <span className="muted"> {seconds}</span>
       <span style={{ color: profitColor(theme, totalDay) }}> {formatMoodValue(totalDay, 0, false)}</span>
     </>

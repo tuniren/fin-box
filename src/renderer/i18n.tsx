@@ -6,6 +6,7 @@ import zhCnYaml from "./locales/zh-CN.yaml?raw";
 
 export type Locale = "zh-CN" | "en-US";
 export type TranslationKey =
+  | `sector.${"title" | "select" | "quoteTime" | "cached" | "openTrend" | "closeTrend" | "nearPrice" | "inFloat" | "unsupported" | "noIndustry" | "refreshHint" | "membershipUpdated" | "membershipFailed" | "chartDate" | "updated" | "change" | "index" | "noPoints" | "watchFloatShow" | "watchFloatHint" | "openDetailFirst"}`
   | `menu.${"application" | "file" | "view" | "window" | "language" | "help" | "usageGuide" | "about" | "addSymbol" | "refresh" | "openConfig" | "openConfigFolder" | "openNotesFolder" | "quit" | "explorer" | "editor" | "sidePanel" | "statusBar" | "details" | "chart" | "toggleCamouflageFloat" | "toggleWatchlistFloat" | "toggleMottoFloat"}`
   | `language.${"chinese" | "english"}`
   | `common.${"add" | "cancel" | "close" | "save" | "saving" | "load" | "loading" | "previousPage" | "nextPage"}`
