@@ -22,11 +22,16 @@ async function main() {
 
   const devDataDir = path.join(os.tmpdir(), "fin-box-electron-dev");
   const devCacheDir = path.join(devDataDir, "cache");
-  const child = spawn(electronPath, [
+  const electronArgs = [
     ".",
     `--user-data-dir=${devDataDir}`,
     `--disk-cache-dir=${devCacheDir}`
-  ], {
+  ];
+  if (process.platform === "linux" && env.WAYLAND_DISPLAY && env.DISPLAY) {
+    electronArgs.push("--ozone-platform=x11");
+  }
+
+  const child = spawn(electronPath, electronArgs, {
     env,
     stdio: "inherit",
     windowsHide: false
